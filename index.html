@@ -6109,13 +6109,20 @@ function stratChart(curva){
 function stratPMsg(k,t){const h=$('stratp-msg-host'); if(h)h.innerHTML=`<div class="stratp-msg ${k}">${t}</div>`;}
 
 /* ── Controles de ejecución ── */
+const STRAT_MAX_ACTIVAS = 2; // espejo de MAX_ESTRATEGIAS_ACTIVAS del backend (gobernanza; el backend es la fuente de verdad)
 async function stratPlay(id){
-  const otra=STRAT.created.find(s=>s.estado==='paper'&&s.id!==id);
-  if(otra && !confirm(`Ya tienes "${otra.nombre}" corriendo. Solo puede haber una activa a la vez.\n¿La pauso y activo esta?`)) return;
+  const activas=STRAT.created.filter(s=>s.estado==='paper'&&s.id!==id);
+  if(activas.length>=STRAT_MAX_ACTIVAS){
+    const vieja=activas[0];
+    if(!confirm(`Límite de ${STRAT_MAX_ACTIVAS} estrategias activas alcanzado (${activas.map(s=>'"'+s.nombre+'"').join(', ')}).\n¿Pauso "${vieja.nombre}" y activo esta?`)) return;
+    try{ await brokerFetch('/v1/strategies/'+vieja.id+'/pause',{method:'POST'}); }
+    catch(e){ stratPMsg('err','No se pudo pausar "'+vieja.nombre+'": '+(e.message||'')); return; }
+  }
   try{ const r=await brokerFetch('/v1/strategies/'+id+'/play',{method:'POST'}); await stratLoad();
        if(STRAT.sel&&STRAT.sel.id===id) await stratSelectCreated(id);
-       stratPMsg('ok', (r.pausadas&&r.pausadas.length)?`Activada. Se pausó "${r.pausadas[0].nombre}".`:'Activada en paper.'); }
-  catch(e){ stratPMsg('err', e.message||'No se pudo activar (¿universo vacío?).'); }
+       const n=(r.activas_ahora||1), m=(r.max_activas||STRAT_MAX_ACTIVAS);
+       stratPMsg('ok', `Activada en paper (${n}/${m} activas).`); }
+  catch(e){ stratPMsg('err', e.message||'No se pudo activar (¿universo vacío o límite alcanzado?).'); }
 }
 async function stratPause(id){ try{ await brokerFetch('/v1/strategies/'+id+'/pause',{method:'POST'}); await stratLoad(); if(STRAT.sel&&STRAT.sel.id===id) await stratSelectCreated(id); stratPMsg('ok','Pausada.'); }catch(e){ stratPMsg('err',e.message); } }
 async function stratStop(id){
