@@ -1725,6 +1725,7 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 
   <!-- Estrategia body -->
   <div class="bp-body" id="body-strat">
+    <div class="strat-expo" id="strat-expo"><div class="strat-expo-hint">Cargando exposición…</div></div>
     <div class="stratp-wrap">
       <div class="stratp-list">
         <div class="stratp-list-head">
@@ -6664,6 +6665,31 @@ function moRecordFromModal(){
 <style>
 /* ── Panel inferior simplificado ── */
 .stratp-wrap{display:flex;height:100%;overflow:hidden}
+/* ── Exposición agregada entre estrategias activas (Roadmap §3.2) ── */
+#body-strat .stratp-wrap{height:auto;flex:1;min-height:0} /* deja sitio al strip de arriba */
+.strat-expo{flex-shrink:0;max-height:210px;overflow-y:auto;border-bottom:1px solid var(--border);background:var(--bg2);padding:8px 10px}
+.strat-expo-hint{font-size:10px;color:#7a869a;padding:6px 2px;line-height:1.5}
+.strat-expo-head{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.strat-expo-title{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text2)}
+.strat-expo-sub{font-size:9.5px;color:#8a94a6;margin-left:auto;text-align:right;line-height:1.35}
+.strat-expo-sub b{color:var(--text);font-weight:700}
+.strat-expo-warn{font-size:10px;font-weight:700;color:var(--red);background:rgba(231,76,60,.10);border:1px solid rgba(231,76,60,.28);border-radius:5px;padding:4px 7px;margin-bottom:6px}
+.strat-expo-tbl{width:100%;border-collapse:collapse;font-size:10.5px}
+.strat-expo-tbl th{font-size:8.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#7a869a;text-align:right;padding:2px 6px;border-bottom:1px solid var(--border)}
+.strat-expo-tbl th:first-child{text-align:left}
+.strat-expo-tbl td{padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.04);text-align:right;vertical-align:middle}
+.strat-expo-tbl td:first-child{text-align:left;font-weight:700}
+.strat-expo-row.dup{background:rgba(231,76,60,.07)}
+.strat-expo-row.dup td:first-child{box-shadow:inset 2px 0 0 var(--red)}
+.strat-expo-tk{display:inline-flex;align-items:center;gap:5px}
+.strat-expo-flag{color:var(--red);font-size:11px}
+.strat-expo-bar{display:inline-block;width:46px;height:5px;border-radius:3px;background:rgba(255,255,255,.08);vertical-align:middle;margin-left:6px;overflow:hidden}
+.strat-expo-bar i{display:block;height:100%;background:var(--blue)}
+.strat-expo-row.dup .strat-expo-bar i{background:var(--red)}
+.strat-expo-chips{display:flex;flex-wrap:wrap;gap:3px;justify-content:flex-end}
+.strat-expo-chip{font-size:8.5px;font-weight:600;color:var(--text2);background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:1px 5px;white-space:nowrap}
+.strat-expo-row.dup .strat-expo-chip{color:var(--red);border-color:rgba(231,76,60,.35);background:rgba(231,76,60,.06)}
+.strat-expo-ref{font-size:8.5px;color:#8a94a6}
 .stratp-list{width:330px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;background:var(--bg2)}
 .stratp-list-head{display:flex;align-items:center;gap:7px;padding:8px 8px 7px;border-bottom:1px solid var(--border);flex-shrink:0}
 .stratp-list-title{font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text2)}
@@ -6956,7 +6982,55 @@ async function stratLoad(){
   STRAT.templates=all.filter(s=>s.estado==='plantilla');
   STRAT.created  =all.filter(s=>s.estado!=='plantilla');
   stratRenderItems();
+  stratExpoLoad();  // panel de exposición agregada (Roadmap §3.2) — se refresca al cambiar las activas
   if(STRAT.sel){ const still=STRAT.created.find(s=>s.id===STRAT.sel.id); if(still) stratSelectCreated(STRAT.sel.id); else stratClearDetail(); }
+}
+
+/* ── Exposición agregada entre estrategias activas (Roadmap §3.2) ───────────────
+   Solo lectura: GET /v1/strategies/exposure agrega por ticker el cost basis
+   (qty×precio_entrada) de las posiciones abiertas de TODAS las estrategias
+   'paper', reusando el mismo neteo canónico del backend. Marca en rojo los
+   tickers donde ≥2 estrategias coinciden (concentración = riesgo). Si CACHE tiene
+   precio en vivo del ticker, se prefiere para el valor de referencia. */
+async function stratExpoLoad(){
+  const host=$('strat-expo'); if(!host) return;
+  const d=await brokerGet('/v1/strategies/exposure');
+  if(!d){ host.innerHTML='<div class="strat-expo-hint">Inicia sesión de founder para ver la exposición.</div>'; return; }
+  stratExpoRender(d);
+}
+function stratExpoRender(d){
+  const host=$('strat-expo'); if(!host) return;
+  const nAct=d.estrategias_activas||0, maxAct=d.max_estrategias_activas||2;
+  const head=`<div class="strat-expo-head">
+    <span class="strat-expo-title">Exposición agregada</span>
+    <span class="strat-expo-sub"><b>${nAct}/${maxAct}</b> activa${nAct===1?'':'s'} · equity comb. <b>${fP(d.equity_combinado)}</b>${d.pct_invertido!=null?` · invertido <b>${d.pct_invertido}%</b>`:''}</span>
+  </div>`;
+  if(!nAct){ host.innerHTML=head+'<div class="strat-expo-hint">Sin estrategias activas. Actívalas (▶) para ver cómo se reparte y solapa la exposición combinada.</div>'; return; }
+  const tks=d.tickers||[];
+  if(!tks.length){ host.innerHTML=head+`<div class="strat-expo-hint">${nAct} estrategia${nAct===1?'':'s'} activa${nAct===1?'':'s'}, sin posiciones abiertas todavía.</div>`; return; }
+  const nDup=d.n_solapados||0;
+  const warn = nDup>0
+    ? `<div class="strat-expo-warn">⚠ ${nDup} ticker${nDup===1?'':'s'} con solapamiento: ${nDup===1?'una misma posición':'varias posiciones'} sostenida${nDup===1?'':'s'} por 2 estrategias a la vez — la exposición real a ${nDup===1?'ese nombre':'esos nombres'} es la suma, no la de cada estrategia por separado.</div>`
+    : '';
+  const maxExpo = Math.max(...tks.map(t=>t.exposicion||0), 1);
+  const rows = tks.map(t=>{
+    const dup=!!t.solapado;
+    const pctBar = t.pct_equity!=null ? Math.max(2, Math.min(100, (t.exposicion/maxExpo*100))) : 0;
+    // Valor de referencia: precio en vivo de CACHE si está; si no, el precio_ref del backend.
+    const live = CACHE[t.ticker]?.sig?.precio_actual;
+    const refPx = (live!=null? live : t.precio_ref);
+    const refVal = (refPx!=null) ? t.qty*refPx : t.valor_ref;
+    const chips = (t.estrategias||[]).map(e=>`<span class="strat-expo-chip" title="${(e.nombre||'').replace(/"/g,'&quot;')} · ${e.qty} @ ${fP(e.precio_entrada)}">${(e.nombre||'').length>16?(e.nombre.slice(0,15)+'…'):e.nombre}</span>`).join('');
+    return `<tr class="strat-expo-row ${dup?'dup':''}">
+      <td><span class="strat-expo-tk">${dup?'<span class="strat-expo-flag" title="Solapada: ≥2 estrategias en este ticker">⚠</span>':''}${t.ticker}</span></td>
+      <td>${fP(t.exposicion)}${refVal!=null?`<div class="strat-expo-ref">≈ ${fP(refVal)} ref${live!=null?' · vivo':''}</div>`:''}</td>
+      <td>${t.pct_equity!=null?t.pct_equity+'%':'—'}<span class="strat-expo-bar"><i style="width:${pctBar}%"></i></span></td>
+      <td><div class="strat-expo-chips">${chips}</div></td>
+    </tr>`;
+  }).join('');
+  host.innerHTML = head + warn + `<table class="strat-expo-tbl">
+    <thead><tr><th>Ticker</th><th>Exposición (a la entrada)</th><th>% equity comb.</th><th>Estrategias</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
 }
 function stratClearDetail(){ stratStopMonitor(); STRAT.sel=null; $('stratp-detail').innerHTML='<div class="stratp-empty"><div class="stratp-empty-ico">🎯</div><span>Selecciona una estrategia o crea una nueva.</span></div>'; }
 function stratRenderItems(){
