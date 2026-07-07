@@ -1076,6 +1076,10 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
       <span class="pf-equity-lbl">Efectivo disponible</span>
       <span class="pf-equity-val" id="pf-bp" style="color:var(--green)">—</span>
     </div>
+    <div class="pf-equity-row" id="pf-realized-row" style="display:none" title="P&L de operaciones ya cerradas (entrada + salida emparejadas)">
+      <span class="pf-equity-lbl">P&L Realizado</span>
+      <span class="pf-equity-val" id="pf-realized">—</span>
+    </div>
     <div class="lp-list" id="lp-list" style="flex:none;max-height:50%;overflow-y:auto">
       <div class="empty"><strong>Cargando portafolio…</strong>Conectando con tu cuenta de Alpaca</div>
     </div>
@@ -2489,7 +2493,120 @@ async function refreshBroker(){
   POSITIONS = positions;
   TICKERS.forEach(t => { const el=$('pv-'+t); if(el) el.textContent=''; });
   renderPositionValues(positions);
+  loadRealizedPnL(); // P&L Realizado (Fase 2A) — caché propia, no bloquea
   if(CP_VIEW === 'home') renderHome();
+}
+
+/* ══════════════════════════════════════════════
+   P&L REALIZADO · Fase 2A (Semana 2)
+   ──────────────────────────────────────────────
+   Visibilidad sobre el paper trading YA operado (NO fabrica edge, no es
+   parte del laboratorio intradía). Empareja BUY↔SELL por ticker (FIFO)
+   usando el historial de órdenes de Alpaca (fills reales: filled_qty /
+   filled_avg_price) para calcular el P&L de round-trips YA CERRADOS.
+   Con brackets (SL/TP) da igual cuál pata cerró: el emparejado por
+   ticker+qty acumulada lo resuelve solo.                                  */
+const REALIZED_PNL_CACHE_KEY = 'st_realized_pnl_cache';
+const REALIZED_PNL_TTL_MS = 5 * 60 * 1000; // 5 min — TTL corto, se invalida también si cambia el nº de órdenes
+
+/* orders: array crudo de GET /v1/broker/orders (id, symbol, side, filled_qty,
+   filled_avg_price, status, submitted_at, ...).
+   Devuelve { total, totalPct, today, todayPct, trips:[...] }.
+   trips = round-trips cerrados: { symbol, qty, entry, exit, pnl, date }.    */
+function calculateRealizedPnL(orders){
+  const todayKey = new Date().toISOString().slice(0,10);
+
+  // Solo fills reales (parciales incluidos), orden cronológico por ticker.
+  const fills = (orders||[])
+    .filter(o => o && (o.status==='filled' || o.status==='partially_filled'))
+    .map(o => ({
+      symbol : String(o.symbol || '').toUpperCase(),
+      side   : String(o.side || '').toLowerCase(),
+      qty    : parseFloat(o.filled_qty),
+      price  : parseFloat(o.filled_avg_price),
+      ts     : o.submitted_at ? Date.parse(o.submitted_at) : NaN,
+      date   : o.submitted_at ? String(o.submitted_at).slice(0,10) : null
+    }))
+    .filter(f => f.symbol && f.side && f.qty>0 && f.price>0 && !isNaN(f.ts))
+    .sort((a,b)=>a.ts-b.ts);
+
+  // Colas FIFO de entradas (BUY) abiertas por ticker: [{qty, price}]
+  const queues = {};
+  let total=0, today=0, costClosed=0, costClosedToday=0;
+  const trips = [];
+
+  fills.forEach(f=>{
+    if(!queues[f.symbol]) queues[f.symbol]=[];
+    const q = queues[f.symbol];
+    if(f.side==='buy'){
+      q.push({ qty:f.qty, price:f.price });
+    } else if(f.side==='sell'){
+      let remaining = f.qty;
+      while(remaining>1e-9 && q.length){
+        const lot = q[0];
+        const matched = Math.min(lot.qty, remaining);
+        const pnl  = (f.price - lot.price) * matched;
+        const cost = lot.price * matched;
+        total += pnl; costClosed += cost;
+        if(f.date===todayKey){ today += pnl; costClosedToday += cost; }
+        trips.push({ symbol:f.symbol, qty:matched, entry:lot.price, exit:f.price, pnl, date:f.date });
+        lot.qty -= matched; remaining -= matched;
+        if(lot.qty<=1e-9) q.shift();
+      }
+      // Si remaining>0: venta sin entrada previa en la ventana traída (fuera
+      // de rango del limit, o short) — se ignora, no se fabrica P&L falso.
+    }
+  });
+
+  return {
+    total, today,
+    totalPct: costClosed>0 ? (total/costClosed*100) : null,
+    todayPct: costClosedToday>0 ? (today/costClosedToday*100) : null,
+    trips
+  };
+}
+
+function loadRealizedPnLCache(){
+  try{
+    const raw = JSON.parse(localStorage.getItem(REALIZED_PNL_CACHE_KEY) || 'null');
+    if(!raw || (Date.now() - raw.ts) > REALIZED_PNL_TTL_MS) return null;
+    return raw;
+  }catch{ return null; }
+}
+function saveRealizedPnLCache(orderCount, result){
+  try{ localStorage.setItem(REALIZED_PNL_CACHE_KEY, JSON.stringify({ ts:Date.now(), orderCount, result })); }
+  catch{}
+}
+
+/* Fetch del historial (limit alto para cubrir el histórico) + caché con
+   invalidación por TTL corto o por detección de órdenes nuevas (cambio en
+   el conteo total de órdenes devueltas por Alpaca). */
+async function loadRealizedPnL(){
+  const cached = loadRealizedPnLCache();
+  const d = await brokerGet('/v1/broker/orders?status=all&limit=500');
+  const orders = Array.isArray(d) ? d : (Array.isArray(d?.orders) ? d.orders : []);
+
+  if(!orders.length){
+    if(cached) renderRealizedPnL(cached.result);
+    return;
+  }
+  if(cached && cached.orderCount === orders.length){
+    renderRealizedPnL(cached.result); // sin cambios → reusar caché, no recalcular
+    return;
+  }
+  const result = calculateRealizedPnL(orders);
+  saveRealizedPnLCache(orders.length, result);
+  renderRealizedPnL(result);
+}
+
+function renderRealizedPnL(r){
+  const row=$('pf-realized-row'), el=$('pf-realized');
+  if(!row || !el) return;
+  if(!r || r.total==null || !r.trips || !r.trips.length){ row.style.display='none'; return; }
+  const col = r.total>=0 ? 'var(--green)' : 'var(--red)';
+  el.innerHTML = `<span style="color:${col};font-weight:800">${fPS(r.total)}${r.totalPct!=null?` (${fPct(r.totalPct)})`:''}</span>`;
+  row.title = `P&L Realizado · ${r.trips.length} operación(es) cerrada(s)` + (r.today!=null ? ` · Hoy: ${fPS(r.today)}` : '');
+  row.style.display='flex';
 }
 
 /* ── URL tickers ── */
@@ -3969,6 +4086,7 @@ async function init(){
   // 2. Construir el panel izquierdo con las posiciones (vacío si no hay)
   buildLeft();
   renderPositionValues(positions);
+  loadRealizedPnL(); // 2a. P&L Realizado (Fase 2A) — fetch en background, caché en localStorage
 
   // 2b. El panel central arranca en el HOME del portafolio (no en un ticker).
   showHome();
