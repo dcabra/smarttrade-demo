@@ -3786,6 +3786,23 @@ function setNivUser(ticker, field, value){
   }catch(e){}
 }
 
+/* Espeja el override manual de SL/TP al backend (M9 · niveles manuales).
+   Front (sl / tp1) → backend (sl / tp). Best-effort: si falla, el override
+   sigue en localStorage y el próximo confirm reintenta. */
+async function syncManualLevel(ticker){
+  try{
+    const tk  = ticker.toUpperCase();
+    const sl  = getNivUser(ticker, 'sl');
+    const tp1 = getNivUser(ticker, 'tp1');
+    const pos = (POSITIONS||[]).find(p => (p.symbol||'').toUpperCase() === tk);
+    const side = pos ? (pos.side || 'long') : 'long';
+    await brokerFetch('/v1/alerts/manual-levels/'+encodeURIComponent(tk), {
+      method:'PUT',
+      body:{ side, sl: sl ?? null, tp: tp1 ?? null, qty: pos ? pos.qty : null }
+    });
+  }catch(e){ /* best-effort; no interrumpe la edición */ }
+}
+
 // Abre el modo edición para un nivel
 function startEditNiv(ticker, field){
   const row = document.getElementById('row-'+field);
@@ -3821,6 +3838,7 @@ function confirmNiv(ticker, field){
   }
   recalcRR(ticker);
   updateLeftPanelNiv(ticker);
+  if(field === 'sl' || field === 'tp1') syncManualLevel(ticker);
 }
 
 // Cancela sin guardar
