@@ -666,6 +666,23 @@ body.tab-max .cp>.osc-panel{display:none !important}
 .pausa-btn:hover{border-color:var(--orange);color:var(--orange)}
 .bp-tab.on.strat{color:var(--gold);border-bottom-color:var(--gold)}
 .bp-tab.on.orders2{color:var(--blue);border-bottom-color:var(--blue)}
+.bp-tab.on.journal{color:var(--green);border-bottom-color:var(--green)}
+.jr-select{font-size:10px;color:var(--text2);background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:4px 8px;font-family:inherit;cursor:pointer;margin-left:auto}
+.jr-select:focus{outline:none;border-color:var(--green)}
+.jr-sort-btn{font-size:10px;font-weight:600;color:var(--text2);background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:4px 10px;cursor:pointer;font-family:inherit}
+.jr-sort-btn:hover{color:var(--text)}
+.jr-table-wrap{flex:1;overflow-y:auto;overflow-x:auto}
+.jr-table-empty{padding:34px 16px;text-align:center;color:var(--text2);font-size:13px;display:flex;flex-direction:column;gap:6px;align-items:center}
+.jr-table-empty .sub{font-size:11px;color:var(--text3)}
+table.jr-table{width:100%;border-collapse:collapse;font-size:12px}
+.jr-table thead th{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;text-align:right;padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;background:var(--bg)}
+.jr-table thead th:first-child,.jr-table thead th:nth-child(2),.jr-table thead th:nth-child(3){text-align:left}
+.jr-table tbody td{padding:9px 12px;border-bottom:1px solid var(--border);text-align:right;color:var(--text);white-space:nowrap;font-variant-numeric:tabular-nums}
+.jr-table tbody td:first-child,.jr-table tbody td:nth-child(2),.jr-table tbody td:nth-child(3){text-align:left}
+.jr-motivo{font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;letter-spacing:.04em}
+.jr-motivo.sl{background:rgba(231,76,60,.14);color:var(--red)}
+.jr-motivo.tp{background:rgba(46,204,113,.14);color:var(--green)}
+.jr-motivo.manual{background:var(--bg3);color:var(--text3);border:1px solid var(--border)}
 
 /* Placeholder bodies */
 .bp-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text3)}
@@ -1533,6 +1550,7 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
     <div class="bp-tab" id="tab-anticker"            onclick="switchTab('anticker')">📰 <span id="tab-anticker-lbl" title="Noticias y análisis del ticker seleccionado">Ticker —</span><span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('anticker')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div class="bp-tab" id="tab-orders"              onclick="switchTab('orders')">📋 Órdenes manuales<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('orders')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div class="bp-tab" id="tab-strat"               onclick="switchTab('strat')">🎯 Estrategias<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('strat')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <div class="bp-tab" id="tab-journal"             onclick="switchTab('journal')">📊 Journal<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('journal')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <span class="bp-chevron" id="bp-chevron" title="Minimizar / restaurar" onclick="toggleBPMin()">▾</span>
   </div>
   <!-- Chat body -->
@@ -1717,6 +1735,21 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
       <div class="stratp-detail" id="stratp-detail">
         <div class="stratp-empty"><div class="stratp-empty-ico">🎯</div><span>Selecciona una estrategia o crea una nueva.</span></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Journal body -->
+  <div class="bp-body" id="body-journal">
+    <div class="mo-wrap">
+      <div class="mo-head">
+        <span class="mo-title">📊 Journal de Operaciones</span>
+        <span class="mo-count" id="journal-count">0</span>
+        <select id="journal-ticker-filter" class="jr-select" onchange="journalRender()" title="Filtrar por ticker">
+          <option value="">Todos los tickers</option>
+        </select>
+        <button class="jr-sort-btn" id="journal-sort-btn" onclick="journalToggleSort()">Más reciente ↓</button>
+      </div>
+      <div class="jr-table-wrap" id="journal-table-wrap"></div>
     </div>
   </div>
 </div>
@@ -2525,12 +2558,13 @@ function calculateRealizedPnL(orders){
       qty    : parseFloat(o.filled_qty),
       price  : parseFloat(o.filled_avg_price),
       ts     : o.submitted_at ? Date.parse(o.submitted_at) : NaN,
-      date   : o.submitted_at ? String(o.submitted_at).slice(0,10) : null
+      date   : o.submitted_at ? String(o.submitted_at).slice(0,10) : null,
+      iso    : o.submitted_at || null
     }))
     .filter(f => f.symbol && f.side && f.qty>0 && f.price>0 && !isNaN(f.ts))
     .sort((a,b)=>a.ts-b.ts);
 
-  // Colas FIFO de entradas (BUY) abiertas por ticker: [{qty, price}]
+  // Colas FIFO de entradas (BUY) abiertas por ticker: [{qty, price, ts, date, iso}]
   const queues = {};
   let total=0, today=0, costClosed=0, costClosedToday=0;
   const trips = [];
@@ -2539,7 +2573,7 @@ function calculateRealizedPnL(orders){
     if(!queues[f.symbol]) queues[f.symbol]=[];
     const q = queues[f.symbol];
     if(f.side==='buy'){
-      q.push({ qty:f.qty, price:f.price });
+      q.push({ qty:f.qty, price:f.price, ts:f.ts, date:f.date, iso:f.iso });
     } else if(f.side==='sell'){
       let remaining = f.qty;
       while(remaining>1e-9 && q.length){
@@ -2549,7 +2583,18 @@ function calculateRealizedPnL(orders){
         const cost = lot.price * matched;
         total += pnl; costClosed += cost;
         if(f.date===todayKey){ today += pnl; costClosedToday += cost; }
-        trips.push({ symbol:f.symbol, qty:matched, entry:lot.price, exit:f.price, pnl, date:f.date });
+
+        const durationDays = (!isNaN(lot.ts) && !isNaN(f.ts))
+          ? Math.max(0, (f.ts - lot.ts) / 86400000) : null;
+
+        trips.push({
+          symbol:f.symbol, qty:matched, entry:lot.price, exit:f.price, pnl, date:f.date,
+          pnlPct: cost>0 ? (pnl/cost*100) : null,
+          entryDate: lot.date, entryIso: lot.iso, entryTs: lot.ts,
+          exitDate:  f.date,   exitIso:  f.iso,   exitTs:  f.ts,
+          durationDays,
+          motivo: inferCloseMotivo(f.symbol, f.price)
+        });
         lot.qty -= matched; remaining -= matched;
         if(lot.qty<=1e-9) q.shift();
       }
@@ -2564,6 +2609,26 @@ function calculateRealizedPnL(orders){
     todayPct: costClosedToday>0 ? (today/costClosedToday*100) : null,
     trips
   };
+}
+
+/* Infiere el motivo de cierre de un round-trip comparando el precio de salida
+   contra los niveles SL/TP1/TP2/TP3 conocidos (cacheados en CACHE[symbol].sig.niveles
+   vía getEffectiveNiv). Best-effort y honesto: si el ticker no está cacheado, no
+   tiene niveles, o el precio no calza dentro de la tolerancia, devuelve "Manual"
+   en vez de inventar un motivo. */
+function inferCloseMotivo(symbol, exitPrice){
+  try{
+    if(typeof getEffectiveNiv !== 'function' || exitPrice==null || isNaN(exitPrice)) return 'Manual';
+    const niv = getEffectiveNiv(symbol);
+    if(!niv) return 'Manual';
+    const TOL = 0.006; // ~0.6% — los fills reales rara vez calzan al centavo exacto
+    const checks = [['sl','SL'], ['tp1','TP1'], ['tp2','TP2'], ['tp3','TP3']];
+    for(const [key,label] of checks){
+      const lvl = niv[key];
+      if(lvl!=null && !isNaN(lvl) && lvl>0 && Math.abs(exitPrice-lvl)/lvl <= TOL) return label;
+    }
+    return 'Manual';
+  }catch{ return 'Manual'; }
 }
 
 function loadRealizedPnLCache(){
@@ -2607,6 +2672,108 @@ function renderRealizedPnL(r){
   el.innerHTML = `<span style="color:${col};font-weight:800">${fPS(r.total)}${r.totalPct!=null?` (${fPct(r.totalPct)})`:''}</span>`;
   row.title = `P&L Realizado · ${r.trips.length} operación(es) cerrada(s)` + (r.today!=null ? ` · Hoy: ${fPS(r.today)}` : '');
   row.style.display='flex';
+}
+
+/* ══════════════════════════════════════════════
+   JOURNAL DE OPERACIONES · Fase 2B (Semana 2)
+   ──────────────────────────────────────────────
+   Visibilidad pura sobre round-trips YA CERRADOS. Reusa el mismo cálculo
+   FIFO y la misma caché (REALIZED_PNL_CACHE_KEY) de P&L Realizado (Fase 2A):
+   si hay caché vigente (TTL 5 min), no vuelve a pegarle al backend ni a
+   recalcular el emparejado. Founder-only, paper-only.                     */
+let JOURNAL_SORT_DESC = true; // true = más reciente primero (default pedido)
+let JOURNAL_TICKER_FILTER = '';
+
+async function journalLoad(){
+  const cached = loadRealizedPnLCache();
+  let result;
+  if(cached){
+    result = cached.result; // caché vigente → sin refetch, sin recalcular FIFO
+  } else {
+    const d = await brokerGet('/v1/broker/orders?status=all&limit=500');
+    const orders = Array.isArray(d) ? d : (Array.isArray(d?.orders) ? d.orders : []);
+    result = orders.length ? calculateRealizedPnL(orders) : null;
+    if(orders.length){ saveRealizedPnLCache(orders.length, result); renderRealizedPnL(result); }
+  }
+  journalRenderFilterOptions(result?.trips || []);
+  journalRender(result?.trips || []);
+}
+
+function journalRenderFilterOptions(trips){
+  const sel = $('journal-ticker-filter'); if(!sel) return;
+  const prev = sel.value;
+  const symbols = [...new Set(trips.map(t=>t.symbol))].sort();
+  sel.innerHTML = `<option value="">Todos los tickers</option>` +
+    symbols.map(s=>`<option value="${s}">${s}</option>`).join('');
+  sel.value = symbols.includes(prev) ? prev : '';
+  JOURNAL_TICKER_FILTER = sel.value;
+}
+
+function journalToggleSort(){
+  JOURNAL_SORT_DESC = !JOURNAL_SORT_DESC;
+  const btn = $('journal-sort-btn');
+  if(btn) btn.textContent = JOURNAL_SORT_DESC ? 'Más reciente ↓' : 'Más antigua ↑';
+  journalRender();
+}
+
+/* trips opcional: si no se pasa, reusa la última corrida cacheada (localStorage),
+   útil cuando se llama desde los controles de filtro/orden sin recargar red. */
+function journalRender(tripsArg){
+  const wrap = $('journal-table-wrap'), cnt = $('journal-count');
+  if(!wrap) return;
+
+  let trips = tripsArg;
+  if(!trips){
+    const cached = loadRealizedPnLCache();
+    trips = cached?.result?.trips || [];
+  }
+
+  const selEl = $('journal-ticker-filter');
+  JOURNAL_TICKER_FILTER = selEl ? selEl.value : JOURNAL_TICKER_FILTER;
+  let rows = trips.slice();
+  if(JOURNAL_TICKER_FILTER) rows = rows.filter(t=>t.symbol===JOURNAL_TICKER_FILTER);
+  rows.sort((a,b)=> JOURNAL_SORT_DESC ? (b.exitTs||0)-(a.exitTs||0) : (a.exitTs||0)-(b.exitTs||0));
+
+  if(cnt) cnt.textContent = rows.length;
+
+  if(!rows.length){
+    wrap.innerHTML = `<div class="jr-table-empty">
+        <strong>Sin operaciones cerradas aún</strong>
+        <span class="sub">En cuanto haya un round-trip (entrada + salida emparejadas) en tu cuenta paper, aparecerá acá.</span>
+      </div>`;
+    return;
+  }
+
+  const fmtDate = iso => {
+    if(!iso) return '—';
+    const dt = new Date(iso);
+    return isNaN(dt.getTime()) ? '—' : dt.toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'2-digit'});
+  };
+  const motivoCls = m => m==='SL' ? 'sl' : (m==='Manual' ? 'manual' : 'tp');
+
+  const trs = rows.map(t=>{
+    const plCls = t.pnl>=0 ? 'ph-pos' : 'ph-neg';
+    const dur = t.durationDays!=null ? (t.durationDays<1 ? '<1 d' : Math.round(t.durationDays)+' d') : '—';
+    return `<tr>
+      <td><span class="ph-row-sym">${t.symbol}</span></td>
+      <td>${fmtDate(t.entryIso)}<br><span style="color:var(--text3);font-size:10.5px">${fP(t.entry)}</span></td>
+      <td>${fmtDate(t.exitIso)}<br><span style="color:var(--text3);font-size:10.5px">${fP(t.exit)}</span></td>
+      <td>${(+t.qty).toLocaleString('en-US',{maximumFractionDigits:6})}</td>
+      <td class="${plCls}">${fPS(t.pnl)}</td>
+      <td class="${plCls}">${t.pnlPct!=null ? fPct(t.pnlPct) : '—'}</td>
+      <td>${dur}</td>
+      <td><span class="jr-motivo ${motivoCls(t.motivo)}">${t.motivo||'Manual'}</span></td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <table class="jr-table">
+      <thead><tr>
+        <th>Ticker</th><th>Entrada</th><th>Salida</th><th>Qty</th>
+        <th>P&L ($)</th><th>P&L (%)</th><th>Duración</th><th>Motivo</th>
+      </tr></thead>
+      <tbody>${trs}</tbody>
+    </table>`;
 }
 
 /* ── URL tickers ── */
@@ -5479,6 +5646,7 @@ function switchTab(tab){
     if(tab==='strat')   tabEl.classList.add('strat');
     if(tab==='orders')  tabEl.classList.add('orders2');
     if(tab==='alerts')  tabEl.classList.add('chat');
+    if(tab==='journal') tabEl.classList.add('journal');
   }
   const bodyEl=$('body-'+tab);
   if(bodyEl) bodyEl.classList.add('on');
@@ -5489,6 +5657,7 @@ function switchTab(tab){
   if(tab==='cal'){ loadCalendar(); loadPausas(); }
   if(tab==='orders') ordersRender();
   if(tab==='alerts') markAlertsRead();
+  if(tab==='journal') journalLoad();
 }
 
 /* ══════════════════════════════════════════════
