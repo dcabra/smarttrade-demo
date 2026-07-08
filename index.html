@@ -685,6 +685,15 @@ table.jr-table{width:100%;border-collapse:collapse;font-size:12px}
 .jr-motivo.sl{background:rgba(231,76,60,.14);color:var(--red)}
 .jr-motivo.tp{background:rgba(46,204,113,.14);color:var(--green)}
 .jr-motivo.manual{background:var(--bg3);color:var(--text3);border:1px solid var(--border)}
+/* §3.1 — Agregados del Journal (fila de chips encima de la tabla) */
+.jr-agg{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.jr-agg-chip{flex:1 1 auto;min-width:98px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;display:flex;flex-direction:column;gap:3px}
+.jr-agg-lbl{font-size:8.5px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+.jr-agg-val{font-size:14px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.jr-agg-val.pos{color:var(--green)}
+.jr-agg-val.neg{color:var(--red)}
+.jr-agg-sym{font-size:11px;font-weight:700;color:var(--text2);margin-right:2px}
+.jr-agg-sub{font-size:9px;font-weight:600;color:var(--text3)}
 
 /* Placeholder bodies */
 .bp-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text3)}
@@ -1752,6 +1761,7 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
         </select>
         <button class="jr-sort-btn" id="journal-sort-btn" onclick="journalToggleSort()">Más reciente ↓</button>
       </div>
+      <div class="jr-agg" id="journal-agg" style="display:none"></div>
       <div class="jr-table-wrap" id="journal-table-wrap"></div>
     </div>
   </div>
@@ -2739,6 +2749,8 @@ function journalRender(tripsArg){
 
   if(cnt) cnt.textContent = rows.length;
 
+  journalRenderAgg(rows); // §3.1 — agregados sobre los mismos trips filtrados
+
   if(!rows.length){
     wrap.innerHTML = `<div class="jr-table-empty">
         <strong>Sin operaciones cerradas aún</strong>
@@ -2777,6 +2789,57 @@ function journalRender(tripsArg){
       </tr></thead>
       <tbody>${trs}</tbody>
     </table>`;
+}
+
+/* §3.1 — Agregados del Journal.
+   100% frontend: calcula las métricas sobre los MISMOS round-trips ya
+   filtrados/ordenados que alimentan la tabla (respeta el filtro por ticker),
+   sin fetch ni endpoint nuevo. Si no hay trips en la vista, oculta el panel:
+   el estado vacío lo maneja la tabla existente.                            */
+function journalRenderAgg(rows){
+  const box = $('journal-agg'); if(!box) return;
+  if(!rows || !rows.length){ box.style.display='none'; box.innerHTML=''; return; }
+
+  const n        = rows.length;
+  const wins     = rows.filter(t=>t.pnl>0).length;
+  const winRate  = wins/n*100;
+  const totalPnl = rows.reduce((a,t)=>a+t.pnl,0);
+  const avgPnl   = totalPnl/n;
+
+  const durs   = rows.map(t=>t.durationDays).filter(d=>d!=null && !isNaN(d));
+  const avgDur = durs.length ? durs.reduce((a,d)=>a+d,0)/durs.length : null;
+  const durTxt = avgDur==null ? '—' : (avgDur<1 ? '<1 d'
+               : avgDur.toFixed(1).replace(/\.0$/,'') + ' d');
+
+  let best = rows[0], worst = rows[0];
+  rows.forEach(t=>{ if(t.pnl>best.pnl) best=t; if(t.pnl<worst.pnl) worst=t; });
+
+  const tradeChip = (lbl,t)=>`
+    <div class="jr-agg-chip">
+      <span class="jr-agg-lbl">${lbl}</span>
+      <span class="jr-agg-val ${t.pnl>=0?'pos':'neg'}"><span class="jr-agg-sym">${t.symbol}</span>${fPS(t.pnl)}</span>
+    </div>`;
+
+  box.style.display = '';
+  box.innerHTML = `
+    <div class="jr-agg-chip">
+      <span class="jr-agg-lbl">Win Rate</span>
+      <span class="jr-agg-val">${winRate.toFixed(1)}%<span class="jr-agg-sub"> · ${wins}/${n}</span></span>
+    </div>
+    <div class="jr-agg-chip">
+      <span class="jr-agg-lbl">P&L Total</span>
+      <span class="jr-agg-val ${totalPnl>=0?'pos':'neg'}">${fPS(totalPnl)}</span>
+    </div>
+    <div class="jr-agg-chip">
+      <span class="jr-agg-lbl">P&L Prom./Trade</span>
+      <span class="jr-agg-val ${avgPnl>=0?'pos':'neg'}">${fPS(avgPnl)}</span>
+    </div>
+    <div class="jr-agg-chip">
+      <span class="jr-agg-lbl">Duración Prom.</span>
+      <span class="jr-agg-val">${durTxt}</span>
+    </div>
+    ${tradeChip('Mejor Trade', best)}
+    ${tradeChip('Peor Trade', worst)}`;
 }
 
 /* ── URL tickers ── */
