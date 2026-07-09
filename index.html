@@ -4593,7 +4593,31 @@ async function init(){
    ══════════════════════════════════════════════ */
 let WATCHLIST = JSON.parse(localStorage.getItem('st_watchlist') || '[]');
 
-function saveWL(){ localStorage.setItem('st_watchlist', JSON.stringify(WATCHLIST)); }
+/* Persistencia del watchlist:
+   - localStorage: caché local para render instantáneo al abrir (offline-friendly).
+   - Backend (PUT /v1/watchlist): la verdad persistente, atada a la sesión de
+     founder, para que el watchlist siga al usuario entre máquinas y navegadores.
+   saveWL() guarda en ambos: local inmediato + backend en segundo plano. */
+function saveWL(){
+  try{ localStorage.setItem('st_watchlist', JSON.stringify(WATCHLIST)); }catch(e){}
+  syncWatchlistToServer();
+}
+let _wlSyncTimer = null;
+function syncWatchlistToServer(){
+  // Debounce: agrupa cambios rápidos (agregar/quitar varios) en un solo PUT.
+  if(_wlSyncTimer) clearTimeout(_wlSyncTimer);
+  _wlSyncTimer = setTimeout(async ()=>{
+    const token = getBrokerToken();
+    if(!token) return;   // sin sesión no hay a quién guardar; queda el localStorage
+    try{
+      await fetch(API+'/v1/watchlist', {
+        method:'PUT',
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
+        body: JSON.stringify({ tickers: WATCHLIST })
+      });
+    }catch(e){ /* si el backend falla, el localStorage conserva el cambio */ }
+  }, 400);
+}
 
 function renderWatchlist(){
   // Dedup: un ticker que ya está en el Portafolio (Alpaca) NO debe aparecer
@@ -4865,7 +4889,25 @@ function removeWatchlist(t){
 
 // Inicializar watchlist guardada
 async function initWatchlist(){
-  if(!WATCHLIST.length) return;
+  // 1. La verdad persistente vive en el backend. La cargamos y reemplazamos el
+  //    caché local con lo que diga el servidor (así el watchlist es el mismo en
+  //    cualquier máquina/navegador). Si el backend no responde, seguimos con lo
+  //    que haya en localStorage.
+  const token = getBrokerToken();
+  if(token){
+    try{
+      const r = await fetch(API+'/v1/watchlist', { headers:{ 'Authorization':'Bearer '+token } });
+      if(r.ok){
+        const data = await r.json();
+        if(Array.isArray(data?.tickers)){
+          WATCHLIST = data.tickers;
+          try{ localStorage.setItem('st_watchlist', JSON.stringify(WATCHLIST)); }catch(e){}
+        }
+      }
+    }catch(e){ /* offline o backend caído: usamos el localStorage ya cargado */ }
+  }
+
+  if(!WATCHLIST.length){ renderWatchlist(); return; }
   renderWatchlist();
   const proms = WATCHLIST.map(async t => {
     if(CACHE[t]?.sig) return;
