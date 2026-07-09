@@ -573,8 +573,14 @@ body.tab-max .cp>.osc-panel{display:none !important}
 .usermenu-item.danger:hover{background:rgba(231,76,60,.12)}
 .usermenu-item .umi-ico{font-size:13px;width:16px;text-align:center;flex-shrink:0}
 .usermenu-div{height:1px;background:var(--border);margin:4px 2px}
-.cpw-step{font-size:11px;line-height:1.6;color:var(--text2)}
-.cpw-code{display:inline-block;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;margin:3px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;color:var(--gold)}
+.cpw-input{width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:9px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .12s}
+.cpw-input:focus{border-color:var(--blue)}
+.cpw-hint{font-size:10.5px;color:var(--text3);min-height:14px}
+.cpw-hint.bad{color:var(--orange)}
+.cpw-hint.good{color:var(--green)}
+.cpw-msg{font-size:11.5px;font-weight:600;min-height:16px}
+.cpw-msg.ok{color:var(--green)}
+.cpw-msg.err{color:var(--red)}
 .lp-hdr-right{display:flex;align-items:center;gap:6px}
 .lp-add-btn{background:rgba(245,197,24,.12);border:1px solid rgba(245,197,24,.3);color:var(--gold);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer;transition:background .1s;line-height:1.4}
 .lp-add-btn:hover{background:rgba(245,197,24,.22)}
@@ -1075,40 +1081,36 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 
 <!-- Modal · Cambiar contraseña (explicativo — el hash vive en Railway) -->
 <div class="om-overlay" id="changepw-overlay" onclick="if(event.target===this)closeChangePassword()">
-  <div class="om-modal" style="max-width:440px">
+  <div class="om-modal" style="max-width:400px">
     <div class="om-hdr">
       <span class="om-title">🔑 Cambiar contraseña</span>
       <button class="om-x" onclick="closeChangePassword()">✕</button>
     </div>
     <div class="om-body">
-      <div class="om-legal">
-        <div class="om-legal-p">
-          Tu contraseña de founder se verifica en el servidor contra un hash guardado
-          como variable de entorno en Railway (<b>FOUNDER_PASSWORD_HASH</b>). No se
-          almacena en una base de datos que la app pueda reescribir, así que el cambio
-          se hace regenerando el hash y actualizando esa variable.
-        </div>
+      <div>
+        <div class="om-lbl">Contraseña actual</div>
+        <input type="password" class="cpw-input" id="cpw-current" autocomplete="current-password"
+               placeholder="Tu contraseña actual"
+               onkeydown="if(event.key==='Enter')document.getElementById('cpw-new').focus()" />
       </div>
       <div>
-        <div class="om-lbl">Paso 1 — Generar el hash nuevo</div>
-        <div class="cpw-step">En tu máquina, en el repo del backend:
-          <code class="cpw-code">python generate_password_hash.py</code>
-          Te pedirá la contraseña nueva (dos veces) e imprime una línea que empieza con
-          <code class="cpw-code">FOUNDER_PASSWORD_HASH=</code></div>
+        <div class="om-lbl">Contraseña nueva</div>
+        <input type="password" class="cpw-input" id="cpw-new" autocomplete="new-password"
+               placeholder="Mínimo 8 caracteres" oninput="cpwCheck()"
+               onkeydown="if(event.key==='Enter')document.getElementById('cpw-confirm').focus()" />
       </div>
       <div>
-        <div class="om-lbl">Paso 2 — Actualizar en Railway</div>
-        <div class="cpw-step">Railway → proyecto del backend → pestaña <b>Variables</b> →
-          reemplaza el valor de <b>FOUNDER_PASSWORD_HASH</b> con el nuevo. Railway
-          redespliega solo.</div>
+        <div class="om-lbl">Confirmar contraseña nueva</div>
+        <input type="password" class="cpw-input" id="cpw-confirm" autocomplete="new-password"
+               placeholder="Repite la contraseña nueva" oninput="cpwCheck()"
+               onkeydown="if(event.key==='Enter')submitChangePassword()" />
       </div>
-      <div>
-        <div class="om-lbl">Paso 3 — Entrar con la nueva</div>
-        <div class="cpw-step">Cierra sesión y vuelve a entrar con la contraseña nueva.</div>
-      </div>
+      <div class="cpw-hint" id="cpw-hint"></div>
+      <div class="cpw-msg" id="cpw-msg"></div>
     </div>
     <div class="om-foot">
-      <button class="om-btn send" onclick="closeChangePassword()">Entendido</button>
+      <button class="om-btn" onclick="closeChangePassword()" style="background:none;border:1px solid var(--border2);color:var(--text2)">Cancelar</button>
+      <button class="om-btn send" id="cpw-submit" onclick="submitChangePassword()">Cambiar contraseña</button>
     </div>
   </div>
 </div>
@@ -2036,16 +2038,71 @@ function userMenuLogout(){
   closeUserMenu();
   if(confirm('¿Cerrar sesión? Volverás a la pantalla de acceso.')) disconnectBroker();
 }
-/* Cambiar contraseña: la contraseña de founder se valida en el servidor contra
-   FOUNDER_PASSWORD_HASH (variable de entorno en Railway). No se guarda en una
-   base de datos que la app pueda reescribir, así que el cambio se hace
-   regenerando el hash y actualizando la variable. Este modal explica el paso a
-   paso de forma honesta en vez de simular un cambio que el backend no soporta. */
+/* Cambiar contraseña: formulario real. Verifica la actual y guarda la nueva
+   vía POST /v1/auth/change-password (protegido con el Bearer de sesión). El
+   backend persiste el hash nuevo; desde ahí el login usa la contraseña nueva. */
 function openChangePassword(){
   closeUserMenu();
+  ['cpw-current','cpw-new','cpw-confirm'].forEach(id=>{ const el=$(id); if(el) el.value=''; });
+  const hint=$('cpw-hint'); if(hint){ hint.textContent=''; hint.className='cpw-hint'; }
+  const msg=$('cpw-msg'); if(msg){ msg.textContent=''; msg.className='cpw-msg'; }
+  const btn=$('cpw-submit'); if(btn){ btn.disabled=false; btn.textContent='Cambiar contraseña'; }
   const ov=$('changepw-overlay'); if(ov) ov.classList.add('show');
+  setTimeout(()=>$('cpw-current')?.focus(), 50);
 }
 function closeChangePassword(){ $('changepw-overlay')?.classList.remove('show'); }
+
+/* Validación en vivo de la contraseña nueva (largo mínimo + coincidencia). */
+function cpwCheck(){
+  const nw=$('cpw-new')?.value||'', cf=$('cpw-confirm')?.value||'';
+  const hint=$('cpw-hint'); if(!hint) return true;
+  if(nw && nw.length<8){ hint.textContent='La nueva debe tener al menos 8 caracteres.'; hint.className='cpw-hint bad'; return false; }
+  if(cf && nw!==cf){ hint.textContent='Las contraseñas no coinciden.'; hint.className='cpw-hint bad'; return false; }
+  if(nw && nw.length>=8 && nw===cf){ hint.textContent='✓ Las contraseñas coinciden.'; hint.className='cpw-hint good'; return true; }
+  hint.textContent=''; hint.className='cpw-hint'; return false;
+}
+
+/* Envía el cambio al backend. */
+async function submitChangePassword(){
+  const cur=$('cpw-current')?.value||'', nw=$('cpw-new')?.value||'', cf=$('cpw-confirm')?.value||'';
+  const msg=$('cpw-msg'), btn=$('cpw-submit');
+  const showErr=(t)=>{ if(msg){ msg.textContent=t; msg.className='cpw-msg err'; } };
+  if(msg){ msg.textContent=''; msg.className='cpw-msg'; }
+
+  if(!cur){ showErr('Ingresa tu contraseña actual.'); return; }
+  if(nw.length<8){ showErr('La nueva contraseña debe tener al menos 8 caracteres.'); return; }
+  if(nw!==cf){ showErr('La nueva contraseña y su confirmación no coinciden.'); return; }
+  if(nw===cur){ showErr('La nueva contraseña debe ser distinta a la actual.'); return; }
+
+  const token = getBrokerToken();
+  if(!token){ showErr('Tu sesión expiró. Cierra e inicia sesión de nuevo.'); return; }
+
+  if(btn){ btn.disabled=true; btn.textContent='Guardando…'; }
+  try{
+    const r = await fetch(API+'/v1/auth/change-password', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+token },
+      body: JSON.stringify({ current_password: cur, new_password: nw })
+    });
+    if(r.status===401){
+      // Puede ser contraseña actual incorrecta o sesión inválida; el detail lo aclara.
+      let d=''; try{ d=(await r.json())?.detail||''; }catch{}
+      showErr(d.includes('actual') ? 'La contraseña actual es incorrecta.' : 'Tu sesión expiró. Inicia sesión de nuevo.');
+      return;
+    }
+    if(r.status===422){ let d=''; try{ d=(await r.json())?.detail||''; }catch{} showErr(d||'La nueva contraseña no cumple los requisitos.'); return; }
+    if(r.status===429){ showErr('Demasiados intentos. Espera unos minutos.'); return; }
+    if(!r.ok){ showErr('No se pudo cambiar la contraseña ('+r.status+').'); return; }
+    if(msg){ msg.textContent='✓ Contraseña cambiada. Úsala la próxima vez que inicies sesión.'; msg.className='cpw-msg ok'; }
+    ['cpw-current','cpw-new','cpw-confirm'].forEach(id=>{ const el=$(id); if(el) el.value=''; });
+    const hint=$('cpw-hint'); if(hint){ hint.textContent=''; hint.className='cpw-hint'; }
+    setTimeout(closeChangePassword, 1800);
+  }catch(e){
+    showErr('No se pudo contactar el backend.');
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='Cambiar contraseña'; }
+  }
+}
 /* Cerrar el dropdown al hacer click fuera del chip */
 document.addEventListener('click', (e)=>{
   const wrap = $('acct-chip-wrap');
