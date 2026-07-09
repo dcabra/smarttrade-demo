@@ -1011,6 +1011,15 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .rp-pos-sub{font-size:9px;color:var(--text3);margin-top:2px}
 .rp-niv-note{font-size:8.5px;color:var(--text3);font-style:italic;margin-top:5px;line-height:1.35}
 .rp-mp-loading{font-size:9.5px;color:var(--text3)}
+.tmode-sel{margin-left:6px;border-color:rgba(245,197,24,.35) !important;color:var(--gold) !important}
+.rp-mp-tfbar{display:flex;gap:3px;margin-bottom:6px}
+.rp-mp-tf{flex:1;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:3px 0;border:1px solid var(--border2);background:var(--bg3);color:var(--text3);border-radius:5px;cursor:pointer;transition:all .12s}
+.rp-mp-tf:hover{color:var(--text2);border-color:var(--blue)}
+.rp-mp-tf.on{color:var(--blue);border-color:var(--blue);background:rgba(77,158,247,.1)}
+.rp-mp-cfg{display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.rp-mp-cfg-item{font-size:9px;color:var(--text3);display:flex;align-items:center;gap:4px}
+.rp-mp-cfg-item input{width:38px;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:10px;padding:2px 4px;font-family:inherit;outline:none}
+.rp-mp-cfg-item input:focus{border-color:var(--blue)}
 .rp-mp-kpis{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
 .rp-mp-roi{font-size:13px;font-weight:800}
 .rp-mp-win{font-size:9.5px;color:var(--text2)}
@@ -1138,6 +1147,12 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
     </select>
     <button class="refresh-now" onclick="forceRefresh()" title="Refrescar ahora">↻</button>
     <span class="refresh-dot" id="rdot" title="Auto-refresco activo"></span>
+    <select class="refresh-sel tmode-sel" id="tmode-sel" onchange="setTradingMode(this.value)" title="Modo de operación: define el timeframe con el que se evalúa el desempeño del modelo">
+      <option value="swing">📊 Swing · diario</option>
+      <option value="1h">⏱ Intradía · 1h</option>
+      <option value="15m">⏱ Intradía · 15m</option>
+      <option value="5m">⚡ Scalping · 5m</option>
+    </select>
     <span class="refresh-cd" id="rcd">—</span>
   </div>
   <span class="mkt-chip" id="mkt-chip" style="display:none" title="Estado del mercado US (NYSE/Nasdaq) según Alpaca"></span>
@@ -3966,10 +3981,28 @@ function buildRP(t,sig,fc){
   </div>
   <div class="rp-sec" id="rp-model-perf" style="padding:6px 14px">
     <div class="rp-lbl" style="margin-bottom:4px">Desempeño del modelo · ${t}</div>
+    <div class="rp-mp-tfbar" id="rp-mp-tfbar">
+      <button class="rp-mp-tf on" data-tf="1D"  onclick="setModelPerfTf('${t}','1D',this)">Diario</button>
+      <button class="rp-mp-tf"    data-tf="1h"  onclick="setModelPerfTf('${t}','1h',this)">1h</button>
+      <button class="rp-mp-tf"    data-tf="15m" onclick="setModelPerfTf('${t}','15m',this)">15m</button>
+      <button class="rp-mp-tf"    data-tf="5m"  onclick="setModelPerfTf('${t}','5m',this)">5m</button>
+    </div>
+    <div class="rp-mp-cfg" id="rp-mp-cfg" style="display:none">
+      <label class="rp-mp-cfg-item" title="Cuántas velas mira cada señal para cerrar en TP/SL o al final de la ventana">
+        Ventana <input type="number" id="rp-mp-ventana" min="1" max="60" value="8" onchange="reloadModelPerfIntradia('${t}')"> velas
+      </label>
+      <label class="rp-mp-cfg-item" title="Costo estimado por lado; ida y vuelta = 2× este valor. Hace el ROI realista.">
+        Costo <input type="number" id="rp-mp-costo" min="0" max="1" step="0.01" value="0.05" onchange="reloadModelPerfIntradia('${t}')">% / lado
+      </label>
+    </div>
     <div class="rp-mp-body" id="rp-mp-body"><span class="rp-mp-loading">Cargando historial…</span></div>
   </div>
   <button class="rp-orden-btn" onclick="openOrderModal('${t}')">Orden manual ↗</button>`;
-  rpLoadModelPerf(t);
+  // El termómetro arranca en el timeframe del modo de operación elegido.
+  const _mtf = TMODE_TF[TRADING_MODE]||'1D';
+  MODEL_PERF_TF = '1D';   // estado limpio; applyModeToPerf lo lleva al del modo
+  if(_mtf==='1D'){ rpLoadModelPerf(t); }
+  else { setTimeout(applyModeToPerf, 0); }
 }
 
 /* ── Desempeño del modelo en el panel derecho ────────────────────────────
@@ -4031,7 +4064,123 @@ async function rpLoadModelPerf(t){
     </svg>`;
 }
 
-/* ── NIV USER OVERRIDES ── */
+/* ── Termómetro de efectividad: selector de timeframe ────────────────────────
+   Diario (1D) usa la fuente paper/backtest existente (rpLoadModelPerf).
+   Intradía (1h/15m/5m) llama al endpoint /v1/papertrading/intradia, que evalúa
+   las señales por vela con TP/SL y descuenta costos (ROI neto y realista). */
+let MODEL_PERF_TF = '1D';
+
+/* ── Modo de operación del trader (dropdown del topbar) ──────────────────────
+   Define CÓMO opera el usuario y, con eso, el timeframe con el que se evalúa
+   el desempeño del modelo (la tabla: scalping→5m, intradía→15m/1h, swing→diario).
+   Las ventanas por defecto son sensatas para cada estilo:
+     5m→12 velas (1h de vida por operación) · 15m→8 velas (2h) · 1h→7 velas (día).
+   El usuario puede afinarlas en los controles del panel. */
+const TMODE_TF  = { swing:'1D', '1h':'1h', '15m':'15m', '5m':'5m' };
+const TMODE_WIN = { '1h':7, '15m':8, '5m':12 };
+let TRADING_MODE = (function(){ try{ return localStorage.getItem('st_trading_mode')||'swing'; }catch(e){ return 'swing'; } })();
+
+function setTradingMode(mode){
+  if(!TMODE_TF[mode]) mode='swing';
+  TRADING_MODE = mode;
+  try{ localStorage.setItem('st_trading_mode', mode); }catch(e){}
+  const sel=$('tmode-sel'); if(sel && sel.value!==mode) sel.value=mode;
+  // Aplicar al termómetro del ticker activo (si el panel está renderizado)
+  applyModeToPerf();
+}
+
+/* Aplica el modo actual al panel de desempeño: selecciona el timeframe que
+   corresponde, pone la ventana default del modo y recarga. */
+function applyModeToPerf(){
+  if(!ACTIVE) return;
+  const tf = TMODE_TF[TRADING_MODE]||'1D';
+  const btn = document.querySelector(`.rp-mp-tf[data-tf="${tf}"]`);
+  if(!btn) return;   // el panel no está en pantalla
+  const vent=$('rp-mp-ventana');
+  if(vent && TMODE_WIN[tf]) vent.value = TMODE_WIN[tf];
+  setModelPerfTf(ACTIVE, tf, btn);
+}
+
+/* Sincronización con la gráfica: 1D/5D del chart usan velas HORARIAS →
+   el termómetro sigue al intradía; rangos diarios (1M+) → vuelve a Diario.
+   Regla anti-sorpresas: solo auto-cambia entre Diario↔intradía-del-modo;
+   si el usuario eligió a mano un tf en el panel, un click de chart del mismo
+   tipo (intradía/diario) no se lo pisa. */
+function syncPerfWithChart(isIntradayChart){
+  if(!ACTIVE) return;
+  const wantTf = isIntradayChart
+    ? (TMODE_TF[TRADING_MODE]!=='1D' ? TMODE_TF[TRADING_MODE] : '1h')
+    : '1D';
+  const isIntraNow = MODEL_PERF_TF!=='1D';
+  if(isIntradayChart === isIntraNow) return;   // ya está en el tipo correcto
+  const btn = document.querySelector(`.rp-mp-tf[data-tf="${wantTf}"]`);
+  if(!btn) return;
+  const vent=$('rp-mp-ventana');
+  if(vent && TMODE_WIN[wantTf]) vent.value = TMODE_WIN[wantTf];
+  setModelPerfTf(ACTIVE, wantTf, btn);
+}
+
+function setModelPerfTf(t, tf, btn){
+  MODEL_PERF_TF = tf;
+  // Resaltar el botón activo
+  document.querySelectorAll('.rp-mp-tf').forEach(b=>b.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  // Mostrar controles de config solo en intradía
+  const cfg=$('rp-mp-cfg'); if(cfg) cfg.style.display = (tf==='1D') ? 'none' : 'flex';
+  if(tf==='1D') rpLoadModelPerf(t);
+  else reloadModelPerfIntradia(t);
+}
+
+function reloadModelPerfIntradia(t){
+  const host=$('rp-mp-body'); if(!host) return;
+  if(MODEL_PERF_TF==='1D') return;   // guardia: los controles solo aplican intradía
+  const ventana = Math.max(1, Math.min(60, parseInt($('rp-mp-ventana')?.value||'8',10)||8));
+  const costo   = Math.max(0, Math.min(1, parseFloat($('rp-mp-costo')?.value||'0.05')||0.05));
+  host.innerHTML='<span class="rp-mp-loading">Evaluando señales intradía…</span>';
+  loadModelPerfIntradia(t, MODEL_PERF_TF, ventana, costo);
+}
+
+async function loadModelPerfIntradia(t, tf, ventana, costo){
+  const token = getBrokerToken();
+  const host=$('rp-mp-body'); if(!host) return;
+  let data=null;
+  try{
+    const url = API+`/v1/papertrading/intradia?ticker=${encodeURIComponent(t)}&timeframe=${tf}&ventana=${ventana}&costo_pct=${costo}`;
+    const r = await fetch(url, { headers: token ? {'Authorization':'Bearer '+token} : {} });
+    if(r.ok) data = await r.json();
+  }catch(e){}
+  // El usuario pudo cambiar de ticker o timeframe mientras cargaba
+  if(ACTIVE!==t || MODEL_PERF_TF!==tf) return;
+  const host2=$('rp-mp-body'); if(!host2) return;
+
+  if(!data || data.roi_neto_pct==null || !data.n_ops){
+    host2.innerHTML=`<span class="rp-mp-loading">Aún no hay señales intradía (${tf}) evaluables para este ticker. Se acumulan con el mercado abierto.</span>`;
+    return;
+  }
+
+  const roiFin = data.roi_neto_pct;
+  const col = roiFin>=0?'var(--green)':'var(--red)';
+  const serie = (data.curva_roi||[]).map(p=>p.roi_acumulado);
+  serie.unshift(0);  // arrancar la curva en 0
+  const W2=100,H2=34,lo2=Math.min(0,...serie),hi2=Math.max(0,...serie),sp2=(hi2-lo2)||1;
+  const ptsS=serie.map((v,i)=>`${(i/(serie.length-1)*W2).toFixed(2)},${(H2-((v-lo2)/sp2)*H2).toFixed(2)}`).join(' ');
+  const y0=(H2-((0-lo2)/sp2)*H2).toFixed(2);
+  // Aviso de muestra chica: por debajo de ~20 operaciones el número no es robusto.
+  const muestra = data.n_ops<20
+    ? `<span class="rp-mp-tag bt" title="Pocas operaciones: el resultado aún no es estadísticamente robusto">muestra chica</span>`
+    : '';
+  host2.innerHTML=`
+    <div class="rp-mp-kpis">
+      <span class="rp-mp-roi" style="color:${col}">${roiFin>=0?'+':''}${roiFin.toFixed(2)}%</span>
+      ${data.win_rate!=null?`<span class="rp-mp-win" title="Operaciones con retorno neto positivo / total">✦ ${data.win_rate}% · ${data.n_ops} ops</span>`:''}
+      <span class="rp-mp-tag paper" title="ROI neto de costos (ida y vuelta). Cada señal cierra en TP1/SL o al final de la ventana de ${ventana} velas.">neto ${tf}</span>
+      ${muestra}
+    </div>
+    <svg viewBox="0 0 ${W2} ${H2}" preserveAspectRatio="none" style="width:100%;height:34px;display:block">
+      <line x1="0" y1="${y0}" x2="${W2}" y2="${y0}" stroke="rgba(255,255,255,.14)" stroke-width="0.5" stroke-dasharray="2,2"/>
+      <polyline points="${ptsS}" fill="none" stroke="${roiFin>=0?'#2ecc71':'#e74c3c'}" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
+    </svg>`;
+}
 const NIV_KEY = k => `st_niv_${k}`;
 
 function getNivUser(ticker, field){
@@ -4383,6 +4532,9 @@ async function setPeriod(btn){
   DAYS_VISUAL = +btn.dataset.d;
   // Modo intraday (velas horarias) + cuántas velas mostrar (data-bars: número o "all" = todas)
   INTRADAY_MODE = (btn.dataset.intraday === '1');
+  // Sincronizar el termómetro de desempeño con la granularidad de la gráfica:
+  // 1D/5D (velas horarias) → intradía del modo; 1M+ (velas diarias) → Diario.
+  try{ syncPerfWithChart(INTRADAY_MODE); }catch(e){}
   const barsAttr = btn.dataset.bars;
   const bars = (barsAttr && barsAttr !== 'all') ? (+barsAttr || 0) : 0; // 0 = todas
   INTRADAY_BARS = bars;
@@ -6723,6 +6875,8 @@ function bootUI(){
   if(UI_BOOTED) return;
   UI_BOOTED = true;
   applyAppBottom();
+  // Restaurar el modo de operación guardado (drop-down del topbar)
+  try{ const s=$('tmode-sel'); if(s) s.value = TRADING_MODE; }catch(e){}
   renderAlerts();   // pinta las alertas persistidas (localStorage) al iniciar
   setTimeout(()=>setRefresh(0), 2000); /* DEV: refresco manual */
   initWatchlist();
