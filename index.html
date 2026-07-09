@@ -167,10 +167,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .tkr-portfolio-val{font-size:9px;color:var(--gold);flex-shrink:0;white-space:nowrap}
 .tkr-sl-xs{font-size:8px;color:var(--red);flex-shrink:0;white-space:nowrap}
 .tkr-tp-xs{font-size:8px;color:var(--green);flex-shrink:0;white-space:nowrap}
-.tkr-pill-xs{font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:.04em;flex-shrink:0;text-align:center;min-width:34px}
-/* Cluster derecho (señal + campana): empujado al borde, ancho estable para que
-   la señal quede SIEMPRE alineada a la derecha, haya o no cambio del día/P&L. */
-.tkr-right{display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:auto}
+.tkr-pill-xs{font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:.04em;flex-shrink:0;text-align:center;width:38px;box-sizing:border-box}
+/* Cluster derecho (campana + señal): pegado al borde derecho. La señal va de
+   ÚLTIMA con ancho fijo, así HOLD/BUY/SELL quedan alineados en la misma columna
+   contra el borde del panel, haya o no cambio del día/P&L a la izquierda. */
+.tkr-right{display:flex;align-items:center;gap:3px;flex-shrink:0;margin-left:auto}
+.tkr-right .tkr-bell{font-size:9px}
 .tkr-cf-xs{font-size:8px;color:var(--text3);flex-shrink:0;white-space:nowrap}
 .tkr-conf-row{display:flex;align-items:center;gap:4px;padding:0px 8px 3px 8px}
 .tkr-conf-bar-wrap{flex:1;height:2px;background:var(--bg3);border-radius:1px;overflow:hidden}
@@ -1567,7 +1569,7 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 <!-- Botón flotante de cerrar eliminado: el panel ya no se cierra, solo se minimiza desde el chevron de la barra. -->
 
 <!-- Panel inferior -->
-<div class="bottom-panel open" id="bottom-panel">
+<div class="bottom-panel open minimized" id="bottom-panel">
   <div class="bp-resize" id="bp-resize"></div>
   <div class="bp-min-btn" id="bp-min-btn" title="Restaurar (volver la pestaña a su lugar)" onclick="unmaximizeTab()"><svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.6 4.4h3v-3M10.4 4.4h-3v-3M1.6 7.6h3v3M10.4 7.6h-3v3"/></svg> Minimizar</div>
   <div class="bp-tabs">
@@ -4030,8 +4032,8 @@ function buildLeft(){
         <span class="tkr-portfolio-val" id="pv-${t}"></span>
         <span class="tkr-pl-xs" id="pl-${t}" title="P&L no realizado de la posición"></span>
         <span class="tkr-right">
-          <span class="tkr-pill-xs pz" id="p-${t}">···</span>
           <span class="tkr-bell" id="bell-${t}" title="Ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
+          <span class="tkr-pill-xs pz" id="p-${t}">···</span>
         </span>
       </div>
       <div class="tkr-conf-row">
@@ -4352,16 +4354,22 @@ async function init(){
   const savedRefresh = localStorage.getItem('st_refresh');
   setRefresh(savedRefresh!=null ? savedRefresh : '120');
   const savedTab = localStorage.getItem('st_tab');
-  if(savedTab && $('tab-'+savedTab)) switchTab(savedTab);
+  if(savedTab && $('tab-'+savedTab)){
+    // Marcar la pestaña guardada como activa SIN expandir el panel (arranca
+    // minimizado). switchTab expandiría; en su lugar solo movemos el resaltado.
+    document.querySelectorAll('.bp-tab').forEach(t=>t.classList.remove('on'));
+    document.querySelectorAll('.bp-body').forEach(b=>b.classList.remove('on'));
+    const te=$('tab-'+savedTab); if(te) te.classList.add('on');
+    const be=$('body-'+savedTab); if(be) be.classList.add('on');
+  }
   const savedH = parseInt(localStorage.getItem('st_bph'));
-  if(savedH>=BP_MIN && savedH<=BP_MAX){ bpH=savedH; applyAppBottom(); }
-  // Estado del panel inferior: SIEMPRE arranca MINIMIZADO (solo la barra de
-  // pestañas) para que el Portafolio se vea completo. No se recuerda entre
-  // sesiones — cada carga empieza colapsado; el usuario lo despliega si quiere.
-  // Limpieza: quitar la llave de preferencia del panel (ya no se usa; el panel
-  // siempre arranca minimizado).
+  if(savedH>=BP_MIN && savedH<=BP_MAX){ bpH=savedH; }
+  // Estado del panel inferior: SIEMPRE arranca MINIMIZADO (la clase 'minimized'
+  // ya viene en el HTML y bpMin=true) para que el Portafolio se vea completo.
+  // Sincronizamos chevron + geometría y limpiamos la llave vieja de preferencia.
   try{ localStorage.removeItem('st_bp_min'); }catch(e){}
-  if(!bpMin) toggleBPMin();
+  { const ch=$('bp-chevron'); if(ch) ch.textContent='▴'; }
+  applyAppBottom();
   syncModelLayerBtns();
   updateAlertBadge();
   // Doble clic en una pestaña = maximizarla
@@ -4455,8 +4463,8 @@ function renderWatchlist(){
         <span class="tkr-px-xs" id="px-${t}">${sig ? fP(px) : '—'}</span>
         <span class="tkr-day-xs" id="day-${t}" title="Cambio del día">${fmtDayChip(dayV)}</span>
         <span class="tkr-right">
-          <span class="tkr-pill-xs pz" id="p-${t}">${sig ? pillLbl(sen) : '···'}</span>
           <span class="tkr-bell" id="bell-${t}" title="Ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
+          <span class="tkr-pill-xs pz" id="p-${t}">${sig ? pillLbl(sen) : '···'}</span>
         </span>
       </div>
       <div class="tkr-conf-row">
@@ -5710,7 +5718,7 @@ function openAlertExplain(id){
 /* ══════════════════════════════════════════════
    PANEL INFERIOR
    ══════════════════════════════════════════════ */
-let bpMin=false, bpH=300, bpMax=false;
+let bpMin=true, bpH=300, bpMax=false;
 const BP_MIN=160, BP_MAX=600;
 
 // El panel NUNCA se cierra: siempre queda visible. Solo alterna entre
