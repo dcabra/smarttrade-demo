@@ -167,7 +167,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .tkr-portfolio-val{font-size:9px;color:var(--gold);flex-shrink:0;white-space:nowrap}
 .tkr-sl-xs{font-size:8px;color:var(--red);flex-shrink:0;white-space:nowrap}
 .tkr-tp-xs{font-size:8px;color:var(--green);flex-shrink:0;white-space:nowrap}
-.tkr-pill-xs{font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:.04em;flex-shrink:0}
+.tkr-pill-xs{font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:.04em;flex-shrink:0;text-align:center;min-width:34px}
+/* Cluster derecho (señal + campana): empujado al borde, ancho estable para que
+   la señal quede SIEMPRE alineada a la derecha, haya o no cambio del día/P&L. */
+.tkr-right{display:flex;align-items:center;gap:4px;flex-shrink:0;margin-left:auto}
 .tkr-cf-xs{font-size:8px;color:var(--text3);flex-shrink:0;white-space:nowrap}
 .tkr-conf-row{display:flex;align-items:center;gap:4px;padding:0px 8px 3px 8px}
 .tkr-conf-bar-wrap{flex:1;height:2px;background:var(--bg3);border-radius:1px;overflow:hidden}
@@ -4024,11 +4027,12 @@ function buildLeft(){
         <span class="tkr-sym">${t}</span>
         <span class="tkr-px-xs" id="px-${t}">—</span>
         <span class="tkr-day-xs" id="day-${t}" title="Cambio del día"></span>
-        <span style="flex:1"></span>
         <span class="tkr-portfolio-val" id="pv-${t}"></span>
         <span class="tkr-pl-xs" id="pl-${t}" title="P&L no realizado de la posición"></span>
-        <span class="tkr-pill-xs pz" id="p-${t}">···</span>
-        <span class="tkr-bell" id="bell-${t}" title="Ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
+        <span class="tkr-right">
+          <span class="tkr-pill-xs pz" id="p-${t}">···</span>
+          <span class="tkr-bell" id="bell-${t}" title="Ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
+        </span>
       </div>
       <div class="tkr-conf-row">
         <span id="sl-${t}" class="tkr-sl-xs"></span>
@@ -4351,6 +4355,11 @@ async function init(){
   if(savedTab && $('tab-'+savedTab)) switchTab(savedTab);
   const savedH = parseInt(localStorage.getItem('st_bph'));
   if(savedH>=BP_MIN && savedH<=BP_MAX){ bpH=savedH; applyAppBottom(); }
+  // Estado del panel inferior: al arrancar queda MINIMIZADO (solo la barra de
+  // pestañas) para que el Portafolio se vea completo. Se recuerda la última
+  // preferencia del usuario; primer arranque = minimizado.
+  const savedMin = localStorage.getItem('st_bp_min');
+  if(savedMin==null || savedMin==='1'){ if(!bpMin) toggleBPMin(); }
   syncModelLayerBtns();
   updateAlertBadge();
   // Doble clic en una pestaña = maximizarla
@@ -4443,9 +4452,10 @@ function renderWatchlist(){
         <span class="tkr-sym" id="sym-${t}">${t}</span>
         <span class="tkr-px-xs" id="px-${t}">${sig ? fP(px) : '—'}</span>
         <span class="tkr-day-xs" id="day-${t}" title="Cambio del día">${fmtDayChip(dayV)}</span>
-        <span style="flex:1"></span>
-        <span class="tkr-pill-xs pz" id="p-${t}">${sig ? pillLbl(sen) : '···'}</span>
-        <span class="tkr-bell" id="bell-${t}" title="Ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
+        <span class="tkr-right">
+          <span class="tkr-pill-xs pz" id="p-${t}">${sig ? pillLbl(sen) : '···'}</span>
+          <span class="tkr-bell" id="bell-${t}" title="Ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
+        </span>
       </div>
       <div class="tkr-conf-row">
         <span id="sl-${t}" class="tkr-sl-xs">${effNiv2.sl ? 'SL$'+effNiv2.sl.toFixed(1) : ''}</span>
@@ -5715,6 +5725,7 @@ function toggleBPMin(){
   bpMin=!bpMin;
   $('bottom-panel').classList.toggle('minimized', bpMin);
   const ch=$('bp-chevron'); if(ch) ch.textContent = bpMin ? '▴' : '▾';
+  try{ localStorage.setItem('st_bp_min', bpMin ? '1' : '0'); }catch(e){}
   applyAppBottom();
   if(!bpMin && $('chat-msgs')) $('chat-msgs').scrollTop=99999;
 }
