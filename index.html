@@ -168,11 +168,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .tkr-sl-xs{font-size:8px;color:var(--red);flex-shrink:0;white-space:nowrap}
 .tkr-tp-xs{font-size:8px;color:var(--green);flex-shrink:0;white-space:nowrap}
 .tkr-pill-xs{font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:.04em;flex-shrink:0;text-align:center;width:38px;box-sizing:border-box}
-/* Cluster derecho (campana + señal): pegado al borde derecho. La señal va de
-   ÚLTIMA con ancho fijo, así HOLD/BUY/SELL quedan alineados en la misma columna
-   contra el borde del panel, haya o no cambio del día/P&L a la izquierda. */
-.tkr-right{display:flex;align-items:center;gap:3px;flex-shrink:0;margin-left:auto}
+/* Cluster derecho (campana + señal): ANCLADO al borde derecho de la fila con
+   posición absoluta, así la señal HOLD/BUY/SELL queda SIEMPRE en la misma
+   columna contra el borde, sin importar cuánto ocupe el precio/cambio/P&L a la
+   izquierda. La fila reserva padding derecho para que el contenido no lo tape. */
+.tkr-right{position:absolute;top:3px;right:8px;display:flex;align-items:center;gap:3px}
 .tkr-right .tkr-bell{font-size:9px}
+.tkr-row{padding-right:52px !important}
 .tkr-cf-xs{font-size:8px;color:var(--text3);flex-shrink:0;white-space:nowrap}
 .tkr-conf-row{display:flex;align-items:center;gap:4px;padding:0px 8px 3px 8px}
 .tkr-conf-bar-wrap{flex:1;height:2px;background:var(--bg3);border-radius:1px;overflow:hidden}
