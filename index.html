@@ -6,6 +6,7 @@
 <title>SmartTrade · Análisis IA</title>
 <style>
 :root {
+  --lp-w:280px;   /* ancho del panel izquierdo (portafolio/watchlist) */
   --gold:#f5c518; --gold-dim:#b8860b;
   --blue:#4d9ef7; --blue-dim:#1a3a6a;
   --green:#2ecc71; --red:#e74c3c; --orange:#f39c12;
@@ -25,7 +26,7 @@
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;overflow:hidden}
 
 /* TOPBAR */
-.topbar{height:44px;background:var(--bg-left);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:10px;position:fixed;top:0;left:220px;right:0;z-index:100}
+.topbar{height:44px;background:var(--bg-left);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:10px;position:fixed;top:0;left:var(--lp-w);right:0;z-index:100}
 .logo-img{height:20px;width:auto;flex-shrink:0;object-fit:contain;filter:brightness(1.05)}
 .login-brand{display:flex;justify-content:center;padding:8px 0 2px}
 .login-logo{height:42px;width:auto;object-fit:contain;filter:brightness(1.05)}
@@ -45,7 +46,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .app{display:flex;position:fixed;top:0;left:0;right:260px;bottom:calc(20px + var(--bp-h));transition:bottom .25s}
 
 /* LEFT */
-.lp{width:220px;flex-shrink:0;background:var(--bg-left);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.lp{width:var(--lp-w);flex-shrink:0;background:var(--bg-left);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
 .lp-hdr{padding:10px 12px 8px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-left)}
 .lp-hdr-lbl{font-size:9px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
 .lp-hdr-cnt{font-size:11px;color:var(--text2)}
@@ -428,7 +429,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .bp-max-ico:hover{opacity:1;color:var(--gold);background:rgba(245,197,24,.14)}
 .bp-min-btn{display:none;position:absolute;top:8px;right:12px;z-index:6;align-items:center;gap:5px;background:rgba(245,197,24,.12);border:1px solid rgba(245,197,24,.3);color:var(--gold);border-radius:6px;padding:4px 9px;font-size:10px;font-weight:700;letter-spacing:.04em;cursor:pointer;transition:all .15s}
 .bp-min-btn:hover{background:rgba(245,197,24,.22)}
-.bottom-panel.bp-max{top:44px;left:220px;right:0;bottom:20px;height:auto !important;z-index:90;background:var(--bg)}
+.bottom-panel.bp-max{top:44px;left:var(--lp-w);right:0;bottom:20px;height:auto !important;z-index:90;background:var(--bg)}
 /* Al maximizar una pestaña ocultamos la gráfica y el panel derecho (mismo patrón
    que el Home del portafolio): el contenido de la pestaña ocupa centro + derecha. */
 body.tab-max .rp{display:none}
@@ -744,6 +745,16 @@ table.jr-table{width:100%;border-collapse:collapse;font-size:12px}
 .om-overlay{position:fixed;inset:0;background:rgba(4,6,12,.72);backdrop-filter:blur(3px);z-index:300;display:none;align-items:center;justify-content:center;padding:20px}
 .om-overlay.show{display:flex}
 .om-modal{background:var(--bg);border:1px solid var(--border2);border-radius:12px;width:100%;max-width:420px;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+/* Modal de ORDEN: columna con pie fijo — el cuerpo scrollea, el botón de
+   acción nunca se sale de pantalla aunque aparezcan campos dinámicos. */
+#order-overlay .om-modal{max-width:460px;display:flex;flex-direction:column;overflow:hidden}
+#order-overlay .om-hdr{flex-shrink:0}
+#order-overlay .om-body{overflow-y:auto;flex:1;min-height:0;overscroll-behavior:contain}
+#order-overlay .om-body::-webkit-scrollbar{width:6px}
+#order-overlay .om-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.om-foot{flex-shrink:0;border-top:1px solid var(--border);padding:10px 16px 12px;display:flex;flex-direction:column;gap:8px;background:var(--bg);border-radius:0 0 12px 12px}
+.om-goto-orders{margin-top:6px;background:none;border:1px solid var(--border2);border-radius:5px;color:var(--blue);font-size:10px;font-weight:700;padding:3px 9px;cursor:pointer;font-family:inherit}
+.om-goto-orders:hover{border-color:var(--blue)}
 .om-hdr{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)}
 .om-hdr .om-title{font-size:13px;font-weight:800;color:var(--text);letter-spacing:.01em}
 .om-hdr .om-sym{font-size:13px;font-weight:800;color:var(--gold)}
@@ -790,13 +801,7 @@ table.jr-table{width:100%;border-collapse:collapse;font-size:12px}
 .om-msg.ok{background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.3);color:var(--green)}
 .om-msg.err{background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:var(--red)}
 .om-msg.info{background:rgba(243,156,18,.08);border:1px solid rgba(243,156,18,.28);color:var(--orange)}
-.om-orders{border-top:1px solid var(--border);padding-top:10px}
-.om-ord-row{display:flex;align-items:center;gap:8px;font-size:10px;padding:5px 0;border-bottom:1px solid var(--border);color:var(--text2)}
-.om-ord-row:last-child{border-bottom:none}
-.om-ord-side{font-weight:800}
-.om-ord-side.buy{color:var(--green)}
-.om-ord-side.sell{color:var(--red)}
-.om-ord-st{margin-left:auto;font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em}
+/* (removido) la lista de últimas órdenes del modal ahora vive en la pestaña Órdenes manuales */
 /* Atajo SECUNDARIO de conexión en el panel izquierdo cuando no hay token.
    Es un empty-state ("esto está vacío"), NO el control principal: la fuente
    de verdad es el chip de cuenta del topbar. Estilo punteado y discreto. */
@@ -973,6 +978,8 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .om-qk-lbl{font-size:8.5px;color:var(--text3)}
 .om-est{display:none;font-size:10px;color:var(--text2);margin-top:6px;padding:5px 8px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:4px}
 .om-pos-line{font-size:10.5px;color:var(--text2);padding:6px 2px}
+/* Al VENDER, la posición existente es el dato clave: resaltarla */
+#om-pos-wrap.sellctx .om-pos-line{background:rgba(231,76,60,.07);border:1px solid rgba(231,76,60,.28);border-radius:6px;padding:6px 8px;color:var(--text)}
 .om-bracket{border:1px solid var(--border2);border-radius:6px;padding:9px 10px;background:rgba(245,197,24,.03)}
 .om-bracket.disabled{opacity:.6}
 .om-bracket-chk{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--text);cursor:pointer}
@@ -1368,7 +1375,7 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 
       <div>
         <div class="om-lbl">Símbolo</div>
-        <input class="om-inp" id="om-symbol" spellcheck="false" placeholder="AAPL · BTC/USD" />
+        <input class="om-inp" id="om-symbol" spellcheck="false" placeholder="AAPL · BTC/USD" oninput="if(typeof omRefreshPosLine==='function')omRefreshPosLine();if(typeof omRenderQuick==='function')omRenderQuick()" />
       </div>
 
       <div class="om-row2">
@@ -1437,11 +1444,9 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
         <div class="om-hint" id="om-bracket-hint" style="display:none;text-align:left;margin-top:5px"></div>
       </div>
 
-      <!-- Área de acción (depende de la conexión) -->
-      <div id="om-action-connected" style="display:none;flex-direction:column;gap:8px">
-        <div style="display:flex;justify-content:center"><span class="om-paper-badge" id="om-paper-badge">paper</span></div>
-
-        <!-- Límites de seguridad (persisten en localStorage) -->
+      <!-- Límites de seguridad (persisten en localStorage) · viven en el cuerpo,
+           el pie queda solo para la acción -->
+      <div id="om-caps-sec" style="display:none">
         <div class="om-caps" id="om-caps">
           <div class="om-caps-hdr">🛡 Límites de seguridad <span id="om-caps-day"></span></div>
           <div class="om-row2">
@@ -1455,6 +1460,14 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Pie fijo: la acción SIEMPRE queda a la vista, sin importar cuántos
+         campos dinámicos aparezcan arriba (el cuerpo es el que scrollea) -->
+    <div class="om-foot">
+      <div id="om-action-connected" style="display:none;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:center"><span class="om-paper-badge" id="om-paper-badge">paper</span></div>
 
         <!-- Confirmación (aparece tras pasar las validaciones) -->
         <div class="om-confirm" id="om-confirm" style="display:none">
@@ -1474,11 +1487,6 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
       </div>
 
       <div class="om-msg" id="om-result"></div>
-
-      <div class="om-orders" id="om-orders-wrap" style="display:none">
-        <button class="om-btn ghost" id="om-orders-btn" onclick="toggleRecentOrders()">Ver últimas órdenes</button>
-        <div id="om-orders-list" style="margin-top:8px"></div>
-      </div>
     </div>
   </div>
 </div>
@@ -2085,15 +2093,7 @@ function openOM(ticker, pf){
   $('om-amount').value=''; $('om-limit').value='';
 
   // Tu posición en este ticker (para vender con contexto y validar cantidad)
-  const myPos2 = (POSITIONS||[]).find(p=>p.symbol===OM_TICKER);
-  const posWrap=$('om-pos-wrap');
-  if(posWrap){
-    if(myPos2 && myPos2.qty!=null){
-      posWrap.style.display='block';
-      const uplpc2=(myPos2.unrealized_plpc!=null)?myPos2.unrealized_plpc*100:null;
-      $('om-pos-line').innerHTML=`Posees <b>${myPos2.qty} u.</b>${myPos2.avg_entry_price!=null?` @ ${fP(myPos2.avg_entry_price)}`:''}${uplpc2!=null?` · <span style="color:${uplpc2>=0?'var(--green)':'var(--red)'}">${uplpc2>=0?'+':''}${uplpc2.toFixed(1)}%</span>`:''}`;
-    } else posWrap.style.display='none';
-  }
+  omRefreshPosLine();
 
   // Bracket: prellenar con niveles efectivos (alerta > usuario > modelo) y
   // deshabilitar en cripto (Alpaca no soporta bracket en cripto).
@@ -2122,8 +2122,6 @@ function openOM(ticker, pf){
   } else {
     res.className='om-msg'; res.textContent='';
   }
-  $('om-orders-list').innerHTML=''; $('om-orders-btn').textContent='Ver últimas órdenes';
-
   renderOrderAction();
   $('order-overlay').classList.add('show');
 }
@@ -2142,6 +2140,7 @@ function omSetSide(s){
     sendBtn.textContent = (s==='sell'?'Vender':'Comprar') + ' · enviar a Alpaca →';
   }
   if(typeof omRenderQuick==='function'){ omRenderQuick(); omUpdateEstimate(); }
+  if(typeof omRefreshPosLine==='function') omRefreshPosLine();
 }
 function omSetType(t){
   OM_TYPE=t;
@@ -2166,6 +2165,39 @@ let OM_TIF='day';
 function omSetTif(t){
   OM_TIF=t;
   document.querySelectorAll('#om-tif-seg button').forEach(b=>b.classList.toggle('on-neutral', b.dataset.tif===t));
+}
+
+/* Busca la posición del usuario para un símbolo, tolerando las variantes de
+   escritura de cripto (BTC/USD ≡ BTC-USD ≡ BTCUSD). */
+function omFindPos(sym){
+  const norm=x=>(x||'').toUpperCase().replace(/[-/\s]/g,'');
+  const n=norm(sym);
+  if(!n) return null;
+  return (POSITIONS||[]).find(p=>norm(p.symbol)===n) || null;
+}
+
+/* Pinta el bloque "Tu posición": cantidad, precio de entrada, VALOR ACTUAL de
+   la posición y P&L — el contexto que necesitas antes de vender. */
+function omRefreshPosLine(){
+  const posWrap=$('om-pos-wrap'); if(!posWrap) return;
+  const sym=($('om-symbol')?.value||OM_TICKER||'').trim();
+  const p=omFindPos(sym);
+  if(!(p && p.qty!=null)){ posWrap.style.display='none'; posWrap.classList.remove('sellctx'); return; }
+  posWrap.style.display='block';
+  posWrap.classList.toggle('sellctx', OM_SIDE==='sell');
+  const val = (p.value!=null && !isNaN(p.value)) ? p.value
+            : (p.current_price>0 ? p.qty*p.current_price : null);
+  const pl  = (p.unrealized_pl!=null && !isNaN(p.unrealized_pl)) ? p.unrealized_pl : null;
+  const plpc= (p.unrealized_plpc!=null) ? p.unrealized_plpc*100 : null;
+  let html=`Posees <b>${p.qty} u.</b>${p.avg_entry_price!=null?` @ ${fP(p.avg_entry_price)}`:''}`;
+  if(val!=null) html+=` · valor <b>${fP(val)}</b>`;
+  if(pl!=null || plpc!=null){
+    const pos=(pl!=null?pl:plpc)>=0;
+    const plTxt=[pl!=null?(typeof fPS==='function'?fPS(pl):fP(pl)):null,
+                 plpc!=null?`${plpc>=0?'+':''}${plpc.toFixed(1)}%`:null].filter(Boolean).join(' · ');
+    html+=` · <span style="color:${pos?'var(--green)':'var(--red)'}">${plTxt}</span>`;
+  }
+  $('om-pos-line').innerHTML=html;
 }
 
 /* Heurística de cripto para el modal: clase de activo de la posición (si existe)
@@ -2193,7 +2225,7 @@ function omToggleBracket(){
 /* ── Atajos de monto: % del efectivo (compra) o % de la posición (venta) ── */
 function omRenderQuick(){
   const host=$('om-quick'); if(!host) return;
-  const myPos=(POSITIONS||[]).find(p=>p.symbol===OM_TICKER);
+  const myPos=omFindPos(($('om-symbol')?.value||OM_TICKER||'').trim());
   let html='';
   if(OM_SIDE==='buy' && OM_QMODE==='notional' && CASH_AVAIL>0){
     html=[0.25,0.5,1].map(f=>`<button class="om-qk" onclick="omQuickNotional(${f})" title="${Math.round(f*100)}% del efectivo disponible (${fP(CASH_AVAIL)})">${f===1?'MAX':Math.round(f*100)+'%'}</button>`).join('')
@@ -2244,9 +2276,10 @@ function omUpdateEstimate(){
 
 /* Decide qué área de acción mostrar según conexión. */
 function renderOrderAction(){
-  const conn=$('om-action-connected'), lock=$('om-action-locked'), ow=$('om-orders-wrap');
+  const conn=$('om-action-connected'), lock=$('om-action-locked'), capsSec=$('om-caps-sec');
   if(BROKER_CONNECTED){
-    conn.style.display='flex'; lock.style.display='none'; ow.style.display='block';
+    conn.style.display='flex'; lock.style.display='none';
+    if(capsSec) capsSec.style.display='block';
     const paper = BROKER_INFO?.paper !== false;
     const badge=$('om-paper-badge');
     badge.textContent = paper ? '🔓 cuenta paper'+(BROKER_INFO?.account_number?' · '+BROKER_INFO.account_number:'') : '⚠ CUENTA REAL · dinero real';
@@ -2258,7 +2291,8 @@ function renderOrderAction(){
     renderDayBudget();
     cancelConfirm();
   } else {
-    conn.style.display='none'; lock.style.display='flex'; ow.style.display='none';
+    conn.style.display='none'; lock.style.display='flex';
+    if(capsSec) capsSec.style.display='none';
   }
 }
 
@@ -2338,7 +2372,7 @@ function sendBrokerOrder(){
   // Venta: no vender más unidades de las que tienes (Alpaca la rechazaría igual,
   // pero con un error críptico — mejor avisar aquí).
   if(OM_SIDE==='sell' && OM_QMODE==='qty'){
-    const myPos=(POSITIONS||[]).find(p=>p.symbol===symbol.toUpperCase());
+    const myPos=omFindPos(symbol);
     if(myPos && myPos.qty!=null && amount > myPos.qty + 1e-9){
       res.className='om-msg err show';
       res.textContent=`Intentas vender ${amount} u. pero posees ${myPos.qty} u. de ${symbol}.`;
@@ -2416,11 +2450,11 @@ async function confirmAndSubmit(){
     const qtyTxt = o?.qty!=null ? o.qty+' u.' : (o?.notional!=null ? fP(o.notional) : '');
     res.className='om-msg ok show';
     res.innerHTML = `Orden enviada · <b>${(o?.side||payload.side).toUpperCase()}</b> ${o?.symbol||symbol} ${qtyTxt}`
-      + `<br>Estado: <b>${o?.status||'—'}</b>${o?.id?` · id ${o.id.slice(0,8)}…`:''}`;
+      + `<br>Estado: <b>${o?.status||'—'}</b>${o?.id?` · id ${o.id.slice(0,8)}…`:''}`
+      + `<br><button class="om-goto-orders" onclick="closeOrder();switchTab('orders');if(typeof moSetSource==='function')moSetSource('alpaca')">Ver registro en Órdenes manuales →</button>`;
     refreshBroker();
     renderDayBudget();
-    ALPACA_ORDERS=null;   // la pestaña Órdenes → Alpaca re-consultará el estado
-    if($('om-orders-list').children.length) loadRecentOrders();
+    ALPACA_ORDERS=null;   // la pestaña Órdenes manuales → Alpaca re-consultará el estado
   }catch(e){
     res.className='om-msg err show';
     if(e.code==='UNAUTHORIZED'){ res.textContent='Sesión expirada (401). Reconecta tu cuenta.'; }
@@ -2434,28 +2468,9 @@ async function confirmAndSubmit(){
   }
 }
 
-/* Últimas órdenes (GET /v1/broker/orders) */
-function toggleRecentOrders(){
-  const list=$('om-orders-list');
-  if(list.children.length){ list.innerHTML=''; $('om-orders-btn').textContent='Ver últimas órdenes'; }
-  else loadRecentOrders();
-}
-async function loadRecentOrders(){
-  const list=$('om-orders-list'); const btn=$('om-orders-btn');
-  btn.textContent='Cargando…';
-  const d = await brokerGet('/v1/broker/orders?status=all&limit=8');
-  const orders = Array.isArray(d) ? d : (Array.isArray(d?.orders) ? d.orders : []);
-  if(!orders.length){ list.innerHTML='<div class="om-hint" style="text-align:left">Sin órdenes recientes.</div>'; btn.textContent='Ocultar'; return; }
-  list.innerHTML = orders.map(o=>{
-    const side=(o.side||'').toLowerCase();
-    const amt = o.qty!=null ? o.qty+' u.' : (o.notional!=null ? fP(o.notional) : '');
-    return `<div class="om-ord-row">
-      <span class="om-ord-side ${side}">${side.toUpperCase()}</span>
-      <span>${o.symbol||''}</span><span style="color:var(--text3)">${amt}</span>
-      <span class="om-ord-st">${o.status||''}</span></div>`;
-  }).join('');
-  btn.textContent='Ocultar';
-}
+/* Las "últimas órdenes" ya NO viven en el modal: el registro de órdenes
+   manuales (bitácora local + Alpaca en vivo) está en la pestaña
+   📋 Órdenes manuales del panel inferior. */
 
 /* ── BROKER · cuenta paper de Alpaca ──
    El Portafolio refleja lo que existe realmente en Alpaca:
@@ -2537,6 +2552,9 @@ async function refreshBroker(){
   const [equity, positions] = await Promise.all([fetchBrokerEquity(), fetchBrokerPositions()]);
   renderEquity(equity);
   POSITIONS = positions;
+  // Si el modal de orden está abierto, refrescar el bloque "Tu posición"
+  // (evita que se abra vacío por una carrera con la carga del broker).
+  if($('order-overlay')?.classList.contains('show') && typeof omRefreshPosLine==='function'){ omRefreshPosLine(); omRenderQuick(); }
   TICKERS.forEach(t => { const el=$('pv-'+t); if(el) el.textContent=''; });
   renderPositionValues(positions);
   loadRealizedPnL(); // P&L Realizado (Fase 2A) — caché propia, no bloquea
@@ -6762,7 +6780,9 @@ function moRecordFromModal(){
 .stratp-items{flex:1;overflow-y:auto;padding:8px 6px}
 .stratp-hint{font-size:10px;color:#7a869a;padding:14px 10px;text-align:center;line-height:1.5}
 /* ── Fila única por estrategia: punto · nombre · badge · métrica · acciones ── */
-.stratp-item{display:flex;align-items:center;gap:7px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;margin-bottom:5px;cursor:pointer;background:var(--bg3);position:relative}
+.stratp-item{display:flex;flex-direction:column;gap:3px;padding:6px 8px 5px;border:1px solid var(--border);border-radius:6px;margin-bottom:5px;cursor:pointer;background:var(--bg3);position:relative}
+.stratp-item-l1{display:flex;align-items:center;gap:7px;min-width:0}
+.stratp-item-l2{display:flex;align-items:center;gap:8px;padding-left:15px;min-width:0;overflow:hidden}
 .stratp-item:hover{border-color:var(--border2)}
 .stratp-item.sel{border-color:var(--gold);box-shadow:inset 2px 0 0 var(--gold)}
 .stratp-item.running{border-color:rgba(46,204,113,.55);background:rgba(46,204,113,.10);box-shadow:inset 0 0 0 1px rgba(46,204,113,.25)}
@@ -6773,9 +6793,9 @@ function moRecordFromModal(){
 .stratp-dot.st-borrador{background:var(--violet)}
 .stratp-dot.st-detenida{background:#8893a5}
 .stratp-item-name{font-size:11.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
-.stratp-item-metric{font-size:10px;color:var(--gold);flex-shrink:0;white-space:nowrap}
+.stratp-item-metric{font-size:10px;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .stratp-item-metric.na{color:#7a869a}
-.stratp-row-actions{display:flex;align-items:center;gap:1px;flex-shrink:0}
+.stratp-row-actions{display:flex;align-items:center;gap:1px;flex-shrink:0;margin-left:auto}
 .stratp-act{background:none;border:none;cursor:pointer;font-size:12px;line-height:1;padding:3px;border-radius:4px;color:#9aa6b5;flex-shrink:0}
 .stratp-act:not(:disabled):hover{background:var(--bg2)}
 .stratp-act:disabled{opacity:.28;cursor:not-allowed}
@@ -7120,14 +7140,22 @@ function stratRenderItems(){
       <button class="stratp-act a-edit"  title="Editar"  onclick="event.stopPropagation();stratOpenModal(${s.id})">✏️</button>
       <button class="stratp-act a-del"   title="${running?'Detenla antes de borrar':'Borrar'}" ${running?'disabled':''} onclick="event.stopPropagation();stratDelete(${s.id})">🗑</button>
     </div>`;
+    // Dos líneas: (1) estado-icono + NOMBRE (siempre visible) + acciones;
+    // (2) métricas (TF · retorno · efectividad). El estado va como icono de
+    // color con tooltip — el texto "Corriendo/Pausada/…" es redundante aquí
+    // (color del punto + fondo verde de la fila) y le robaba el ancho al nombre.
+    const estadoLbl={borrador:'Borrador',paper:'Corriendo (paper)',pausada:'Pausada',detenida:'Detenida',plantilla:'Plantilla',live:'EN VIVO'}[s.estado]||s.estado;
     return `<div class="stratp-item ${running?'running':''} ${sel}" onclick="stratSelectCreated(${s.id})">
-      <span class="stratp-dot st-${s.estado}"></span>
-      <span class="stratp-item-name" title="${(s.nombre||'').replace(/"/g,'&quot;')}">${s.nombre}</span>
-      ${stratBadge(s.estado)}
-      ${stratTfTag(s.timeframe)}
-      ${retHtml}
-      ${metric}
-      ${acts}</div>`;
+      <div class="stratp-item-l1">
+        <span class="stratp-dot st-${s.estado}" title="${estadoLbl}"></span>
+        <span class="stratp-item-name" title="${(s.nombre||'').replace(/"/g,'&quot;')} · ${estadoLbl}">${s.nombre}</span>
+        ${acts}
+      </div>
+      <div class="stratp-item-l2">
+        ${stratTfTag(s.timeframe)}
+        ${retHtml}
+        ${metric}
+      </div></div>`;
   }).join('');
 }
 async function stratSelectCreated(id){
