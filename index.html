@@ -4355,11 +4355,13 @@ async function init(){
   if(savedTab && $('tab-'+savedTab)) switchTab(savedTab);
   const savedH = parseInt(localStorage.getItem('st_bph'));
   if(savedH>=BP_MIN && savedH<=BP_MAX){ bpH=savedH; applyAppBottom(); }
-  // Estado del panel inferior: al arrancar queda MINIMIZADO (solo la barra de
-  // pestañas) para que el Portafolio se vea completo. Se recuerda la última
-  // preferencia del usuario; primer arranque = minimizado.
-  const savedMin = localStorage.getItem('st_bp_min');
-  if(savedMin==null || savedMin==='1'){ if(!bpMin) toggleBPMin(); }
+  // Estado del panel inferior: SIEMPRE arranca MINIMIZADO (solo la barra de
+  // pestañas) para que el Portafolio se vea completo. No se recuerda entre
+  // sesiones — cada carga empieza colapsado; el usuario lo despliega si quiere.
+  // Limpieza: quitar la llave de preferencia del panel (ya no se usa; el panel
+  // siempre arranca minimizado).
+  try{ localStorage.removeItem('st_bp_min'); }catch(e){}
+  if(!bpMin) toggleBPMin();
   syncModelLayerBtns();
   updateAlertBadge();
   // Doble clic en una pestaña = maximizarla
@@ -5725,7 +5727,6 @@ function toggleBPMin(){
   bpMin=!bpMin;
   $('bottom-panel').classList.toggle('minimized', bpMin);
   const ch=$('bp-chevron'); if(ch) ch.textContent = bpMin ? '▴' : '▾';
-  try{ localStorage.setItem('st_bp_min', bpMin ? '1' : '0'); }catch(e){}
   applyAppBottom();
   if(!bpMin && $('chat-msgs')) $('chat-msgs').scrollTop=99999;
 }
