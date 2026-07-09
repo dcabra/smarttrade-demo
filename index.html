@@ -7012,7 +7012,7 @@ function stratDefaultParams(perfil){
   return {
     timeframe:'1D',
     universo:{modo:'portafolio_watchlist', tickers:[]},
-    entrada:{confianza_min:65, concordancia_forecast:true, horizonte_ref:'3D', direccion:'solo_buy', rr_min:0},
+    entrada:{confianza_min:65, concordancia_forecast:true, horizonte_ref:'3D', direccion:'solo_buy', rr_min:0, min_ratio_tp_peaje:null},
     salida:{obedecer_sl:true, obedecer_tp:true, tp_nivel:'tp1', salida_por_vencimiento:true, trailing_pct:0, cerrar_si_senal_invierte:false},
     riesgo:{perfil:perfil||'moderado', pct_capital_por_senal:S.p, max_posiciones:S.m, max_exposicion_clase:{equity:70,crypto:30}, drawdown_max_pct:0, cooldown_ciclos:0, ring_fence_pct:100, riesgo_por_trade_pct:0},
     temporalidad:{vigencia_fin:null, solo_market_hours:true, evitar_eventos:[], ventana_evento_horas:48, ventanas_bloqueo:[]},
@@ -7140,6 +7140,7 @@ function stratRenderDetail(d){
   const running=d.estado==='paper', detenida=d.estado==='detenida', plantilla=d.estado==='plantilla';
   const u={portafolio:'Solo portafolio',portafolio_watchlist:'Portafolio + watchlist',watchlist:'Solo watchlist',explicito:'Lista explícita'}[p.universo.modo];
   const rrTxt=(p.entrada.rr_min>0)?` · R/B≥${p.entrada.rr_min}`:'';
+  const peajeTxt=(p.entrada.min_ratio_tp_peaje>0)?` · TP≥${p.entrada.min_ratio_tp_peaje}×peaje`:'';
   const rptTxt=(p.riesgo.riesgo_por_trade_pct>0)?` · ${p.riesgo.riesgo_por_trade_pct}%/trade`:'';
   const invTxt=p.salida.cerrar_si_senal_invierte?' · inv→cierra':'';
   const det=$('stratp-detail');
@@ -7159,7 +7160,7 @@ function stratRenderDetail(d){
        <div class="stratp-chips">
          <div class="stratp-chip"><div class="k">Temporalidad</div><div class="v">${stratTfLabel((p.timeframe)||'1D')}</div></div>
          <div class="stratp-chip"><div class="k">Universo</div><div class="v">${u} · ${(p.universo.tickers||[]).length} tk</div></div>
-         <div class="stratp-chip"><div class="k">Entrada</div><div class="v">BUY · conf ≥${p.entrada.confianza_min} · ${p.entrada.horizonte_ref}${rrTxt}</div></div>
+         <div class="stratp-chip"><div class="k">Entrada</div><div class="v">BUY · conf ≥${p.entrada.confianza_min} · ${p.entrada.horizonte_ref}${rrTxt}${peajeTxt}</div></div>
          <div class="stratp-chip"><div class="k">Riesgo</div><div class="v">${p.riesgo.perfil} · ${p.riesgo.pct_capital_por_senal}%/señal · máx ${p.riesgo.max_posiciones}${rptTxt}</div></div>
          <div class="stratp-chip"><div class="k">Salida</div><div class="v">SL ✓ (oblig.) · ${p.salida.tp_nivel.toUpperCase()} ${p.salida.salida_por_vencimiento?'· vencim.':''}${invTxt}</div></div>
        </div>
@@ -7546,6 +7547,10 @@ function stratModalForm(d){
          <div class="smf-field"><label>R/B mínimo (0 = off)</label><input type="number" id="smf-rr" min="0" max="10" step="0.5" value="${p.entrada.rr_min??0}" placeholder="0"></div>
        </div>
        <div class="smf-note">R/B = premio al TP ÷ riesgo al SL. Omite la entrada si el recorrido no compensa el riesgo. <b>0 = sin filtro</b> · rango 0.5–10.</div>
+       <div class="smf-row">
+         <div class="smf-field"><label>Conciencia de costos · TP ≥ N×peaje (vacío = off)</label><input type="number" id="smf-peaje" min="1" max="100" step="0.5" value="${p.entrada.min_ratio_tp_peaje??''}" placeholder="off"></div>
+       </div>
+       <div class="smf-note">Omite la entrada si el recorrido esperado al TP es menor que N veces el peaje round-trip. El <b>peaje se deriva solo</b> del fee + 2×slippage de la estrategia (no se fija un número). <b>Vacío = sin filtro</b> · rango 1–100.</div>
        <label class="smf-check"><input type="checkbox" id="smf-conc" ${p.entrada.concordancia_forecast?'checked':''}> Exigir que el forecast concuerde</label></div>
       </div>
       <div class="smf-col">
@@ -7703,6 +7708,7 @@ function stratModalPerfil(){ const S={conservador:{p:5,m:8},moderado:{p:10,m:5},
 function stratMMsg(k,t){const h=$('smf-msg-host'); if(h)h.innerHTML=`<div class="smf-msg ${k}">${t}</div>`;}
 function stratClamp(v,min,max,def){ let n=parseFloat(v); if(!isFinite(n)) n=def; return Math.max(min,Math.min(max,n)); }
 function stratReadRR(){ let v=parseFloat($('smf-rr').value); if(!isFinite(v)||v<=0) return 0; return Math.max(0.5,Math.min(10,v)); }
+function stratReadPeaje(){ const el=$('smf-peaje'); if(!el||el.value==='') return null; let v=parseFloat(el.value); if(!isFinite(v)||v<=0) return null; return Math.max(1,Math.min(100,v)); }
 function stratModalRead(){
   const modo=$('smf-modo').value, explic=($('smf-tickers')?$('smf-tickers').value:'').split(',').map(t=>t.trim().toUpperCase()).filter(Boolean);
   return {
@@ -7712,7 +7718,7 @@ function stratModalRead(){
     params:{
       timeframe:($('smf-tf')?$('smf-tf').value:'1D'),
       universo:{modo, tickers:stratResolveUniverse(modo,explic)},
-      entrada:{confianza_min:parseInt($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, horizonte_ref:$('smf-hz').value, direccion:$('smf-dir').value, rr_min:stratReadRR()},
+      entrada:{confianza_min:parseInt($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, horizonte_ref:$('smf-hz').value, direccion:$('smf-dir').value, rr_min:stratReadRR(), min_ratio_tp_peaje:stratReadPeaje()},
       salida:{obedecer_sl:true, obedecer_tp:$('smf-tpchk').checked, tp_nivel:$('smf-tp').value, salida_por_vencimiento:$('smf-venc').checked, trailing_pct:stratRiskVal('smf-trail',1,50,0), cerrar_si_senal_invierte:$('smf-cinv').checked},
       riesgo:{perfil:$('smf-perfil').value, pct_capital_por_senal:parseFloat($('smf-pct').value), max_posiciones:parseInt($('smf-maxp').value), max_exposicion_clase:{equity:stratClamp($('smf-exp-eq').value,0,100,70), crypto:stratClamp($('smf-exp-cr').value,0,100,30)}, drawdown_max_pct:stratRiskVal('smf-dd',1,90,0), cooldown_ciclos:stratRiskVal('smf-cd',1,30,0), ring_fence_pct:stratRiskVal('smf-rf',1,100,100), riesgo_por_trade_pct:stratRiskValFloat('smf-rpt',0.1,10,0)},
       temporalidad:{vigencia_fin:null, solo_market_hours:$('smf-mh').checked, evitar_eventos:stratReadEvitar(), ventana_evento_horas:parseInt($('smf-ev-win').value)||48, ventanas_bloqueo:(STRAT.modalBlackout||[])},
@@ -7745,6 +7751,7 @@ const SMF_DIFF_MAP = [
   ['entrada.horizonte_ref',              'smf-hz',     'Horizonte'],
   ['entrada.direccion',                  'smf-dir',    'Dirección'],
   ['entrada.rr_min',                     'smf-rr',     'R/B mínimo'],
+  ['entrada.min_ratio_tp_peaje',         'smf-peaje',  'Conciencia de costos (TP×peaje)'],
   ['entrada.concordancia_forecast',      'smf-conc',   'Concordancia forecast'],
   ['salida.tp_nivel',                    'smf-tp',     'Nivel TP'],
   ['salida.obedecer_tp',                 'smf-tpchk',  'Obedecer TP'],
