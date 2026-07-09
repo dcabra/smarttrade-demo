@@ -171,10 +171,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 /* Cluster derecho (campana + señal): ANCLADO al borde derecho de la fila con
    posición absoluta, así la señal HOLD/BUY/SELL queda SIEMPRE en la misma
    columna contra el borde, sin importar cuánto ocupe el precio/cambio/P&L a la
-   izquierda. La fila reserva padding derecho para que el contenido no lo tape. */
-.tkr-right{position:absolute;top:3px;right:8px;display:flex;align-items:center;gap:3px}
+   izquierda. z-index alto para que quede por encima del contenido; la fila
+   reserva padding derecho para que el contenido no invada su zona. */
+.tkr-right{position:absolute;top:3px;right:10px;display:flex;align-items:center;gap:3px;z-index:2}
 .tkr-right .tkr-bell{font-size:9px}
-.tkr-row{padding-right:52px !important}
+.tkr-row{padding-right:60px !important}
 .tkr-cf-xs{font-size:8px;color:var(--text3);flex-shrink:0;white-space:nowrap}
 .tkr-conf-row{display:flex;align-items:center;gap:4px;padding:0px 8px 3px 8px}
 .tkr-conf-bar-wrap{flex:1;height:2px;background:var(--bg3);border-radius:1px;overflow:hidden}
@@ -969,7 +970,7 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .lp-hdr-right .lp-sort-sel{margin-left:0}
 /* Filas del panel izquierdo: % día, P&L, forecast 3D */
 .tkr-day-xs{font-size:8.5px;font-weight:600;margin-left:4px;white-space:nowrap}
-.tkr-pl-xs{font-size:8.5px;margin-left:5px;white-space:nowrap}
+.tkr-pl-xs{font-size:8.5px;margin-left:5px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .tkr-fc-xs{font-size:8px;margin-left:4px;white-space:nowrap}
 /* Panel derecho: posición propia, nota SL/TP, desempeño del modelo */
 .rp-pos-sec{background:rgba(77,158,247,.05);border-left:2px solid rgba(77,158,247,.4)}
