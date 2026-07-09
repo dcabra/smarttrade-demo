@@ -4197,7 +4197,7 @@ async function loadModelPerfIntradia(t, tf, ventana, costo){
     <div class="rp-mp-kpis">
       <span class="rp-mp-roi" style="color:${col}">${roiFin>=0?'+':''}${roiFin.toFixed(2)}%</span>
       ${data.win_rate!=null?`<span class="rp-mp-win" title="Operaciones con retorno neto positivo / total">✦ ${data.win_rate}% · ${data.n_ops} ops</span>`:''}
-      <span class="rp-mp-tag paper" title="ROI neto de costos (ida y vuelta). Cada señal cierra en TP1/SL o al final de la ventana de ${ventana} velas.">neto ${tf}</span>
+      <span class="rp-mp-tag paper" title="ROI neto de costos (ida y vuelta). SL/TP calculados con el ATR del propio timeframe (no el SL/TP diario del modelo) — cierra en TP1/SL o al final de la ventana de ${ventana} velas.">neto ${tf} · ATR</span>
       ${muestra}
     </div>
     ${desgloseHtml}
