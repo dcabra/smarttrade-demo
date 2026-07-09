@@ -6,7 +6,7 @@
 <title>SmartTrade · Análisis IA</title>
 <style>
 :root {
-  --lp-w:280px;   /* ancho del panel izquierdo (portafolio/watchlist) */
+  --lp-w:260px;   /* ancho del panel izquierdo (portafolio/watchlist) */
   --gold:#f5c518; --gold-dim:#b8860b;
   --blue:#4d9ef7; --blue-dim:#1a3a6a;
   --green:#2ecc71; --red:#e74c3c; --orange:#f39c12;
@@ -381,7 +381,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 /* ── Auto-refresh selector ── */
 .refresh-ctrl{display:flex;align-items:center;gap:5px;padding:6px 10px;border-top:1px solid var(--border);flex-shrink:0;background:var(--bg-left)}
 .refresh-lbl{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap}
-.refresh-sel{background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--border2);border-radius:4px;font-size:10px;padding:2px 4px;cursor:pointer;width:52px}
+.refresh-sel{background:rgba(255,255,255,.06);color:var(--text);border:1px solid var(--border2);border-radius:4px;font-size:10px;padding:2px 20px 2px 6px;cursor:pointer;width:auto;min-width:64px}
 .refresh-sel:focus{outline:none;border-color:var(--gold)}
 .refresh-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;display:none}
 .refresh-dot.active{display:block;animation:pulse 2s infinite}
