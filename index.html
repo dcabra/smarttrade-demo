@@ -1026,6 +1026,9 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .rp-mp-tag{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border-radius:3px;padding:1px 5px}
 .rp-mp-tag.paper{color:var(--green);background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.3)}
 .rp-mp-tag.bt{color:var(--orange);background:rgba(243,156,18,.1);border:1px solid rgba(243,156,18,.3)}
+.rp-mp-breakdown{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:5px;font-size:9px;color:var(--text2)}
+.rp-mp-bd-item{display:flex;align-items:center;gap:4px}
+.rp-mp-bd-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 /* Modal de orden: atajos, estimación, bracket, posición */
 .om-quick{display:flex;align-items:center;gap:5px;margin-top:6px;flex-wrap:wrap}
 .om-qk{font-size:9px;font-weight:700;color:var(--blue);background:rgba(77,158,247,.08);border:1px solid rgba(77,158,247,.3);border-radius:4px;padding:2px 8px;cursor:pointer}
@@ -4169,6 +4172,27 @@ async function loadModelPerfIntradia(t, tf, ventana, costo){
   const muestra = data.n_ops<20
     ? `<span class="rp-mp-tag bt" title="Pocas operaciones: el resultado aún no es estadísticamente robusto">muestra chica</span>`
     : '';
+  // Desglose por motivo de cierre (tp1 / sl / cierre_ventana): así se ve si el
+  // win-rate viene de TPs genuinos o de que la mayoría cierra "sin tocar nada"
+  // con retorno positivo por casualidad — dato clave para confiar (o no) en el número.
+  const curva = data.curva_roi||[];
+  const porMotivo = {tp1:{n:0,wins:0}, sl:{n:0,wins:0}, cierre_ventana:{n:0,wins:0}};
+  curva.forEach(p=>{
+    const m = p.motivo||'cierre_ventana';
+    if(!porMotivo[m]) porMotivo[m]={n:0,wins:0};
+    porMotivo[m].n++;
+    if((p.retorno_neto??0) > 0) porMotivo[m].wins++;
+  });
+  const motivoLbl = {tp1:'TP1', sl:'SL', cierre_ventana:'Cierre ventana'};
+  const motivoColor = {tp1:'var(--green)', sl:'var(--red)', cierre_ventana:'var(--text3)'};
+  const desgloseHtml = curva.length ? `
+    <div class="rp-mp-breakdown" title="Cómo cerró cada operación: TP1 tocado, SL tocado, o cerrada al final de la ventana sin tocar ninguno">
+      ${['tp1','sl','cierre_ventana'].map(m=>{
+        const d=porMotivo[m]; if(!d.n) return '';
+        const pct=Math.round(d.n/curva.length*100);
+        return `<span class="rp-mp-bd-item"><span class="rp-mp-bd-dot" style="background:${motivoColor[m]}"></span>${motivoLbl[m]} ${d.n} (${pct}%)</span>`;
+      }).join('')}
+    </div>` : '';
   host2.innerHTML=`
     <div class="rp-mp-kpis">
       <span class="rp-mp-roi" style="color:${col}">${roiFin>=0?'+':''}${roiFin.toFixed(2)}%</span>
@@ -4176,6 +4200,7 @@ async function loadModelPerfIntradia(t, tf, ventana, costo){
       <span class="rp-mp-tag paper" title="ROI neto de costos (ida y vuelta). Cada señal cierra en TP1/SL o al final de la ventana de ${ventana} velas.">neto ${tf}</span>
       ${muestra}
     </div>
+    ${desgloseHtml}
     <svg viewBox="0 0 ${W2} ${H2}" preserveAspectRatio="none" style="width:100%;height:34px;display:block">
       <line x1="0" y1="${y0}" x2="${W2}" y2="${y0}" stroke="rgba(255,255,255,.14)" stroke-width="0.5" stroke-dasharray="2,2"/>
       <polyline points="${ptsS}" fill="none" stroke="${roiFin>=0?'#2ecc71':'#e74c3c'}" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
