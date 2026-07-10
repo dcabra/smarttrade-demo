@@ -1018,8 +1018,9 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .rp-mp-tf.on{color:var(--blue);border-color:var(--blue);background:rgba(77,158,247,.1)}
 .rp-mp-cfg{display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap}
 .rp-mp-cfg-item{font-size:9px;color:var(--text3);display:flex;align-items:center;gap:4px}
-.rp-mp-cfg-item input{width:38px;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:10px;padding:2px 4px;font-family:inherit;outline:none}
+.rp-mp-cfg-item input{width:46px;background:var(--bg3);border:1px solid var(--border2);border-radius:4px;color:var(--text);font-size:10px;padding:2px 4px;font-family:inherit;outline:none}
 .rp-mp-cfg-item input:focus{border-color:var(--blue)}
+.rp-mp-applied{font-size:8px;color:var(--text3);display:block;margin:-2px 0 5px}
 .rp-mp-kpis{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
 .rp-mp-roi{font-size:13px;font-weight:800}
 .rp-mp-win{font-size:9.5px;color:var(--text2)}
@@ -4197,7 +4198,8 @@ async function loadModelPerfIntradia(t, tf, ventana, costo){
     <div class="rp-mp-kpis">
       <span class="rp-mp-roi" style="color:${col}">${roiFin>=0?'+':''}${roiFin.toFixed(2)}%</span>
       ${data.win_rate!=null?`<span class="rp-mp-win" title="Operaciones con retorno neto positivo / total">✦ ${data.win_rate}% · ${data.n_ops} ops</span>`:''}
-      <span class="rp-mp-tag paper" title="ROI neto de costos (ida y vuelta). SL/TP calculados con el ATR del propio timeframe (no el SL/TP diario del modelo) — cierra en TP1/SL o al final de la ventana de ${ventana} velas.">neto ${tf} · ATR</span>
+      <span class="rp-mp-tag paper" title="ROI neto de costos (ida y vuelta). SL/TP calculados con el ATR del propio timeframe (no el SL/TP diario del modelo) — cierra en TP1/SL o al final de la ventana de ${data.ventana??ventana} velas.">neto ${tf} · ATR</span>
+      <span class="rp-mp-applied" title="Costo por lado REALMENTE aplicado por el servidor en este cálculo (ida y vuelta = 2× este valor). Si no coincide con lo que escribiste, el campo no se envió — recarga o revisa.">costo aplicado: ${(data.costo_pct??costo).toFixed(2)}%/lado</span>
       ${muestra}
     </div>
     ${desgloseHtml}
