@@ -584,6 +584,21 @@ body.tab-max .cp>.osc-panel{display:none !important}
 .usermenu-item.danger:hover{background:rgba(231,76,60,.12)}
 .usermenu-item .umi-ico{font-size:13px;width:16px;text-align:center;flex-shrink:0}
 .usermenu-div{height:1px;background:var(--border);margin:4px 2px}
+.set-sec-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--gold);margin-bottom:3px}
+.set-sec-desc{font-size:10.5px;color:var(--text3);line-height:1.5;margin-bottom:12px}
+.set-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--border)}
+.set-row-main{flex:1;min-width:0}
+.set-lbl{font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px}
+.set-help{font-size:10px;color:var(--text3);line-height:1.45}
+.set-ctrl{display:flex;align-items:center;gap:5px;flex-shrink:0;padding-top:2px}
+.set-ctrl input{width:56px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:5px 7px;font-family:inherit;outline:none;text-align:right}
+.set-ctrl input:focus{border-color:var(--blue)}
+.set-unit{font-size:10px;color:var(--text3);white-space:nowrap}
+.set-msg{font-size:11.5px;font-weight:600;color:var(--green);min-height:16px;margin-top:10px}
+.rp-mp-cfg-note{font-size:9.5px;color:var(--text3)}
+.rp-mp-cfg-note b{color:var(--text2);font-weight:700}
+.rp-mp-cfg-link{color:var(--blue);cursor:pointer;font-weight:600}
+.rp-mp-cfg-link:hover{text-decoration:underline}
 .cpw-input{width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;padding:9px 11px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .12s}
 .cpw-input:focus{border-color:var(--blue)}
 .cpw-hint{font-size:10.5px;color:var(--text3);min-height:14px}
@@ -1139,6 +1154,56 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
   </div>
 </div>
 
+<!-- Modal · Configuración de la aplicación (ajustes globales) -->
+<div class="om-overlay" id="settings-overlay" onclick="if(event.target===this)closeSettings()">
+  <div class="om-modal" style="max-width:440px">
+    <div class="om-hdr">
+      <span class="om-title">⚙️ Configuración</span>
+      <button class="om-x" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="om-body">
+      <div class="set-sec-title">Evaluación intradía del modelo</div>
+      <div class="set-sec-desc">Estos valores aplican a todos los tickers al medir el desempeño intradía del modelo.</div>
+
+      <div class="set-row">
+        <div class="set-row-main">
+          <div class="set-lbl">Ventana de evaluación</div>
+          <div class="set-help">Cuántas velas mira cada señal para cerrar en TP/SL o al final de la ventana.</div>
+        </div>
+        <div class="set-ctrl">
+          <input type="number" id="set-ventana" min="1" max="60" step="1"> <span class="set-unit">velas</span>
+        </div>
+      </div>
+
+      <div class="set-row">
+        <div class="set-row-main">
+          <div class="set-lbl">Costo por operación — acciones/ETF</div>
+          <div class="set-help">Por lado; ida y vuelta = 2×. Alpaca no cobra comisión en acciones (solo spread/slippage real).</div>
+        </div>
+        <div class="set-ctrl">
+          <input type="number" id="set-costo-eq" min="0" max="1" step="0.01"> <span class="set-unit">% / lado</span>
+        </div>
+      </div>
+
+      <div class="set-row">
+        <div class="set-row-main">
+          <div class="set-lbl">Costo por operación — cripto</div>
+          <div class="set-help">Por lado. Tarifa real de Alpaca Crypto: 0.25% por operación.</div>
+        </div>
+        <div class="set-ctrl">
+          <input type="number" id="set-costo-cr" min="0" max="1" step="0.01"> <span class="set-unit">% / lado</span>
+        </div>
+      </div>
+
+      <div class="set-msg" id="set-msg"></div>
+    </div>
+    <div class="om-foot">
+      <button class="om-btn" onclick="resetSettings()" style="background:none;border:1px solid var(--border2);color:var(--text2)" title="Volver a los valores recomendados">Restaurar</button>
+      <button class="om-btn send" onclick="saveSettings()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <div class="topbar">
   <div class="refresh-ctrl-tb">
     <select class="refresh-sel" id="rsel" onchange="setRefresh(this.value)">
@@ -1190,6 +1255,9 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
     </button>
     <div class="usermenu" id="usermenu" role="menu" aria-hidden="true">
       <div class="usermenu-hdr">Founder</div>
+      <button class="usermenu-item" role="menuitem" onclick="openSettings()">
+        <span class="umi-ico">⚙️</span> Configuración
+      </button>
       <button class="usermenu-item" role="menuitem" onclick="openChangePassword()">
         <span class="umi-ico">🔑</span> Cambiar contraseña
       </button>
@@ -3992,12 +4060,10 @@ function buildRP(t,sig,fc){
       <button class="rp-mp-tf"    data-tf="5m"  onclick="setModelPerfTf('${t}','5m',this)">5m</button>
     </div>
     <div class="rp-mp-cfg" id="rp-mp-cfg" style="display:none">
-      <label class="rp-mp-cfg-item" title="Cuántas velas mira cada señal para cerrar en TP/SL o al final de la ventana">
-        Ventana <input type="number" id="rp-mp-ventana" min="1" max="60" value="8" onchange="reloadModelPerfIntradia('${t}')"> velas
-      </label>
-      <label class="rp-mp-cfg-item" title="Costo estimado por lado; ida y vuelta = 2× este valor. Hace el ROI realista.">
-        Costo <input type="number" id="rp-mp-costo" min="0" max="1" step="0.01" value="0.05" onchange="reloadModelPerfIntradia('${t}')">% / lado
-      </label>
+      <span class="rp-mp-cfg-note">Ventana <b id="rp-mp-vent-lbl">8</b> · costo <b id="rp-mp-cost-lbl">0.02%</b> · <a class="rp-mp-cfg-link" onclick="openSettings()">ajustar ⚙️</a></span>
+      <input type="hidden" id="rp-mp-ventana" value="8">
+      <input type="hidden" id="rp-mp-costo" value="0.02">
+    </div>
     </div>
     <div class="rp-mp-body" id="rp-mp-body"><span class="rp-mp-loading">Cargando historial…</span></div>
   </div>
@@ -4082,6 +4148,86 @@ let MODEL_PERF_TF = '1D';
    El usuario puede afinarlas en los controles del panel. */
 const TMODE_TF  = { swing:'1D', '1h':'1h', '15m':'15m', '5m':'5m' };
 const TMODE_WIN = { '1h':7, '15m':8, '5m':12 };
+
+/* ── Ventana y Costo: preferencia GLOBAL (no por ticker) ──────────────────────
+   Antes se reseteaban cada vez que cambiabas de ticker. Ahora, una vez que el
+   usuario los ajusta a mano, se guardan en localStorage y se aplican a
+   CUALQUIER ticker/modo — hasta que el usuario los vuelva a cambiar.
+   Mientras no haya preferencia guardada, se sugiere un default razonable:
+     - Ventana: la del modo de operación (TMODE_WIN).
+     - Costo: 0.02%/lado para acciones (Alpaca no cobra comisión en acciones/ETF,
+       pero sí hay spread/slippage real de ejecución) · 0.25%/lado para cripto
+       (tarifa real de Alpaca Crypto: 0.25% por operación).
+   Fuente: alpaca.markets/support/commission-clearing-fees (acciones $0 comisión,
+   solo tarifas regulatorias SEC/FINRA insignificantes en ventas) y la tarifa de
+   0.25% de Alpaca Crypto reportada en los fee schedules públicos de Alpaca. */
+function getPerfVentanaPref(tf){
+  try{ const v=localStorage.getItem('st_perf_ventana'); if(v!=null && v!=='') return Math.max(1,Math.min(60,parseInt(v,10)||8)); }catch(e){}
+  return TMODE_WIN[tf] || 8;
+}
+function setPerfVentanaPref(v){ try{ localStorage.setItem('st_perf_ventana', String(v)); }catch(e){} }
+function isCryptoTicker(t){ return /-USD$/i.test(t||''); }
+/* Costo: preferencias separadas para acciones/ETF vs cripto (defaults basados en
+   los costos reales de Alpaca: $0 comisión en acciones → ~0.02% de spread real;
+   0.25% en cripto). Config editable desde el modal ⚙️ Configuración. */
+const _COSTO_EQ_DEFAULT = 0.02;
+const _COSTO_CR_DEFAULT = 0.25;
+function getCostoEqPref(){
+  try{ const v=localStorage.getItem('st_perf_costo_eq'); if(v!=null && v!=='') return Math.max(0,Math.min(1,parseFloat(v))); }catch(e){}
+  // Compat: si existía la vieja clave única, úsala como valor de acciones.
+  try{ const old=localStorage.getItem('st_perf_costo'); if(old!=null && old!=='') return Math.max(0,Math.min(1,parseFloat(old))); }catch(e){}
+  return _COSTO_EQ_DEFAULT;
+}
+function getCostoCrPref(){
+  try{ const v=localStorage.getItem('st_perf_costo_cr'); if(v!=null && v!=='') return Math.max(0,Math.min(1,parseFloat(v))); }catch(e){}
+  return _COSTO_CR_DEFAULT;
+}
+function getPerfCostoPref(ticker){
+  return isCryptoTicker(ticker) ? getCostoCrPref() : getCostoEqPref();
+}
+function setPerfCostoPref(v){
+  /* Compat con el campo del panel: guarda en la preferencia del tipo del ticker activo. */
+  try{
+    if(isCryptoTicker(ACTIVE)) localStorage.setItem('st_perf_costo_cr', String(v));
+    else localStorage.setItem('st_perf_costo_eq', String(v));
+  }catch(e){}
+}
+
+/* ── Modal de Configuración ─────────────────────────────────────────────── */
+function openSettings(){
+  closeUserMenu();
+  const vt=$('set-ventana'); if(vt) vt.value = getPerfVentanaPref(TMODE_TF[TRADING_MODE]||'15m');
+  const ce=$('set-costo-eq'); if(ce) ce.value = getCostoEqPref();
+  const cc=$('set-costo-cr'); if(cc) cc.value = getCostoCrPref();
+  const msg=$('set-msg'); if(msg) msg.textContent='';
+  $('settings-overlay')?.classList.add('show');
+}
+function closeSettings(){ $('settings-overlay')?.classList.remove('show'); }
+function saveSettings(){
+  const vt=Math.max(1,Math.min(60,parseInt($('set-ventana')?.value||'8',10)||8));
+  const ce=Math.max(0,Math.min(1,parseFloat($('set-costo-eq')?.value||'0.02')||0));
+  const cc=Math.max(0,Math.min(1,parseFloat($('set-costo-cr')?.value||'0.25')||0));
+  try{
+    localStorage.setItem('st_perf_ventana', String(vt));
+    localStorage.setItem('st_perf_costo_eq', String(ce));
+    localStorage.setItem('st_perf_costo_cr', String(cc));
+    localStorage.removeItem('st_perf_costo');   // limpiar clave vieja unificada
+  }catch(e){}
+  const msg=$('set-msg'); if(msg) msg.textContent='✓ Guardado. Aplica a todos los tickers.';
+  // Refrescar el termómetro del ticker activo si está en intradía
+  if(typeof MODEL_PERF_TF!=='undefined' && MODEL_PERF_TF!=='1D' && ACTIVE){
+    const vf=$('rp-mp-ventana'); if(vf) vf.value=vt;
+    const cf=$('rp-mp-costo'); if(cf) cf.value=getPerfCostoPref(ACTIVE);
+    reloadModelPerfIntradia(ACTIVE);
+  }
+  setTimeout(closeSettings, 1000);
+}
+function resetSettings(){
+  const vt=$('set-ventana'); if(vt) vt.value = TMODE_WIN[TMODE_TF[TRADING_MODE]||'15m'] || 8;
+  const ce=$('set-costo-eq'); if(ce) ce.value = _COSTO_EQ_DEFAULT;
+  const cc=$('set-costo-cr'); if(cc) cc.value = _COSTO_CR_DEFAULT;
+  const msg=$('set-msg'); if(msg) msg.textContent='Valores recomendados cargados (aún sin guardar).';
+}
 let TRADING_MODE = (function(){ try{ return localStorage.getItem('st_trading_mode')||'swing'; }catch(e){ return 'swing'; } })();
 
 function setTradingMode(mode){
@@ -4100,9 +4246,7 @@ function applyModeToPerf(){
   const tf = TMODE_TF[TRADING_MODE]||'1D';
   const btn = document.querySelector(`.rp-mp-tf[data-tf="${tf}"]`);
   if(!btn) return;   // el panel no está en pantalla
-  const vent=$('rp-mp-ventana');
-  if(vent && TMODE_WIN[tf]) vent.value = TMODE_WIN[tf];
-  setModelPerfTf(ACTIVE, tf, btn);
+  setModelPerfTf(ACTIVE, tf, btn);   // ventana/costo se leen de config global al recargar
 }
 
 /* Sincronización con la gráfica: 1D/5D del chart usan velas HORARIAS →
@@ -4119,9 +4263,7 @@ function syncPerfWithChart(isIntradayChart){
   if(isIntradayChart === isIntraNow) return;   // ya está en el tipo correcto
   const btn = document.querySelector(`.rp-mp-tf[data-tf="${wantTf}"]`);
   if(!btn) return;
-  const vent=$('rp-mp-ventana');
-  if(vent && TMODE_WIN[wantTf]) vent.value = TMODE_WIN[wantTf];
-  setModelPerfTf(ACTIVE, wantTf, btn);
+  setModelPerfTf(ACTIVE, wantTf, btn);   // ventana/costo se leen de config global al recargar
 }
 
 function setModelPerfTf(t, tf, btn){
@@ -4138,8 +4280,14 @@ function setModelPerfTf(t, tf, btn){
 function reloadModelPerfIntradia(t){
   const host=$('rp-mp-body'); if(!host) return;
   if(MODEL_PERF_TF==='1D') return;   // guardia: los controles solo aplican intradía
-  const ventana = Math.max(1, Math.min(60, parseInt($('rp-mp-ventana')?.value||'8',10)||8));
-  const costo   = Math.max(0, Math.min(1, parseFloat($('rp-mp-costo')?.value||'0.05')||0.05));
+  // Los valores vienen de la configuración GLOBAL (modal ⚙️), no de campos por ticker.
+  const ventana = getPerfVentanaPref(MODEL_PERF_TF);
+  const costo   = getPerfCostoPref(t);
+  // Reflejar en los hidden inputs (compat) y en las etiquetas visibles.
+  const vh=$('rp-mp-ventana'); if(vh) vh.value=ventana;
+  const ch=$('rp-mp-costo'); if(ch) ch.value=costo;
+  const vl=$('rp-mp-vent-lbl'); if(vl) vl.textContent=ventana;
+  const cl=$('rp-mp-cost-lbl'); if(cl) cl.textContent=costo+'%';
   host.innerHTML='<span class="rp-mp-loading">Evaluando señales intradía…</span>';
   loadModelPerfIntradia(t, MODEL_PERF_TF, ventana, costo);
 }
