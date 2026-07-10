@@ -1641,7 +1641,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
            el pie queda solo para la acción -->
       <div id="om-caps-sec" style="display:none">
         <div class="om-caps" id="om-caps">
-          <div class="om-caps-hdr">🛡 Límites de seguridad <span id="om-caps-day"></span></div>
+          <div class="om-caps-hdr">🛡 Límites de seguridad <button id="om-caps-lockbtn" onclick="unlockCaps()" style="display:none;font-size:9px;background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.3);color:var(--red,#ff6b6b);border-radius:4px;padding:2px 7px;cursor:pointer;margin-left:6px">🔒 editar topes</button> <span id="om-caps-day"></span></div>
           <div class="om-row2">
             <div>
               <div class="om-lbl">Tope por orden (USD)</div>
@@ -2566,6 +2566,8 @@ function renderOrderAction(){
     const caps=getCaps();
     $('om-cap-order').value = caps.perOrder || '';
     $('om-cap-daily').value = caps.daily || '';
+    CAPS_UNLOCKED=false;        // cada render vuelve a bloquear la edición en real
+    setCapsLock(!paper);
     renderDayBudget();
     cancelConfirm();
   } else {
@@ -2584,7 +2586,28 @@ function getCaps(){
   return {...CAPS_DEFAULT};
 }
 function saveCaps(c){ try{ localStorage.setItem(CAPS_KEY, JSON.stringify(c)); }catch{} }
+
+/* ── Fricción en cuenta REAL: los topes quedan bloqueados en el modal ──
+   Editarlos exige escribir TOPES en un prompt. En paper se editan libre.
+   Nota: la AUTORIDAD de los topes es el backend (BROKER_CAP_* en Railway);
+   estos del localStorage son la primera línea, de cortesía. */
+let CAPS_UNLOCKED=false;
+function setCapsLock(lockWanted){
+  const a=$('om-cap-order'), b=$('om-cap-daily'), btn=$('om-caps-lockbtn');
+  const locked = lockWanted && !CAPS_UNLOCKED;
+  [a,b].forEach(i=>{ if(i){ i.readOnly=locked; i.style.opacity=locked?'.55':''; } });
+  if(btn){
+    btn.style.display = lockWanted ? 'inline-block' : 'none';
+    btn.textContent = locked ? '🔒 editar topes' : '🔓 topes editables';
+    btn.disabled = !locked;
+  }
+}
+function unlockCaps(){
+  const t=prompt('⚠ CUENTA REAL: los topes son tu freno de seguridad.\nPara editarlos en esta sesión escribe: TOPES');
+  if((t||'').trim().toUpperCase()==='TOPES'){ CAPS_UNLOCKED=true; setCapsLock(true); }
+}
 function saveCapsFromUI(){
+  if($('om-cap-order')?.readOnly) return;   // bloqueado en cuenta real: ignorar
   const po=parseFloat($('om-cap-order').value), pd=parseFloat($('om-cap-daily').value);
   saveCaps({ perOrder: po>0?po:0, daily: pd>0?pd:0 });
   renderDayBudget();
@@ -2672,6 +2695,13 @@ function sendBrokerOrder(){
 
   // Topes
   const caps=getCaps(), est=estimateOrderUSD();
+  // Cuenta REAL: si el valor no es estimable, NO se permite enviar (fail-closed).
+  // El backend también lo rechazaría (defensa en profundidad), pero mejor avisar aquí.
+  if(!est.known && BROKER_INFO?.paper===false){
+    res.className='om-msg err show';
+    res.textContent='⚠ Cuenta real: no se pudo estimar el valor de la orden (sin precio de referencia), así que no se puede verificar contra los topes. Usa monto en USD (notional) o una orden límite.';
+    return;
+  }
   if(est.known && caps.perOrder>0 && est.value>caps.perOrder){
     res.className='om-msg err show';
     res.textContent=`Supera el tope por orden (${fP(est.value)} > ${fP(caps.perOrder)}). Ajusta el monto o el tope.`;
@@ -2736,6 +2766,7 @@ async function confirmAndSubmit(){
   }catch(e){
     res.className='om-msg err show';
     if(e.code==='UNAUTHORIZED'){ res.textContent='Sesión expirada (401). Reconecta tu cuenta.'; }
+    else if(e.status===400){ res.textContent=e.message; }   // rechazo por controles de riesgo del backend (topes/halt)
     else if(e.code==='UNAVAILABLE'){ res.textContent='Backend no disponible (503).'; }
     else if(e.code==='NETWORK'){ res.textContent='No se pudo contactar el backend.'; }
     else if(e.code==='NO_TOKEN'){ res.textContent='No hay sesión. Conecta tu cuenta.'; }
