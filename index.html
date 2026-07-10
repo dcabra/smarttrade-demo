@@ -4214,11 +4214,12 @@ function saveSettings(){
     localStorage.removeItem('st_perf_costo');   // limpiar clave vieja unificada
   }catch(e){}
   const msg=$('set-msg'); if(msg) msg.textContent='✓ Guardado. Aplica a todos los tickers.';
-  // Refrescar el termómetro del ticker activo si está en intradía
-  if(typeof MODEL_PERF_TF!=='undefined' && MODEL_PERF_TF!=='1D' && ACTIVE){
-    const vf=$('rp-mp-ventana'); if(vf) vf.value=vt;
-    const cf=$('rp-mp-costo'); if(cf) cf.value=getPerfCostoPref(ACTIVE);
-    reloadModelPerfIntradia(ACTIVE);
+  // Refrescar el termómetro del ticker activo SI está mostrando un timeframe
+  // intradía. reloadModelPerfIntradia relee las preferencias globales recién
+  // guardadas. Se hace en el próximo tick para asegurar que localStorage ya
+  // está escrito, y ANTES de cerrar el modal para que el usuario vea el cambio.
+  if(ACTIVE && typeof MODEL_PERF_TF!=='undefined' && MODEL_PERF_TF!=='1D'){
+    setTimeout(()=>{ try{ reloadModelPerfIntradia(ACTIVE); }catch(e){} }, 0);
   }
   setTimeout(closeSettings, 1000);
 }
