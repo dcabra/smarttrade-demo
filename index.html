@@ -822,6 +822,40 @@ table.jr-table{width:100%;border-collapse:collapse;font-size:12px}
 .om-hdr .om-sym{font-size:13px;font-weight:800;color:var(--gold)}
 .om-hdr .om-x{margin-left:auto;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;line-height:1;padding:0 2px}
 .om-hdr .om-x:hover{color:var(--text)}
+/* ── Maximizar secciones del panel derecho (Señal IA / Forecast / Desempeño) ──
+   Mismo lenguaje visual que .bp-max-ico de las pestañas del panel inferior. */
+.rp-max-ico{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:auto;border-radius:4px;color:var(--text3);opacity:.5;transition:all .12s;flex-shrink:0;cursor:pointer}
+.rp-max-ico:hover{opacity:1;color:var(--gold);background:rgba(245,197,24,.1)}
+.rpmax-modal{max-width:720px;display:flex;flex-direction:column;overflow:hidden;max-height:84vh}
+.rpmax-body{overflow-y:auto;flex:1;min-height:0;overscroll-behavior:contain;padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+.rpmax-body::-webkit-scrollbar{width:6px}
+.rpmax-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.rpx-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--text3);margin-bottom:6px}
+.rpx-sint{font-size:12px;line-height:1.65;color:var(--text2);white-space:normal}
+.rpx-factors{display:grid;grid-template-columns:1fr 1fr;gap:5px 14px}
+.rpx-factors .rp-f{font-size:11px;line-height:1.5}
+.rpx-fc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.rpx-fc-col{background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;text-align:center}
+.rpx-fc-h{font-size:10px;font-weight:800;color:var(--gold);letter-spacing:.08em;margin-bottom:4px}
+.rpx-fc-p{font-size:16px;font-weight:800;color:var(--text)}
+.rpx-fc-r{font-size:10px;color:var(--text3);margin-top:2px}
+.rpx-fc-d{font-size:12px;font-weight:700;margin-top:3px}
+.rpx-range{position:relative;height:8px;background:rgba(255,255,255,.06);border-radius:4px;margin-top:8px}
+.rpx-range-band{position:absolute;top:0;bottom:0;background:rgba(245,197,24,.22);border-radius:4px}
+.rpx-range-mark{position:absolute;top:-3px;width:2px;height:14px;border-radius:1px}
+.rpx-note{font-size:10px;color:var(--text3);line-height:1.5}
+.rpx-disc{font-size:9.5px;color:var(--text3);border-top:1px solid var(--border);padding-top:8px;line-height:1.5}
+.rpx-sltp-ref{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.rpx-sltp-cell{background:rgba(255,255,255,.03);border:1px solid var(--border2);border-radius:8px;padding:7px 8px;text-align:center}
+.rpx-sltp-k{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em}
+.rpx-sltp-v{font-size:13px;font-weight:800;margin-top:2px}
+/* El termómetro real se MUEVE dentro del modal (mismos ids) → agrandarlo ahí */
+#rpmax-body #rp-model-perf{padding:0 !important;border:none}
+#rpmax-body #rp-model-perf .rp-mp-body svg{height:110px !important}
+#rpmax-body #rp-model-perf .rp-mp-roi{font-size:20px}
+#rpmax-body #rp-model-perf .rp-mp-win{font-size:12px}
+#rpmax-body #rp-model-perf .rp-mp-tf{font-size:11px;padding:4px 12px}
+#rpmax-body #rp-model-perf > .rp-lbl{display:none !important} /* el título ya está en el header del modal */
 .om-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
 .om-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--text3);margin-bottom:5px}
 /* Bloque legal — copy inmutable, estilo neutral informativo */
@@ -1165,6 +1199,17 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 </div>
 
 <!-- Modal · Configuración de la aplicación (ajustes globales) -->
+<!-- Modal grande de secciones del panel derecho (Señal IA / Forecast IA / Desempeño) -->
+<div class="om-overlay" id="rpmax-overlay" onclick="if(event.target===this)closeRpMax()">
+  <div class="om-modal rpmax-modal">
+    <div class="om-hdr">
+      <span class="om-title" id="rpmax-title">—</span>
+      <span class="om-sym" id="rpmax-sym"></span>
+      <button class="om-x" onclick="closeRpMax()" title="Cerrar">✕</button>
+    </div>
+    <div class="om-body rpmax-body" id="rpmax-body"></div>
+  </div>
+</div>
 <div class="om-overlay" id="settings-overlay" onclick="if(event.target===this)closeSettings()">
   <div class="om-modal" style="max-width:440px">
     <div class="om-hdr">
@@ -3969,6 +4014,8 @@ function draw(candles, fullCandles){
 /* ── RIGHT PANEL ── */
 function buildRP(t,sig,fc){
   const rp=$('rp');
+  closeRpMax();                 // si hay un modal expandido abierto, devolver/cerrar antes de re-render
+  RPMAX_CTX={t,sig,fc};         // contexto para los modales de Señal/Forecast expandidos
   if(!sig){rp.innerHTML='<div class="empty"><strong>Sin datos</strong>No se pudo cargar '+t+'</div>';return;}
   const px=sig.precio_actual||0, sen=sig['señal']||'HOLD';
   const conf=sig.confianza||50, niv=sig.niveles||{};
@@ -4035,7 +4082,7 @@ function buildRP(t,sig,fc){
   </div>
   ${posHtml}
   <div class="rp-sec rp-sec-sig" style="padding:8px 14px">
-    <div class="rp-lbl" style="margin-bottom:5px;flex-shrink:0">Señal IA</div>
+    <div class="rp-lbl" style="margin-bottom:5px;flex-shrink:0;display:flex;align-items:center">Señal IA<span class="rp-max-ico" title="Maximizar Señal IA" onclick="openRpMax('sig')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-shrink:0">
       <div class="rp-sig-pill" style="background:${sc}18;color:${sc};border:1px solid ${sc}44;padding:3px 10px;font-size:12px">${pillLbl(sen)}</div>
       <div style="flex:1">
@@ -4053,7 +4100,7 @@ function buildRP(t,sig,fc){
     </div>
   </div>
   <div class="rp-sec" style="padding:5px 14px">
-    <div class="rp-lbl" style="margin-bottom:4px">Forecast IA</div>
+    <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center">Forecast IA<span class="rp-max-ico" title="Maximizar Forecast IA" onclick="openRpMax('fc')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div>
       <div class="rp-fc-grid">${fcHtml}</div>
       <div class="rp-fc-note" style="margin-top:3px;font-size:9px">p50 mediana · p10/p90 rango · ATR+Ichimoku</div>
@@ -4092,7 +4139,7 @@ function buildRP(t,sig,fc){
     <div class="rp-niv-note">Los cambios se guardan solo en este navegador. Las estrategias automáticas siguen usando los niveles del modelo.</div>
   </div>
   <div class="rp-sec" id="rp-model-perf" style="padding:6px 14px">
-    <div class="rp-lbl" style="margin-bottom:4px">Desempeño del modelo · ${t}</div>
+    <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center">Desempeño del modelo · ${t}<span class="rp-max-ico" title="Maximizar Desempeño del modelo" onclick="openRpMax('perf')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div class="rp-mp-tfbar" id="rp-mp-tfbar">
       <button class="rp-mp-tf on" data-tf="1D"  onclick="setModelPerfTf('${t}','1D',this)">Diario</button>
       <button class="rp-mp-tf"    data-tf="1h"  onclick="setModelPerfTf('${t}','1h',this)">1h</button>
@@ -4177,6 +4224,117 @@ async function rpLoadModelPerf(t){
    Diario (1D) usa la fuente paper/backtest existente (rpLoadModelPerf).
    Intradía (1h/15m/5m) llama al endpoint /v1/papertrading/intradia, que evalúa
    las señales por vela con TP/SL y descuenta costos (ROI neto y realista). */
+/* ── Maximizar secciones del panel derecho ────────────────────────────────
+   'sig' y 'fc' se construyen desde RPMAX_CTX (los mismos datos ya cargados,
+   sin fetch nuevo). 'perf' MUEVE el nodo real #rp-model-perf al modal (ids
+   únicos, botones de timeframe y config siguen funcionando) y lo devuelve al
+   cerrar. buildRP() llama closeRpMax() antes de re-renderizar, así el nodo
+   nunca queda duplicado. Solo lectura: SL/TP se edita en el panel/orden. */
+let RPMAX_CTX=null, RPMAX_KIND=null, RPMAX_PH=null;
+
+function openRpMax(kind){
+  if(!RPMAX_CTX) return;
+  const {t,sig,fc}=RPMAX_CTX;
+  const body=$('rpmax-body'), title=$('rpmax-title'), sym=$('rpmax-sym');
+  if(!body) return;
+  closeRpMax();                       // por si había otro abierto
+  RPMAX_KIND=kind;
+  sym.textContent=t;
+
+  if(kind==='sig'){
+    title.textContent='Señal IA';
+    const sen=sig['señal']||'HOLD', conf=sig.confianza||50, sc=sigCol(sen);
+    const traz=sig.trazabilidad||{};
+    const sint=(sig.sintesis||'').replace(/\[DEV\][^|]*\|[^|]*\|[^|]*\|\s*/,'').replace(/Síntesis real desactivada \(DEV_MODE=true\)\./,'').replace(/[#*]/g,'').trim();
+    const sintDeg=sig.sintesis_degradada===true, sintNota=(sig.sintesis_nota||'').trim();
+    const cCol=conf>=85?'var(--green)':conf>=70?'var(--blue)':conf>=55?'var(--orange)':'var(--red)';
+    const F=(arr,ico)=>(arr||[]).map(f=>`<div class="rp-f"><span class="rp-fi">${ico}</span>${f}</div>`).join('');
+    const fAll=F(traz.factores_positivos,'✅')+F(traz.factores_negativos,'⚠️')+F(traz.alertas,'🚨');
+    body.innerHTML=`
+      <div style="display:flex;align-items:center;gap:14px">
+        <div class="rp-sig-pill" style="background:${sc}18;color:${sc};border:1px solid ${sc}44;padding:6px 18px;font-size:16px;font-weight:800">${pillLbl(sen)}</div>
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Confianza</span>
+            <span style="font-size:18px;font-weight:800;color:${cCol}">${conf}%</span>
+          </div>
+          <div class="rp-cf-bg" style="height:8px"><div class="rp-cf-fg" style="width:${conf}%;background:${cCol}"></div></div>
+        </div>
+      </div>
+      ${sintDeg&&sintNota?`<div class="rp-sint-deg">⚠ ${sintNota}</div>`:''}
+      ${sint?`<div><div class="rpx-lbl">Síntesis del modelo</div><div class="rpx-sint">${sint}</div></div>`:''}
+      ${fAll?`<div><div class="rpx-lbl">Factores considerados</div><div class="rpx-factors">${fAll}</div></div>`:''}
+      <div class="rpx-disc">El modelo predice — esto NO constituye consejo de inversión. Resultados pasados no garantizan resultados futuros.</div>`;
+  }
+
+  else if(kind==='fc'){
+    title.textContent='Forecast IA';
+    const px=sig.precio_actual||0, Hz=fc?.horizontes||{};
+    // Escala común de las barras de rango: min/max de todos los p10/p90 + precio actual
+    let lo=px,hi=px;
+    ['1D','3D','7D'].forEach(h=>{const d=Hz[h]; if(d){ if(d.p10!=null)lo=Math.min(lo,d.p10); if(d.p90!=null)hi=Math.max(hi,d.p90);}});
+    const span=(hi-lo)||1, X=v=>((v-lo)/span*100).toFixed(1);
+    const cols=['1D','3D','7D'].map(h=>{
+      const d=Hz[h];
+      if(!d) return `<div class="rpx-fc-col"><div class="rpx-fc-h">${h}</div><div class="rpx-fc-p">--</div></div>`;
+      const dv=pct(px,d.p50);
+      const dCol=dv>0.05?'var(--green)':dv<-0.05?'var(--red)':'var(--text3)';
+      const hasR=d.p10!=null&&d.p90!=null;
+      return `<div class="rpx-fc-col">
+        <div class="rpx-fc-h">${h}</div>
+        <div class="rpx-fc-p">${fP(d.p50)}</div>
+        <div class="rpx-fc-r">${hasR?`${fP(d.p10)} – ${fP(d.p90)}`:'—'}</div>
+        ${dv!=null?`<div class="rpx-fc-d" style="color:${dCol}">${fPct(dv)}</div>`:''}
+        ${hasR?`<div class="rpx-range">
+          <div class="rpx-range-band" style="left:${X(d.p10)}%;width:${Math.max(1,X(d.p90)-X(d.p10))}%"></div>
+          <div class="rpx-range-mark" style="left:${X(px)}%;background:var(--text2)" title="Precio actual ${fP(px)}"></div>
+          <div class="rpx-range-mark" style="left:${X(d.p50)}%;background:var(--gold)" title="p50 ${fP(d.p50)}"></div>
+        </div>`:''}
+      </div>`;
+    }).join('');
+    // SL/TP efectivos como referencia de SOLO lectura (se editan en el panel / modal de orden)
+    const niv=sig.niveles||{};
+    const ref=[['sl','SL','var(--red)'],['tp1','TP1','var(--green)'],['tp2','TP2','var(--green)'],['tp3','TP3','var(--green)']].map(([k,lbl,col])=>{
+      const v=(typeof getNivUser==='function'?getNivUser(t,k):null)??niv[k];
+      return `<div class="rpx-sltp-cell"><div class="rpx-sltp-k">${lbl}</div><div class="rpx-sltp-v" style="color:${col}">${v!=null?fP(v):'—'}</div></div>`;
+    }).join('');
+    body.innerHTML=`
+      <div style="font-size:11px;color:var(--text2)">Precio actual: <b style="color:var(--text)">${fP(px)}</b> · barra: <span style="color:var(--gold)">▎p50</span> · <span style="color:var(--text2)">▎precio actual</span> · banda = rango p10–p90</div>
+      <div class="rpx-fc-grid">${cols}</div>
+      <div><div class="rpx-lbl">Niveles SL/TP de referencia (solo lectura — se editan en el panel)</div><div class="rpx-sltp-ref">${ref}</div></div>
+      <div class="rpx-note">p50 = mediana del pronóstico · p10/p90 = rango probable · método ATR+Ichimoku. Concordancia forecast↔señal: el gate de estrategias exige que la dirección del forecast acompañe a la señal.</div>
+      <div class="rpx-disc">El modelo predice — esto NO constituye consejo de inversión. Resultados pasados no garantizan resultados futuros.</div>`;
+  }
+
+  else if(kind==='perf'){
+    title.textContent='Desempeño del modelo';
+    const node=$('rp-model-perf');
+    if(!node){ RPMAX_KIND=null; return; }
+    RPMAX_PH=document.createElement('div'); RPMAX_PH.id='rpmax-ph'; RPMAX_PH.style.display='none';
+    node.parentNode.insertBefore(RPMAX_PH,node);
+    body.innerHTML='';
+    body.appendChild(node);
+    body.insertAdjacentHTML('beforeend','<div class="rpx-disc">Efectividad etiquetada por origen (paper real / backtest simulado), muestra y fechas. Resultados pasados no garantizan resultados futuros.</div>');
+  }
+
+  $('rpmax-overlay')?.classList.add('show');
+}
+
+function closeRpMax(){
+  const ov=$('rpmax-overlay');
+  // Devolver el termómetro a su lugar en el panel si estaba movido
+  if(RPMAX_KIND==='perf'){
+    const node=$('rp-model-perf');
+    if(node && RPMAX_PH && RPMAX_PH.parentNode){ RPMAX_PH.parentNode.replaceChild(node,RPMAX_PH); }
+    RPMAX_PH=null;
+  }
+  RPMAX_KIND=null;
+  ov?.classList.remove('show');
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape' && $('rpmax-overlay')?.classList.contains('show')) closeRpMax();
+});
+
 let MODEL_PERF_TF = '1D';
 
 /* ── Modo de operación del trader (dropdown del topbar) ──────────────────────
