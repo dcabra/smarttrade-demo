@@ -2049,7 +2049,16 @@ function pillLbl(s){ return s==='BUY'?'BUY':s==='SELL'?'SELL':'HOLD'; }
 function sigCol(s) { return s==='BUY'?'var(--green)':s==='SELL'?'var(--red)':'var(--orange)'; }
 
 async function get(path){
-  try{ const r=await fetch(API+path); if(!r.ok)return null; return await r.json(); }
+  try{
+    const token = getBrokerToken();
+    const r=await fetch(API+path, { headers: token ? {'Authorization':'Bearer '+token} : {} });
+    if(r.status===401){
+      // Token vencido: mismo patrón que apiBroker → limpiar y volver al gate.
+      try{ clearBrokerToken(); showLoginGate('Sesión expirada. Vuelve a ingresar.'); }catch(e){}
+      return null;
+    }
+    if(!r.ok)return null; return await r.json();
+  }
   catch{ return null; }
 }
 
@@ -7223,7 +7232,7 @@ async function sendChat(){
     const msgs=CHAT_HISTORY.slice(-12).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.content}));
     const res=await fetch('https://smarttrade-backend-production-b8e7.up.railway.app/v1/chat',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+(getBrokerToken()||'')},
       body:JSON.stringify({
         model:'claude-sonnet-4-6',
         max_tokens:500,
