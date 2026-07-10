@@ -6932,7 +6932,7 @@ Fundamentales: P/E ${fun.pe_ratio||'N/D'} | EPS ${fun.eps_anual||'N/D'} | Sector
       return `${p.symbol}: ${p.qty??'?'} u. @ ${p.avg_entry_price!=null?fP(p.avg_entry_price):'?'} · valor ${p.value!=null?fP(p.value):'?'} · P&L ${p.unrealized_pl!=null?fPS(p.unrealized_pl):'N/D'} (${pc})`;
     }).join(' | ')||'ninguna';
     ctx+=`
-PORTAFOLIO DEL USUARIO (cuenta paper en Alpaca — datos reales de la cuenta):
+PORTAFOLIO DEL USUARIO (cuenta ${BROKER_INFO?.paper===false?'REAL con DINERO REAL':'paper/simulada'} en Alpaca — datos reales de la cuenta):
 Equity total: ${fP(EQUITY)} | Efectivo disponible: ${fP(CASH_AVAIL)}${dayPl!=null?` | P&L del día: ${fPS(dayPl)}`:''}
 Posiciones abiertas: ${posTxt}
 `;
@@ -6957,14 +6957,14 @@ Alertas recientes del sistema: ${alTxt}
       return `"${s.nombre}" (${s.estado}, ${s.timeframe||'1D'})${ret}${wr}`;
     }).join(' | ');
     ctx+=`
-Estrategias automáticas (paper): ${stTxt}
+Estrategias automáticas (siempre simuladas en paper, NO ejecutan en la cuenta real): ${stTxt}
 `;
   }
   ctx+=`
 Instrucciones: Responde en español neutro latinoamericano. Máximo 4-5 oraciones salvo que pidan detalle.
 Integra técnico + noticias + macro en tu respuesta cuando estén disponibles.
 No des consejos directos de inversión. Usa "el modelo sugiere", "el análisis indica".
-SmartTrade incorpora noticias de Alpha Vantage y datos macro del FRED — menciónalos cuando sean relevantes.`;
+SmartTrade incorpora noticias de Alpha Vantage y datos macro del FRED — menciónalos cuando sean relevantes.${BROKER_INFO?.paper===false?'\n⚠ IMPORTANTE: la cuenta conectada es REAL con DINERO REAL. Sé especialmente prudente al hablar de riesgo; recuerda que las pérdidas son reales.':''}`;
   return ctx;
 }
 
