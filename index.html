@@ -7,6 +7,7 @@
 <style>
 :root {
   --lp-w:260px;   /* ancho del panel izquierdo (portafolio/watchlist) */
+  --rp-w:300px;   /* ancho del panel derecho (precio/señal/forecast/orden) — antes 260px hardcodeado */
   --gold:#f5c518; --gold-dim:#b8860b;
   --blue:#4d9ef7; --blue-dim:#1a3a6a;
   --green:#2ecc71; --red:#e74c3c; --orange:#f39c12;
@@ -49,7 +50,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* APP */
-.app{display:flex;position:fixed;top:0;left:0;right:260px;bottom:calc(20px + var(--bp-h));transition:bottom .25s}
+.app{display:flex;position:fixed;top:0;left:0;right:var(--rp-w);bottom:calc(20px + var(--bp-h));transition:bottom .25s}
 
 /* LEFT */
 .lp{width:var(--lp-w);flex-shrink:0;background:var(--bg-left);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
@@ -140,7 +141,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .osc-lbl.macd-lbl{color:var(--orange)}
 
 /* RIGHT */
-.rp{position:fixed;top:44px;bottom:20px;right:0;left:auto;z-index:40;width:260px;flex-shrink:0;background:var(--bg);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+.rp{position:fixed;top:44px;bottom:20px;right:0;left:auto;z-index:40;width:var(--rp-w);flex-shrink:0;background:var(--bg);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
 .rp::-webkit-scrollbar{width:3px}
 .rp::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 .rp-sec{padding:12px 14px;border:1px solid rgba(245,197,24,.18);border-radius:8px;margin:4px 8px}
@@ -296,6 +297,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .an-main-tab{font-size:10px;font-weight:700;padding:8px 18px;color:var(--text3);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;text-transform:uppercase;letter-spacing:.07em;transition:all .15s}
 .an-main-tab.on{color:var(--gold);border-bottom-color:var(--gold);background:rgba(245,197,24,.05)}
 .an-main-tab:hover:not(.on){color:var(--text);background:rgba(255,255,255,.03)}
+.bp-tab-sep{width:1px;align-self:stretch;background:var(--border2);margin:5px 7px;flex-shrink:0}
 /* Sub-pestañas */
 .an-sub-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg2);overflow-x:auto}
 .an-sub-tabs::-webkit-scrollbar{display:none}
@@ -415,7 +417,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .no-alerts{padding:12px 10px;font-size:10px;color:var(--text3);text-align:center}
 
 /* ── Panel inferior (chat + órdenes) ── */
-.bottom-panel{position:fixed;bottom:20px;left:0;right:260px;height:var(--bp-h,300px);background:var(--bg-main);border-top:1px solid var(--border);z-index:80;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .25s ease}
+.bottom-panel{position:fixed;bottom:20px;left:0;right:var(--rp-w);height:var(--bp-h,300px);background:var(--bg-main);border-top:1px solid var(--border);z-index:80;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .25s ease}
 .bottom-panel.open{transform:translateY(0)}
 /* Minimizado: solo la barra de pestañas visible (el panel nunca se cierra) */
 .bottom-panel.minimized{height:auto !important}
@@ -1280,6 +1282,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
     <span class="refresh-cd" id="rcd">—</span>
   </div>
   <span class="mkt-chip" id="mkt-chip" style="display:none" title="Estado del mercado US (NYSE/Nasdaq) según Alpaca"></span>
+  <span class="mkt-chip" id="regimen-chip" style="display:none"></span>
   <span class="pause-chip" id="pause-chip" style="display:none" onclick="switchTab('cal')" title="Pausa global activa: ninguna estrategia abre posiciones nuevas. Clic para administrar."></span>
   <div class="tb-load" id="tb-load" style="margin-left:8px"><div class="spin"></div><span id="tb-load-txt">Cargando...</span></div>
   <!-- News ticker (centro del topbar) -->
@@ -1803,14 +1806,15 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
     <div class="bp-min-btn" id="bp-min-btn" title="Restaurar (volver la pestaña a su lugar)" onclick="unmaximizeTab()"><svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.6 4.4h3v-3M10.4 4.4h-3v-3M1.6 7.6h3v3M10.4 7.6h-3v3"/></svg> Minimizar</div>
   </div>
   <div class="bp-tabs">
-    <div class="bp-tab chat on" id="tab-chat"        onclick="switchTab('chat')">🤖 Chat IA<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('chat')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <div class="bp-tab chat on" id="tab-chat"        onclick="switchTab('chat')">💬 Consulta IA<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('chat')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div class="bp-tab" id="tab-alerts"              onclick="switchTab('alerts')">⚡ Alertas<span class="alert-tab-badge" id="alert-tab-badge" style="display:none">0</span><span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('alerts')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
-    <div class="bp-tab" id="tab-cal"                 onclick="switchTab('cal')">📅 Calendario<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('cal')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <div class="bp-tab" id="tab-orders" onclick="switchTab('orders')">📋 Órdenes manuales<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('orders')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <div class="bp-tab" id="tab-strat" onclick="switchTab('strat')">🎯 Estrategias<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('strat')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <span class="bp-tab-sep" title="Operar | Contexto"></span>
     <div class="bp-tab" id="tab-angral"              onclick="switchTab('angral')" title="Noticias y análisis del mercado general">🌐 Mercado<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('angral')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div class="bp-tab" id="tab-anticker"            onclick="switchTab('anticker')">📰 <span id="tab-anticker-lbl" title="Noticias y análisis del ticker seleccionado">Ticker —</span><span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('anticker')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
-    <div class="bp-tab" id="tab-orders"              onclick="switchTab('orders')">📋 Órdenes manuales<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('orders')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
-    <div class="bp-tab" id="tab-strat"               onclick="switchTab('strat')">🎯 Estrategias<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('strat')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
-    <div class="bp-tab" id="tab-journal"             onclick="switchTab('journal')">📊 Journal<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('journal')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <div class="bp-tab" id="tab-cal" onclick="switchTab('cal')">📅 Calendario<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('cal')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <div class="bp-tab" id="tab-journal" onclick="switchTab('journal')">📊 Journal<span class="bp-max-ico" title="Maximizar esta pestaña" onclick="event.stopPropagation();maximizeTab('journal')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <span class="bp-chevron" id="bp-chevron" title="Minimizar / restaurar" onclick="toggleBPMin()">▾</span>
   </div>
   <!-- Chat body -->
@@ -2786,6 +2790,12 @@ function showConfirm(payload, est){
   }
   html += est.known ? `<span class="est">Valor estimado: ${fP(est.value)}</span>`
                     : `<span class="est">⚠ Valor no estimable (sin precio): no se pudo verificar contra el tope.</span>`;
+  // TOTP (opt-in, 10-jul): compras en cuenta REAL con BROKER_TOTP_SECRET seteado
+  // en el backend exigen el código de Google Authenticator. Si no está
+  // configurado, el campo se ignora del lado servidor (sin efecto).
+  if(real && payload.side==='buy'){
+    html += `<div style="margin-top:8px"><input id="om-totp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Código TOTP (si está configurado)" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px;padding:6px 9px;font-family:inherit;outline:none;letter-spacing:.2em;text-align:center"></div>`;
+  }
   txt.innerHTML=html;
   box.classList.toggle('real', real);
   box.style.display='block';
@@ -2803,6 +2813,9 @@ function cancelConfirm(){
 async function confirmAndSubmit(){
   if(!OM_PENDING) return;
   const { payload, est, symbol } = OM_PENDING;
+  // TOTP: si el campo existe y el usuario lo llenó, viaja con la orden.
+  const _totpEl=$('om-totp');
+  if(_totpEl && _totpEl.value.trim()) payload.totp_code=_totpEl.value.trim();
   const res=$('om-result');
   const btn=$('om-confirm-send'); const prev=btn.textContent;
   btn.disabled=true; btn.textContent='Enviando…';
@@ -4091,7 +4104,7 @@ function buildRP(t,sig,fc){
   </div>
   ${posHtml}
   <div class="rp-sec rp-sec-sig" style="padding:8px 14px">
-    <div class="rp-lbl" style="margin-bottom:5px;flex-shrink:0;display:flex;align-items:center">Señal IA<span class="rp-max-ico" title="Maximizar Señal IA" onclick="openRpMax('sig')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <div class="rp-lbl" style="margin-bottom:5px;flex-shrink:0;display:flex;align-items:center;cursor:pointer" title="Clic para ver el detalle completo" onclick="openRpMax('sig')">Señal IA<span class="rp-max-ico" title="Maximizar Señal IA" onclick="event.stopPropagation();openRpMax('sig')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-shrink:0">
       <div class="rp-sig-pill" style="background:${sc}18;color:${sc};border:1px solid ${sc}44;padding:3px 10px;font-size:12px">${pillLbl(sen)}</div>
       <div style="flex:1">
@@ -4109,7 +4122,7 @@ function buildRP(t,sig,fc){
     </div>
   </div>
   <div class="rp-sec" style="padding:5px 14px">
-    <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center">Forecast IA<span class="rp-max-ico" title="Maximizar Forecast IA" onclick="openRpMax('fc')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center;cursor:pointer" title="Clic para ver el detalle completo" onclick="openRpMax('fc')">Forecast IA<span class="rp-max-ico" title="Maximizar Forecast IA" onclick="event.stopPropagation();openRpMax('fc')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div>
       <div class="rp-fc-grid">${fcHtml}</div>
       <div class="rp-fc-note" style="margin-top:3px;font-size:9px">p50 mediana · p10/p90 rango · ATR+Ichimoku</div>
@@ -4148,7 +4161,7 @@ function buildRP(t,sig,fc){
     <div class="rp-niv-note">Los cambios se guardan solo en este navegador. Las estrategias automáticas siguen usando los niveles del modelo.</div>
   </div>
   <div class="rp-sec" id="rp-model-perf" style="padding:6px 14px">
-    <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center">Desempeño del modelo · ${t}<span class="rp-max-ico" title="Maximizar Desempeño del modelo" onclick="openRpMax('perf')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center;cursor:pointer" title="Clic para ver el detalle completo" onclick="openRpMax('perf')">Desempeño del modelo · ${t}<span class="rp-max-ico" title="Maximizar Desempeño del modelo" onclick="event.stopPropagation();openRpMax('perf')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div class="rp-mp-tfbar" id="rp-mp-tfbar">
       <button class="rp-mp-tf on" data-tf="1D"  onclick="setModelPerfTf('${t}','1D',this)">Diario</button>
       <button class="rp-mp-tf"    data-tf="1h"  onclick="setModelPerfTf('${t}','1h',this)">1h</button>
@@ -4845,7 +4858,17 @@ async function pick(t){
   $('cspinner').classList.remove('hidden');
   // Refrescar análisis si alguna pestaña está activa
   if($('body-angral')?.classList.contains('on')) loadAngral();
-  if($('body-anticker')?.classList.contains('on')) loadAnTicker(t);
+  // Punto 6 (10-jul): al elegir un ticker, activar automáticamente la pestaña
+  // 📰 del ticker. Excepciones: panel cerrado/minimizado (no forzar apertura)
+  // y Consulta IA activa (no interrumpir una conversación en curso).
+  // switchTab('anticker') ya dispara loadAnTicker(ACTIVE); el else conserva la
+  // recarga previa cuando la pestaña ya estaba activa (sin doble carga).
+  const _bpOpen = document.querySelector('.bottom-panel')?.classList.contains('open');
+  if(_bpOpen && !bpMin
+     && !$('body-chat')?.classList.contains('on')
+     && !$('body-anticker')?.classList.contains('on')){
+    switchTab('anticker');
+  } else if($('body-anticker')?.classList.contains('on')) loadAnTicker(t);
 
   if(!CACHE[t]) CACHE[t]={};
   let d=CACHE[t];
@@ -5000,8 +5023,35 @@ function fmtCountdown(ms){
   if(h<24) return h+'h '+(m%60)+'m';
   return Math.floor(h/24)+'d '+(h%24)+'h';
 }
+/* ── Régimen de correlación del universo (10-jul, punto 2c) ─────────────────
+   Consume GET /v1/papertrading/regimen (solo lectura). Si un % alto del
+   universo emite señal en la misma dirección, las señales del día son UNA
+   tesis macro, no N independientes. El chip solo se muestra en régimen de
+   alta correlación (silencio = normal). Throttle 10 min: el dato cambia una
+   vez por noche. */
+let REGIMEN_LAST_FETCH = 0;
+async function loadRegimen(){
+  const chip=$('regimen-chip'); if(!chip) return;
+  const now=Date.now();
+  if(now - REGIMEN_LAST_FETCH < 10*60*1000) return;
+  REGIMEN_LAST_FETCH = now;
+  const d = await get('/v1/papertrading/regimen');
+  if(!d || d.regimen==='sin_datos'){ chip.style.display='none'; return; }
+  if(d.regimen==='alta_correlacion'){
+    chip.style.display='inline-flex';
+    chip.className='mkt-chip closed';
+    chip.style.color='var(--orange)';
+    chip.style.borderColor='rgba(243,156,18,.35)';
+    chip.innerHTML=`⚠ Alta correlación · ${d.pct_dominante}% ${d.direccion_dominante}`;
+    chip.title=d.nota+` (señales de ${d.job_date}: ${d.n_buy} BUY / ${d.n_sell} SELL / ${d.n_hold} HOLD)`;
+  } else {
+    chip.style.display='none';   // normal: sin ruido en el topbar
+  }
+}
+
 function renderMktChip(){
   const chip=$('mkt-chip'); if(!chip) return;
+  loadRegimen();   // piggyback: el chip de régimen se refresca con el del reloj (throttle interno 10 min)
   if(!MKT_CLOCK){ chip.style.display='none'; return; }
   const now=Date.now();
   chip.style.display='inline-flex';
@@ -7247,7 +7297,7 @@ async function sendChat(){
     CHAT_HISTORY.push({role:'ai',content:reply});
   } catch(e){
     hideTyping();
-    appendMsg('ai','⚠️ El Chat IA requiere configuración del backend. El navegador bloquea llamadas directas a la API de Anthropic (CORS). Para habilitarlo, el backend de Railway debe actuar como proxy. Esto se configura en el siguiente sprint.');
+    appendMsg('ai','⚠️ La Consulta IA requiere configuración del backend. El navegador bloquea llamadas directas a la API de Anthropic (CORS). Para habilitarlo, el backend de Railway debe actuar como proxy. Esto se configura en el siguiente sprint.');
   }
   chatBusy=false; $('chat-send').disabled=false;
 }
