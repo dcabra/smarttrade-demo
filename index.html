@@ -8399,17 +8399,17 @@ function stratModalForm(d){
            <option value="watchlist" ${p.universo.modo==='watchlist'?'selected':''}>Solo watchlist</option>
            <option value="explicito" ${p.universo.modo==='explicito'?'selected':''}>Lista explícita</option></select></div>
          <div class="smf-field" id="smf-tk-wrap" style="${p.universo.modo==='explicito'?'':'display:none'}"><label>Tickers (coma)</label>
-           <input id="smf-tickers" value="${tk}" placeholder="AAPL, BTC-USD, TSLA"></div>
+           <input id="smf-tickers" value="${tk}" placeholder="AAPL, MSFT, TSLA"></div>
        </div></div>
-       <div class="smf-grp"><h4>📥 Entrada ${smfHelp('Condiciones para ABRIR una posición: confianza mínima de la señal IA, horizonte del forecast, dirección permitida y relación premio/riesgo mínima (R/B).')}</h4>
+       <div class="smf-grp"><h4>📥 Entrada ${smfHelp('Condiciones para ABRIR una posición: confianza mínima de la señal IA, horizonte del forecast y relación premio/riesgo mínima (R/B).')}</h4>
        <div class="smf-row">
          <div class="smf-field"><label>Confianza mín (50–95)</label><input type="number" id="smf-conf" min="50" max="95" value="${p.entrada.confianza_min}"></div>
          <div class="smf-field"><label>Horizonte</label><select id="smf-hz">${['1D','3D','7D'].map(h=>`<option ${p.entrada.horizonte_ref===h?'selected':''}>${h}</option>`).join('')}</select></div>
        </div>
        <div class="smf-row">
-         <div class="smf-field"><label>Dirección</label><select id="smf-dir">
-           <option value="solo_buy" ${p.entrada.direccion==='solo_buy'?'selected':''}>Solo compra</option>
-           <option value="buy_sell" ${p.entrada.direccion==='buy_sell'?'selected':''}>Compra y venta</option></select></div>
+         <!-- E1 (11-jul-2026): selector "Dirección" retirado — el motor nunca leía
+              entrada.direccion (campo muerto). El validador lo sigue aceptando por
+              retrocompatibilidad y el guardado preserva el valor almacenado. -->
          <div class="smf-field"><label>R/B mínimo (0 = off)</label><input type="number" id="smf-rr" min="0" max="10" step="0.5" value="${p.entrada.rr_min??0}" placeholder="0"></div>
        </div>
        <div class="smf-note">R/B = premio al TP ÷ riesgo al SL. Omite la entrada si el recorrido no compensa el riesgo. <b>0 = sin filtro</b> · rango 0.5–10.</div>
@@ -8431,7 +8431,10 @@ function stratModalForm(d){
        </div>
        <div class="smf-row">
          <div class="smf-field"><label>Máx % equity</label><input type="number" id="smf-exp-eq" min="0" max="100" value="${mec.equity}"></div>
-         <div class="smf-field"><label>Máx % crypto</label><input type="number" id="smf-exp-cr" min="0" max="100" value="${mec.crypto}"></div>
+         <!-- E1 (11-jul-2026): "Máx % crypto" retirado — crypto fuera del alcance
+              actual (motor asume NYSE/T+1/earnings; bracket de Alpaca no existe en
+              crypto). El validador acepta el parámetro y el guardado preserva el
+              valor almacenado; estrategias guardadas con crypto siguen corriendo. -->
        </div>
        <div class="smf-row">
          <label class="smf-check locked"><input type="checkbox" checked disabled> Obedecer SL <span style="color:var(--green)">(obligatorio)</span></label>
@@ -8577,6 +8580,14 @@ function stratReadRR(){ let v=parseFloat($('smf-rr').value); if(!isFinite(v)||v<
 function stratReadPeaje(){ const el=$('smf-peaje'); if(!el||el.value==='') return null; let v=parseFloat(el.value); if(!isFinite(v)||v<=0) return null; return Math.max(1,Math.min(100,v)); }
 function stratModalRead(){
   const modo=$('smf-modo').value, explic=($('smf-tickers')?$('smf-tickers').value:'').split(',').map(t=>t.trim().toUpperCase()).filter(Boolean);
+  /* E1 (11-jul-2026): "Dirección" y "Máx % crypto" ya no existen en el formulario.
+     Se PRESERVA el valor almacenado de la estrategia (retrocompat: editar una
+     estrategia guardada no le borra esos parámetros); en creación aplican los
+     defaults (solo_buy / crypto:30, los mismos del validador). */
+  const prev=(STRAT.modal&&STRAT.modal.params)||{};
+  const prevDir=((prev.entrada||{}).direccion)||'solo_buy';
+  const prevCr=(((prev.riesgo||{}).max_exposicion_clase)||{}).crypto;
+  const crVal=stratClamp(prevCr!=null?prevCr:30,0,100,30);
   return {
     nombre:$('smf-nombre').value.trim()||'Estrategia',
     prompt_llm:$('smf-prompt').value||'',
@@ -8584,9 +8595,9 @@ function stratModalRead(){
     params:{
       timeframe:($('smf-tf')?$('smf-tf').value:'1D'),
       universo:{modo, tickers:stratResolveUniverse(modo,explic)},
-      entrada:{confianza_min:parseInt($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, horizonte_ref:$('smf-hz').value, direccion:$('smf-dir').value, rr_min:stratReadRR(), min_ratio_tp_peaje:stratReadPeaje()},
+      entrada:{confianza_min:parseInt($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, horizonte_ref:$('smf-hz').value, direccion:prevDir, rr_min:stratReadRR(), min_ratio_tp_peaje:stratReadPeaje()},
       salida:{obedecer_sl:true, obedecer_tp:$('smf-tpchk').checked, tp_nivel:$('smf-tp').value, salida_por_vencimiento:$('smf-venc').checked, trailing_pct:stratRiskVal('smf-trail',1,50,0), cerrar_si_senal_invierte:$('smf-cinv').checked},
-      riesgo:{perfil:$('smf-perfil').value, pct_capital_por_senal:parseFloat($('smf-pct').value), max_posiciones:parseInt($('smf-maxp').value), max_exposicion_clase:{equity:stratClamp($('smf-exp-eq').value,0,100,70), crypto:stratClamp($('smf-exp-cr').value,0,100,30)}, drawdown_max_pct:stratRiskVal('smf-dd',1,90,0), cooldown_ciclos:stratRiskVal('smf-cd',1,30,0), ring_fence_pct:stratRiskVal('smf-rf',1,100,100), riesgo_por_trade_pct:stratRiskValFloat('smf-rpt',0.1,10,0)},
+      riesgo:{perfil:$('smf-perfil').value, pct_capital_por_senal:parseFloat($('smf-pct').value), max_posiciones:parseInt($('smf-maxp').value), max_exposicion_clase:{equity:stratClamp($('smf-exp-eq').value,0,100,70), crypto:crVal}, drawdown_max_pct:stratRiskVal('smf-dd',1,90,0), cooldown_ciclos:stratRiskVal('smf-cd',1,30,0), ring_fence_pct:stratRiskVal('smf-rf',1,100,100), riesgo_por_trade_pct:stratRiskValFloat('smf-rpt',0.1,10,0)},
       temporalidad:{vigencia_fin:null, solo_market_hours:$('smf-mh').checked, evitar_eventos:stratReadEvitar(), ventana_evento_horas:parseInt($('smf-ev-win').value)||48, ventanas_bloqueo:(STRAT.modalBlackout||[])},
       sim_config:{fee_bps:parseFloat($('smf-fee').value)||0, slippage_bps:parseFloat($('smf-slip').value)||0, benchmark:$('smf-bm').value}
     }
@@ -8615,7 +8626,8 @@ const SMF_DIFF_MAP = [
   ['universo.tickers',                   'smf-tickers','Tickers'],
   ['entrada.confianza_min',              'smf-conf',   'Confianza mín'],
   ['entrada.horizonte_ref',              'smf-hz',     'Horizonte'],
-  ['entrada.direccion',                  'smf-dir',    'Dirección'],
+  /* E1 (11-jul-2026): 'entrada.direccion' retirado del mapa — el campo ya no
+     existe en el formulario (campo muerto; el motor nunca lo leyó). */
   ['entrada.rr_min',                     'smf-rr',     'R/B mínimo'],
   ['entrada.min_ratio_tp_peaje',         'smf-peaje',  'Conciencia de costos (TP×peaje)'],
   ['entrada.concordancia_forecast',      'smf-conc',   'Concordancia forecast'],
