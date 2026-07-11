@@ -8417,7 +8417,11 @@ function stratModalForm(d){
          <div class="smf-field"><label>Conciencia de costos · TP ≥ N×peaje (vacío = off)</label><input type="number" id="smf-peaje" min="1" max="100" step="0.5" value="${p.entrada.min_ratio_tp_peaje??''}" placeholder="off"></div>
        </div>
        <div class="smf-note">Omite la entrada si el recorrido esperado al TP es menor que N veces el peaje round-trip. El <b>peaje se deriva solo</b> del fee + 2×slippage de la estrategia (no se fija un número). <b>Vacío = sin filtro</b> · rango 1–100.</div>
-       <label class="smf-check"><input type="checkbox" id="smf-conc" ${p.entrada.concordancia_forecast?'checked':''}> Exigir que el forecast concuerde</label></div>
+       <label class="smf-check"><input type="checkbox" id="smf-conc" ${p.entrada.concordancia_forecast?'checked':''}> Exigir que el forecast concuerde</label>
+       <!-- E2 (11-jul-2026): gate de alta correlación (opt-in, default OFF). Reutiliza
+            el termómetro GET /v1/papertrading/regimen vía el motor (mismo molde que
+            el filtro de calendario). Bloquea SOLO entradas, nunca salidas. -->
+       <label class="smf-check"><input type="checkbox" id="smf-corr" ${p.entrada.evitar_alta_correlacion?'checked':''}> Evitar entradas en alta correlación ${smfHelp('Si las señales del día apuntan mayoritariamente en la misma dirección (régimen de alta correlación), no abre posiciones nuevas ese ciclo — las trata como UNA tesis macro, no como N señales independientes. Las salidas no se ven afectadas.')}</label></div>
       </div>
       <div class="smf-col">
        <div class="smf-grp"><h4>📤 Salida y riesgo ${smfHelp('Cómo se cierra y cuánto se arriesga: nivel de TP, perfil de riesgo, % de capital por señal, exposición máxima por clase y el SL obligatorio (siempre activo).')}</h4>
@@ -8595,7 +8599,7 @@ function stratModalRead(){
     params:{
       timeframe:($('smf-tf')?$('smf-tf').value:'1D'),
       universo:{modo, tickers:stratResolveUniverse(modo,explic)},
-      entrada:{confianza_min:parseInt($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, horizonte_ref:$('smf-hz').value, direccion:prevDir, rr_min:stratReadRR(), min_ratio_tp_peaje:stratReadPeaje()},
+      entrada:{confianza_min:parseInt($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, evitar_alta_correlacion:$('smf-corr').checked, horizonte_ref:$('smf-hz').value, direccion:prevDir, rr_min:stratReadRR(), min_ratio_tp_peaje:stratReadPeaje()},
       salida:{obedecer_sl:true, obedecer_tp:$('smf-tpchk').checked, tp_nivel:$('smf-tp').value, salida_por_vencimiento:$('smf-venc').checked, trailing_pct:stratRiskVal('smf-trail',1,50,0), cerrar_si_senal_invierte:$('smf-cinv').checked},
       riesgo:{perfil:$('smf-perfil').value, pct_capital_por_senal:parseFloat($('smf-pct').value), max_posiciones:parseInt($('smf-maxp').value), max_exposicion_clase:{equity:stratClamp($('smf-exp-eq').value,0,100,70), crypto:crVal}, drawdown_max_pct:stratRiskVal('smf-dd',1,90,0), cooldown_ciclos:stratRiskVal('smf-cd',1,30,0), ring_fence_pct:stratRiskVal('smf-rf',1,100,100), riesgo_por_trade_pct:stratRiskValFloat('smf-rpt',0.1,10,0)},
       temporalidad:{vigencia_fin:null, solo_market_hours:$('smf-mh').checked, evitar_eventos:stratReadEvitar(), ventana_evento_horas:parseInt($('smf-ev-win').value)||48, ventanas_bloqueo:(STRAT.modalBlackout||[])},
@@ -8631,6 +8635,7 @@ const SMF_DIFF_MAP = [
   ['entrada.rr_min',                     'smf-rr',     'R/B mínimo'],
   ['entrada.min_ratio_tp_peaje',         'smf-peaje',  'Conciencia de costos (TP×peaje)'],
   ['entrada.concordancia_forecast',      'smf-conc',   'Concordancia forecast'],
+  ['entrada.evitar_alta_correlacion',    'smf-corr',   'Evitar alta correlación'],
   ['salida.tp_nivel',                    'smf-tp',     'Nivel TP'],
   ['salida.obedecer_tp',                 'smf-tpchk',  'Obedecer TP'],
   ['salida.salida_por_vencimiento',      'smf-venc',   'Salir al vencer'],
