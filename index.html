@@ -3519,6 +3519,13 @@ function draw(candles, fullCandles){
   const xS=i=>PL + cw/2 + (i/(n-1))*(cW - cw);
   const yS=p=>PT+(1-(p-lo)/rng)*cH;
 
+  // Guardado para el tooltip (TOOLTIP SOBRE LA GRÁFICA, más abajo): la escala
+  // vertical real de este dibujo (incluye el ensanche por BB/Ichimoku/cono de
+  // forecast si están activos), para que el tooltip pueda saber si el cursor
+  // está realmente cerca de la vela (dentro de su rango high-low en píxeles)
+  // y no solo dentro del rectángulo de la caja.
+  window.__priceScale = {lo, hi, rng, PT, cH};
+
   // Background + grid (full canvas, no clip)
   ctx.fillStyle='#0c1220'; ctx.fillRect(0,0,W,H);
   ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
@@ -5535,6 +5542,20 @@ async function initWatchlist(){
     const idx = Math.max(0, Math.min(_n-1, Math.round((mx - _PL - cw/2) / (cW - cw) * (_n-1))));
     const c = _candles[idx];
     if(!c){ tt.style.display='none'; return; }
+
+    // Solo si el cursor está realmente cerca de la vela en el eje vertical —
+    // no en cualquier punto de la caja (arriba de la más alta, abajo de la
+    // más baja, en un hueco vacío del panel). Replica la escala real que usó
+    // el último draw() (window.__priceScale), incluyendo el ensanche por BB/
+    // Ichimoku/cono de forecast, con un margen chico para que no haga falta
+    // apuntar al píxel exacto de la mecha.
+    const ps = window.__priceScale;
+    if(ps){
+      const yOf = p => ps.PT + (1 - (p - ps.lo)/ps.rng) * ps.cH;
+      const yHigh = yOf(c.high), yLow = yOf(c.low);
+      const margin = 10; // px de tolerancia alrededor de la mecha
+      if(my < yHigh - margin || my > yLow + margin){ tt.style.display='none'; return; }
+    }
 
     const chg = idx > 0 ? ((c.close - _candles[idx-1].close) / _candles[idx-1].close * 100) : 0;
     const chgCls = chg >= 0 ? 'up' : 'dn';
