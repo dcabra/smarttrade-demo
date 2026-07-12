@@ -805,6 +805,25 @@ table.jr-table{width:100%;border-collapse:collapse;font-size:12px}
 .acct-menu-disc{margin-top:7px;width:100%;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:var(--red);border-radius:6px;padding:7px 0;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.02em;transition:all .12s}
 .acct-menu-disc:hover{background:rgba(231,76,60,.2)}
 
+/* ── M2 · Freno de emergencia (HALT) ── */
+.halt-btn{flex-shrink:0;display:flex;align-items:center;gap:5px;background:rgba(231,76,60,.14);border:1px solid rgba(231,76,60,.5);color:var(--red);border-radius:7px;padding:5px 10px;font-size:10px;font-weight:800;letter-spacing:.03em;cursor:pointer;font-family:inherit;transition:all .12s}
+.halt-btn:hover{background:rgba(231,76,60,.26)}
+.halt-btn.active{background:var(--red);color:#fff;border-color:var(--red);animation:halt-pulse 1.6s ease-in-out infinite}
+@keyframes halt-pulse{0%,100%{box-shadow:0 0 0 0 rgba(231,76,60,.55)}50%{box-shadow:0 0 0 6px rgba(231,76,60,0)}}
+.halt-banner{display:none;position:fixed;top:44px;left:var(--lp-w);right:0;z-index:150;background:var(--red);color:#fff;font-weight:800;font-size:12px;letter-spacing:.03em;text-align:center;padding:7px 10px}
+.halt-banner.show{display:block}
+.halt-banner .hb-motivo{font-weight:600;opacity:.9;margin-left:6px}
+.halt-banner .hb-lift{margin-left:12px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:6px;padding:3px 9px;font-size:10px;font-weight:800;cursor:pointer;font-family:inherit}
+.halt-banner .hb-lift:hover{background:rgba(255,255,255,.3)}
+.halt-modal-txt{font-size:12px;line-height:1.6;color:var(--text2)}
+.halt-modal-txt b{color:var(--text)}
+.halt-confirm-inp{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:13px;padding:8px 10px;font-family:inherit;outline:none;letter-spacing:.08em;text-align:center;text-transform:uppercase;margin-top:10px}
+.halt-confirm-inp:focus{border-color:var(--red)}
+.halt-modal-actions{display:flex;gap:8px;margin-top:14px}
+.halt-modal-actions button{flex:1;border-radius:7px;padding:9px 0;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;border:1px solid var(--border2);background:var(--bg3);color:var(--text)}
+.halt-modal-actions .hb-confirm{background:var(--red);border-color:var(--red);color:#fff}
+.halt-modal-actions .hb-confirm:disabled{opacity:.45;cursor:not-allowed}
+
 /* ── Modales genéricos (unlock + orden) ── */
 .om-overlay{position:fixed;inset:0;background:rgba(4,6,12,.72);backdrop-filter:blur(3px);z-index:300;display:none;align-items:center;justify-content:center;padding:20px}
 .om-overlay.show{display:flex}
@@ -1290,6 +1309,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
     <div class="news-ticker-track" id="news-ticker-track"></div>
   </div>
   <div style="flex:1" id="news-ticker-spacer"></div>
+  <button class="halt-btn" id="halt-btn" onclick="openHaltModal()" title="Freno de emergencia: bloquea toda orden nueva" style="display:none">⛔ HALT</button>
   <div class="acct-chip-wrap" id="acct-chip-wrap">
     <button class="broker-conn off" id="broker-conn-btn" onclick="onBrokerConnClick(event)" title="Sesión de demo">
       <span class="bc-ico" id="broker-conn-ico">🔌</span><span id="broker-conn-lbl">Conectando…</span><span class="bc-caret" id="broker-conn-caret" style="display:none">▾</span>
@@ -1325,6 +1345,10 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       </button>
     </div>
   </div>
+</div>
+<div class="halt-banner" id="halt-banner">
+  ⛔ TRADING DETENIDO<span class="hb-motivo" id="halt-banner-motivo"></span>
+  <button class="hb-lift" onclick="openHaltModal()">Levantar freno</button>
 </div>
 <script>/* Reusa el logo del topbar en el gate de login (sin duplicar el base64). */
 (function(){var t=document.querySelector('.topbar .logo-img')||document.querySelector('.logo-img');var el=document.getElementById('login-logo');if(t&&el&&t.src)el.src=t.src;})();</script>
@@ -1597,6 +1621,23 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 </div>
 
 <!-- ══ MODAL: Orden ══ -->
+<div class="om-overlay" id="halt-overlay" onclick="if(event.target===this)closeHaltModal()">
+  <div class="om-modal" style="max-width:380px">
+    <div class="om-hdr">
+      <span class="om-title" id="halt-modal-title">Freno de emergencia</span>
+      <button class="om-x" onclick="closeHaltModal()">×</button>
+    </div>
+    <div class="om-body">
+      <div class="halt-modal-txt" id="halt-modal-txt"></div>
+      <input class="halt-confirm-inp" id="halt-confirm-inp" placeholder="Escribe la palabra de confirmación" autocomplete="off" oninput="haltConfirmInputChanged()">
+      <div class="halt-modal-actions">
+        <button onclick="closeHaltModal()">Cancelar</button>
+        <button class="hb-confirm" id="halt-confirm-btn" disabled onclick="submitHalt()">Confirmar</button>
+      </div>
+      <div class="om-msg" id="halt-modal-msg"></div>
+    </div>
+  </div>
+</div>
 <div class="om-overlay" id="order-overlay" onclick="if(event.target===this)closeOrder()">
   <div class="om-modal">
     <div class="om-hdr">
@@ -2162,6 +2203,7 @@ function setBrokerUI(connected, info){
       set('am-acct', BROKER_INFO?.account_number || '—');
       set('am-equity', (eq!=null && !isNaN(eq)) ? fP(eq) : '—');
       const mv=$('am-mode'); if(mv) mv.classList.toggle('real', !paper);
+      fetchServerCaps();   // M2: refresca topes/halt en cuanto hay sesión activa
     } else {
       btn.classList.add('off'); btn.classList.remove('on','real');
       if(ico) ico.textContent = '🔌';
@@ -2169,6 +2211,8 @@ function setBrokerUI(connected, info){
       btn.title = 'Sesión de demo inactiva · click para reintentar';
       if(caret) caret.style.display = 'none';
       closeAcctMenu();
+      SERVER_CAPS = null;
+      renderHaltUI();
     }
   }
   // Si el modal de orden está abierto, refrescar su área de acción
@@ -2680,12 +2724,92 @@ function addDaySpend(v){
   try{ localStorage.setItem(DAY_KEY, JSON.stringify({ date:todayKey(), total:getDaySpend()+v })); }catch{}
 }
 function renderDayBudget(){
-  const caps=getCaps(), spent=getDaySpend(), el=$('om-caps-day');
+  const el=$('om-caps-day');
   if(!el) return;
+  // M2: la autoridad del gasto diario es el servidor (GET /v1/broker/caps).
+  // Si todavía no llegó la respuesta del servidor, se muestra el tope local
+  // (localStorage) solo como placeholder momentáneo hasta que refresque.
+  if(SERVER_CAPS){
+    const tope = SERVER_CAPS.cap_daily, spent = SERVER_CAPS.gastado_hoy||0;
+    if(tope>0){
+      el.textContent = `hoy: ${fP(spent)} de ${fP(tope)}`;
+      el.classList.toggle('warn', spent >= tope*0.8);
+    } else { el.textContent='diario: sin tope'; el.classList.remove('warn'); }
+    return;
+  }
+  const caps=getCaps(), spent=getDaySpend();
   if(caps.daily>0){
     el.textContent = `hoy: ${fP(spent)} de ${fP(caps.daily)}`;
     el.classList.toggle('warn', spent >= caps.daily*0.8);
   } else { el.textContent='diario: sin tope'; el.classList.remove('warn'); }
+}
+
+/* ── M2 · Topes/halt server-side (GET /v1/broker/caps) ──
+   SERVER_CAPS es la autoridad: { cap_per_order, cap_daily, cap_position,
+   gastado_hoy, dia, modo, halt, halt_detalle:{activo,motivo,...}, auto_trading }.
+   Se refresca junto con el resto de la cuenta (refreshBroker) y al conectar. */
+let SERVER_CAPS = null;
+
+async function fetchServerCaps(){
+  const caps = await brokerGet('/v1/broker/caps');
+  if(caps) SERVER_CAPS = caps;
+  renderDayBudget();
+  renderHaltUI();
+  return caps;
+}
+
+function renderHaltUI(){
+  const btn=$('halt-btn'), banner=$('halt-banner'), motivoEl=$('halt-banner-motivo');
+  if(!btn) return;
+  if(!BROKER_CONNECTED){ btn.style.display='none'; banner?.classList.remove('show'); return; }
+  btn.style.display='inline-flex';
+  const activo = !!(SERVER_CAPS?.halt_detalle?.activo ?? SERVER_CAPS?.halt);
+  btn.classList.toggle('active', activo);
+  btn.textContent = activo ? '⛔ HALT ACTIVO' : '⛔ HALT';
+  btn.title = activo ? 'Freno de emergencia ACTIVO — clic para levantarlo'
+                     : 'Freno de emergencia: bloquea toda orden nueva';
+  if(banner){
+    banner.classList.toggle('show', activo);
+    if(motivoEl) motivoEl.textContent = SERVER_CAPS?.halt_detalle?.motivo ? ` — ${SERVER_CAPS.halt_detalle.motivo}` : '';
+  }
+}
+
+let HALT_WANT_ACTIVATE = true;   // true = modal para ACTIVAR; false = para LEVANTAR
+function openHaltModal(){
+  const activo = !!(SERVER_CAPS?.halt_detalle?.activo ?? SERVER_CAPS?.halt);
+  HALT_WANT_ACTIVATE = !activo;
+  const word = HALT_WANT_ACTIVATE ? 'HALT' : 'REANUDAR';
+  $('halt-modal-title').textContent = HALT_WANT_ACTIVATE ? 'Activar freno de emergencia' : 'Levantar freno de emergencia';
+  $('halt-modal-txt').innerHTML = HALT_WANT_ACTIVATE
+    ? `<b>Esto bloquea TODA orden nueva</b> (compras y ventas manuales, y cualquier estrategia automática) hasta que lo levantes. Para confirmar, escribe <b>${word}</b> abajo.`
+    : `El freno está activo${SERVER_CAPS?.halt_detalle?.motivo?` (motivo: ${SERVER_CAPS.halt_detalle.motivo})`:''}. Para volver a permitir órdenes, escribe <b>${word}</b> abajo.`;
+  $('halt-confirm-inp').value='';
+  $('halt-confirm-btn').disabled=true;
+  const msg=$('halt-modal-msg'); msg.className='om-msg'; msg.textContent='';
+  $('halt-overlay').classList.add('show');
+  setTimeout(()=>$('halt-confirm-inp')?.focus(), 50);
+}
+function closeHaltModal(){ $('halt-overlay')?.classList.remove('show'); }
+function haltConfirmInputChanged(){
+  const want = HALT_WANT_ACTIVATE ? 'HALT' : 'REANUDAR';
+  const val = ($('halt-confirm-inp').value||'').trim().toUpperCase();
+  $('halt-confirm-btn').disabled = (val !== want);
+}
+async function submitHalt(){
+  const btn=$('halt-confirm-btn'), msg=$('halt-modal-msg');
+  const confirmar = HALT_WANT_ACTIVATE ? 'HALT' : 'REANUDAR';
+  const prev=btn.textContent; btn.disabled=true; btn.textContent='Enviando…';
+  try{
+    const path='/v1/broker/halt';
+    const body = HALT_WANT_ACTIVATE ? { confirmar } : { confirmar };
+    await brokerFetch(path, { method: HALT_WANT_ACTIVATE ? 'POST' : 'DELETE', body });
+    await fetchServerCaps();
+    closeHaltModal();
+  }catch(e){
+    msg.className='om-msg err show';
+    msg.textContent = e.message || 'No se pudo actualizar el freno de emergencia.';
+    btn.disabled=false; btn.textContent=prev;
+  }
 }
 
 /* Valor estimado de la orden en USD (para validar topes). */
@@ -2765,9 +2889,14 @@ function sendBrokerOrder(){
     res.textContent=`Supera el tope por orden (${fP(est.value)} > ${fP(caps.perOrder)}). Ajusta el monto o el tope.`;
     return;
   }
-  if(est.known && caps.daily>0 && (getDaySpend()+est.value)>caps.daily){
+  // M2: el gasto diario ya no se lee de localStorage — es SERVER_CAPS
+  // (GET /v1/broker/caps), la misma fuente que usa el backend para decidir.
+  // Si SERVER_CAPS aún no llegó, se usa el acumulador local como respaldo momentáneo.
+  const topeDiario = SERVER_CAPS?.cap_daily ?? caps.daily;
+  const gastadoHoy = SERVER_CAPS ? (SERVER_CAPS.gastado_hoy||0) : getDaySpend();
+  if(est.known && topeDiario>0 && (gastadoHoy+est.value)>topeDiario){
     res.className='om-msg err show';
-    res.textContent=`Supera el tope diario. Hoy: ${fP(getDaySpend())} de ${fP(caps.daily)}; esta orden suma ${fP(est.value)}.`;
+    res.textContent=`Supera el tope diario. Hoy: ${fP(gastadoHoy)} de ${fP(topeDiario)}; esta orden suma ${fP(est.value)}.`;
     return;
   }
 
@@ -2790,6 +2919,24 @@ function showConfirm(payload, est){
   }
   html += est.known ? `<span class="est">Valor estimado: ${fP(est.value)}</span>`
                     : `<span class="est">⚠ Valor no estimable (sin precio): no se pudo verificar contra el tope.</span>`;
+  // M2 · aviso de exposición por ticker: si esta compra + la posición ya
+  // existente se acerca al tope BROKER_CAP_POSITION (>80%), avisar ANTES del
+  // rechazo 400 del backend (mismo tope, autoridad del servidor).
+  if(payload.side==='buy' && est.known){
+    const topePos = SERVER_CAPS?.cap_position;
+    if(topePos>0){
+      const posActual = omFindPos(payload.symbol);
+      const valorActual = posActual?.market_value!=null ? Number(posActual.market_value) : 0;
+      const expuesto = valorActual + est.value;
+      if(expuesto > topePos*0.8){
+        const supera = expuesto > topePos;
+        html += `<span class="est" style="color:var(--orange)">⚠ Exposición en ${payload.symbol}: `
+          + `${fP(valorActual)} en posición + ${fP(est.value)} de esta orden = ${fP(expuesto)} `
+          + `${supera?'SUPERA':'se acerca al'} tope de ${fP(topePos)} por ticker`
+          + `${supera?' — el servidor la rechazará.':'.'}</span>`;
+      }
+    }
+  }
   // TOTP (opt-in, 10-jul): compras en cuenta REAL con BROKER_TOTP_SECRET seteado
   // en el backend exigen el código de Google Authenticator. Si no está
   // configurado, el campo se ignora del lado servidor (sin efecto).
@@ -2928,6 +3075,7 @@ async function refreshBroker(){
   const [equity, positions] = await Promise.all([fetchBrokerEquity(), fetchBrokerPositions()]);
   renderEquity(equity);
   POSITIONS = positions;
+  fetchServerCaps();   // M2: topes/gasto/halt — autoridad del servidor (no bloquea el resto del refresco)
   // Si el modal de orden está abierto, refrescar el bloque "Tu posición"
   // (evita que se abra vacío por una carrera con la carga del broker).
   if($('order-overlay')?.classList.contains('show') && typeof omRefreshPosLine==='function'){ omRefreshPosLine(); omRenderQuick(); }
