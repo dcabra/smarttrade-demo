@@ -941,6 +941,8 @@ table.jr-table{width:100%;border-collapse:collapse;font-size:12px}
 .om-confirm-txt{font-size:12px;line-height:1.5;color:var(--text)}
 .om-confirm-txt .warn{color:var(--red);font-weight:800;display:block;margin-bottom:5px}
 .om-confirm-txt .est{display:block;margin-top:4px;font-size:10px;color:var(--text3)}
+.om-personal-limit-check{display:flex;align-items:flex-start;gap:7px;margin-top:9px;padding:8px 9px;background:rgba(243,156,18,.08);border:1px solid rgba(243,156,18,.3);border-radius:6px;font-size:11px;line-height:1.4;color:var(--orange);cursor:pointer}
+.om-personal-limit-check input{margin-top:2px;accent-color:var(--orange);cursor:pointer;flex-shrink:0}
 
 /* ════════════════════════════════════════════════════════════
    HOME · Portafolio (v32) — dashboard de la cuenta en el panel central
@@ -1268,6 +1270,19 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
         </div>
         <div class="set-ctrl">
           <input type="number" id="set-costo-cr" min="0" max="1" step="0.01"> <span class="set-unit">% / lado</span>
+        </div>
+      </div>
+
+      <div class="set-sec-title" style="margin-top:16px">Riesgo personal</div>
+      <div class="set-sec-desc">Un límite tuyo, no del servidor. El tope diario real siempre lo decide el backend (se ve como "hoy: $X de $Y" en el modal de orden) — esto es un freno propio, para cuando quieras ser más estricto contigo mismo.</div>
+
+      <div class="set-row">
+        <div class="set-row-main">
+          <div class="set-lbl">Mi límite diario personal (USD)</div>
+          <div class="set-help">Si el gasto de hoy + la orden que vas a enviar lo supera, el modal te va a pedir marcar un check a propósito antes de dejarte confirmar — no bloquea el envío, solo te obliga a un paso consciente extra. Vacío o 0 = desactivado.</div>
+        </div>
+        <div class="set-ctrl">
+          <input type="number" id="set-limite-personal" min="0" step="any" placeholder="sin límite"> <span class="set-unit">USD</span>
         </div>
       </div>
 
@@ -1736,11 +1751,11 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
               <div class="om-lbl">Tope por orden (USD)</div>
               <input class="om-inp om-inp-sm" id="om-cap-order" type="number" step="any" min="0" onchange="saveCapsFromUI()" />
             </div>
-            <div>
-              <div class="om-lbl">Tope diario (USD)</div>
-              <input class="om-inp om-inp-sm" id="om-cap-daily" type="number" step="any" min="0" onchange="saveCapsFromUI()" />
-            </div>
           </div>
+          <!-- El tope diario ya NO se edita aquí: es autoridad 100% del servidor
+               (arriba, "hoy: $X de $Y"). Este hint es solo tu límite PERSONAL,
+               configurable en ⚙ Configuración — informativo, no técnico. -->
+          <div class="om-hint" id="om-personal-limit-hint" style="display:none;margin-top:6px"></div>
         </div>
       </div>
     </div>
@@ -1754,6 +1769,14 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
         <!-- Confirmación (aparece tras pasar las validaciones) -->
         <div class="om-confirm" id="om-confirm" style="display:none">
           <div class="om-confirm-txt" id="om-confirm-txt"></div>
+          <!-- Fricción de límite personal (M2.1): solo aparece si el usuario
+               configuró un límite en ⚙ Configuración y esta orden lo supera.
+               No es un tope técnico — el botón de confirmar queda deshabilitado
+               hasta que el usuario marque el check a propósito. -->
+          <label class="om-personal-limit-check" id="om-personal-limit-check" style="display:none">
+            <input type="checkbox" id="om-personal-limit-ack" onchange="renderConfirmSendState()">
+            <span id="om-personal-limit-check-txt">Sé que supero mi límite diario personal, continuar</span>
+          </label>
           <div class="om-row2" style="margin-top:9px">
             <button class="om-btn ghost" onclick="cancelConfirm()">Cancelar</button>
             <button class="om-btn send" id="om-confirm-send" onclick="confirmAndSubmit()">Confirmar envío</button>
@@ -2664,13 +2687,14 @@ function renderOrderAction(){
     const badge=$('om-paper-badge');
     badge.textContent = paper ? '🔓 cuenta paper'+(BROKER_INFO?.account_number?' · '+BROKER_INFO.account_number:'') : '⚠ CUENTA REAL · dinero real';
     badge.classList.toggle('real', !paper);
-    // Cargar topes + presupuesto del día, y resetear cualquier confirmación pendiente
+    // Cargar tope por orden (el único editable aquí) + presupuesto del día
+    // (100% servidor), y resetear cualquier confirmación pendiente.
     const caps=getCaps();
     $('om-cap-order').value = caps.perOrder || '';
-    $('om-cap-daily').value = caps.daily || '';
     CAPS_UNLOCKED=false;        // cada render vuelve a bloquear la edición en real
     setCapsLock(!paper);
     renderDayBudget();
+    renderPersonalLimitHint();
     cancelConfirm();
   } else {
     conn.style.display='none'; lock.style.display='flex';
@@ -2678,26 +2702,30 @@ function renderOrderAction(){
   }
 }
 
-/* ── Topes de seguridad (persisten en localStorage) ── */
-const CAPS_KEY='st_broker_caps', DAY_KEY='st_broker_day_spend';
-const CAPS_DEFAULT={ perOrder:1000, daily:5000 };   // USD · ajustables desde el modal
+/* ── Tope por orden (persiste en localStorage) ──
+   El tope diario YA NO se edita aquí desde M2: es autoridad 100% del
+   servidor (se muestra de solo lectura como "hoy: $X de $Y", ver
+   renderDayBudget). Este campo de tope por orden sigue siendo cortesía de
+   UI — la autoridad real es BROKER_CAP_PER_ORDER en el backend. */
+const CAPS_KEY='st_broker_caps';
+const CAPS_DEFAULT={ perOrder:1000 };   // USD · ajustable desde el modal
 let OM_PENDING=null;                                 // {payload, est, symbol}
 
 function getCaps(){
-  try{ const c=JSON.parse(localStorage.getItem(CAPS_KEY)||'null'); if(c) return c; }catch{}
+  try{ const c=JSON.parse(localStorage.getItem(CAPS_KEY)||'null'); if(c) return {...CAPS_DEFAULT, ...c}; }catch{}
   return {...CAPS_DEFAULT};
 }
 function saveCaps(c){ try{ localStorage.setItem(CAPS_KEY, JSON.stringify(c)); }catch{} }
 
-/* ── Fricción en cuenta REAL: los topes quedan bloqueados en el modal ──
-   Editarlos exige escribir TOPES en un prompt. En paper se editan libre.
-   Nota: la AUTORIDAD de los topes es el backend (BROKER_CAP_* en Railway);
-   estos del localStorage son la primera línea, de cortesía. */
+/* ── Fricción en cuenta REAL: el tope por orden queda bloqueado en el modal ──
+   Editarlo exige escribir TOPES en un prompt. En paper se edita libre.
+   Nota: la AUTORIDAD del tope es el backend (BROKER_CAP_PER_ORDER en
+   Railway); este de localStorage es la primera línea, de cortesía. */
 let CAPS_UNLOCKED=false;
 function setCapsLock(lockWanted){
-  const a=$('om-cap-order'), b=$('om-cap-daily'), btn=$('om-caps-lockbtn');
+  const a=$('om-cap-order'), btn=$('om-caps-lockbtn');
   const locked = lockWanted && !CAPS_UNLOCKED;
-  [a,b].forEach(i=>{ if(i){ i.readOnly=locked; i.style.opacity=locked?'.55':''; } });
+  if(a){ a.readOnly=locked; a.style.opacity=locked?'.55':''; }
   if(btn){
     btn.style.display = lockWanted ? 'inline-block' : 'none';
     btn.textContent = locked ? '🔒 editar topes' : '🔓 topes editables';
@@ -2705,43 +2733,53 @@ function setCapsLock(lockWanted){
   }
 }
 function unlockCaps(){
-  const t=prompt('⚠ CUENTA REAL: los topes son tu freno de seguridad.\nPara editarlos en esta sesión escribe: TOPES');
+  const t=prompt('⚠ CUENTA REAL: el tope por orden es tu freno de seguridad.\nPara editarlo en esta sesión escribe: TOPES');
   if((t||'').trim().toUpperCase()==='TOPES'){ CAPS_UNLOCKED=true; setCapsLock(true); }
 }
 function saveCapsFromUI(){
   if($('om-cap-order')?.readOnly) return;   // bloqueado en cuenta real: ignorar
-  const po=parseFloat($('om-cap-order').value), pd=parseFloat($('om-cap-daily').value);
-  saveCaps({ perOrder: po>0?po:0, daily: pd>0?pd:0 });
+  const po=parseFloat($('om-cap-order').value);
+  saveCaps({ perOrder: po>0?po:0 });
   renderDayBudget();
 }
-function todayKey(){ return new Date().toISOString().slice(0,10); }
-function getDaySpend(){
-  try{ const d=JSON.parse(localStorage.getItem(DAY_KEY)||'null'); if(d && d.date===todayKey()) return d.total||0; }catch{}
-  return 0;
+
+/* ── Límite diario PERSONAL (M2.1, configurable en ⚙ Configuración) ──
+   Puramente informativo/de fricción: NUNCA bloquea el envío por sí solo.
+   La autoridad real del gasto diario sigue siendo el servidor
+   (SERVER_CAPS.cap_daily). Este límite solo agrega un paso consciente
+   extra (checkbox) en la confirmación cuando el usuario decide superarlo. */
+function getPersonalDailyLimit(){
+  try{ const v=parseFloat(localStorage.getItem('st_personal_daily_limit')); return (v>0) ? v : 0; }catch{ return 0; }
 }
-function addDaySpend(v){
-  if(!(v>0)) return;
-  try{ localStorage.setItem(DAY_KEY, JSON.stringify({ date:todayKey(), total:getDaySpend()+v })); }catch{}
+function renderPersonalLimitHint(){
+  const el=$('om-personal-limit-hint');
+  if(!el) return;
+  const lim = getPersonalDailyLimit();
+  if(lim>0){
+    el.style.display='block';
+    el.textContent = `Tu límite personal: ${fP(lim)}/día (ajustable en ⚙ Configuración).`;
+  } else {
+    el.style.display='none';
+    el.textContent='';
+  }
 }
 function renderDayBudget(){
   const el=$('om-caps-day');
   if(!el) return;
-  // M2: la autoridad del gasto diario es el servidor (GET /v1/broker/caps).
-  // Si todavía no llegó la respuesta del servidor, se muestra el tope local
-  // (localStorage) solo como placeholder momentáneo hasta que refresque.
+  // M2: el tope diario y el gasto de hoy son 100% autoridad del servidor
+  // (GET /v1/broker/caps) — ya no hay un tope diario editable en localStorage.
+  // Mientras SERVER_CAPS no haya llegado (justo después de conectar), se
+  // muestra un placeholder neutro en vez de un número que podría ser viejo.
   if(SERVER_CAPS){
     const tope = SERVER_CAPS.cap_daily, spent = SERVER_CAPS.gastado_hoy||0;
     if(tope>0){
       el.textContent = `hoy: ${fP(spent)} de ${fP(tope)}`;
       el.classList.toggle('warn', spent >= tope*0.8);
     } else { el.textContent='diario: sin tope'; el.classList.remove('warn'); }
-    return;
+  } else {
+    el.textContent='cargando…';
+    el.classList.remove('warn');
   }
-  const caps=getCaps(), spent=getDaySpend();
-  if(caps.daily>0){
-    el.textContent = `hoy: ${fP(spent)} de ${fP(caps.daily)}`;
-    el.classList.toggle('warn', spent >= caps.daily*0.8);
-  } else { el.textContent='diario: sin tope'; el.classList.remove('warn'); }
 }
 
 /* ── M2 · Topes/halt server-side (GET /v1/broker/caps) ──
@@ -2889,23 +2927,37 @@ function sendBrokerOrder(){
     res.textContent=`Supera el tope por orden (${fP(est.value)} > ${fP(caps.perOrder)}). Ajusta el monto o el tope.`;
     return;
   }
-  // M2: el gasto diario ya no se lee de localStorage — es SERVER_CAPS
-  // (GET /v1/broker/caps), la misma fuente que usa el backend para decidir.
-  // Si SERVER_CAPS aún no llegó, se usa el acumulador local como respaldo momentáneo.
-  const topeDiario = SERVER_CAPS?.cap_daily ?? caps.daily;
-  const gastadoHoy = SERVER_CAPS ? (SERVER_CAPS.gastado_hoy||0) : getDaySpend();
+  // M2: el gasto diario y su tope son 100% SERVER_CAPS (GET /v1/broker/caps),
+  // la misma fuente que usa el backend para decidir. Ya no hay fallback local
+  // (localStorage) — si SERVER_CAPS aún no llegó, este chequeo se salta acá
+  // (el backend lo sigue aplicando igual del lado servidor).
+  const topeDiario = SERVER_CAPS?.cap_daily;
+  const gastadoHoy = SERVER_CAPS?.gastado_hoy || 0;
   if(est.known && topeDiario>0 && (gastadoHoy+est.value)>topeDiario){
     res.className='om-msg err show';
     res.textContent=`Supera el tope diario. Hoy: ${fP(gastadoHoy)} de ${fP(topeDiario)}; esta orden suma ${fP(est.value)}.`;
     return;
   }
 
+  // M2.1: límite diario PERSONAL (configurable en ⚙ Configuración). A
+  // diferencia del tope diario del servidor, este NUNCA bloquea el envío
+  // aquí — solo marca que la confirmación va a pedir un check consciente
+  // extra (fricción, no bloqueo silencioso ni tope técnico).
+  let personalLimitExceeded = false;
+  if(est.known){
+    const limitePersonal = getPersonalDailyLimit();
+    if(limitePersonal>0){
+      const gastado = SERVER_CAPS?.gastado_hoy || 0;
+      personalLimitExceeded = (gastado + est.value) > limitePersonal;
+    }
+  }
+
   // Mostrar confirmación
-  OM_PENDING={ payload, est, symbol };
-  showConfirm(payload, est);
+  OM_PENDING={ payload, est, symbol, personalLimitExceeded };
+  showConfirm(payload, est, personalLimitExceeded);
 }
 
-function showConfirm(payload, est){
+function showConfirm(payload, est, personalLimitExceeded){
   const box=$('om-confirm'), txt=$('om-confirm-txt');
   const real = BROKER_INFO?.paper === false;
   const sideTxt = payload.side==='sell' ? 'VENDER' : 'COMPRAR';
@@ -2948,10 +3000,34 @@ function showConfirm(payload, est){
   box.style.display='block';
   $('om-send-btn').style.display='none';
   $('om-send-hint').style.display='none';
+
+  // M2.1: fricción de límite diario PERSONAL — no es un tope técnico, así
+  // que nunca deshabilita el envío por sí mismo salvo que el usuario NO haya
+  // marcado el check a propósito. Si no aplica, el check ni se muestra.
+  const checkRow=$('om-personal-limit-check'), checkTxt=$('om-personal-limit-check-txt'), checkbox=$('om-personal-limit-ack');
+  if(checkRow){
+    checkRow.style.display = personalLimitExceeded ? 'flex' : 'none';
+    if(checkbox) checkbox.checked = false;
+    if(personalLimitExceeded && checkTxt){
+      const lim = getPersonalDailyLimit(), gastado = SERVER_CAPS?.gastado_hoy||0;
+      checkTxt.textContent = `Superas tu límite personal de ${fP(lim)}/día (llevas ${fP(gastado)} + esta orden). Marca aquí para continuar de todos modos.`;
+    }
+  }
+  renderConfirmSendState();
+}
+/* Habilita/deshabilita "Confirmar envío" según la fricción del límite
+   personal: si aplica y no está marcado el check, el botón queda deshabilitado. */
+function renderConfirmSendState(){
+  const btn=$('om-confirm-send');
+  if(!btn) return;
+  const exigeCheck = !!OM_PENDING?.personalLimitExceeded;
+  const marcado = $('om-personal-limit-ack')?.checked;
+  btn.disabled = exigeCheck && !marcado;
 }
 function cancelConfirm(){
   OM_PENDING=null;
   $('om-confirm').style.display='none';
+  const checkRow=$('om-personal-limit-check'); if(checkRow) checkRow.style.display='none';
   $('om-send-btn').style.display='block';
   $('om-send-hint').style.display='block';
 }
@@ -2968,7 +3044,6 @@ async function confirmAndSubmit(){
   btn.disabled=true; btn.textContent='Enviando…';
   try{
     const o = await brokerFetch('/v1/broker/orders', { method:'POST', body:payload });
-    if(est.known) addDaySpend(est.value);          // contabiliza contra el tope diario
     const qtyTxt = o?.qty!=null ? o.qty+' u.' : (o?.notional!=null ? fP(o.notional) : '');
     res.className='om-msg ok show';
     res.innerHTML = `Orden enviada · <b>${(o?.side||payload.side).toUpperCase()}</b> ${o?.symbol||symbol} ${qtyTxt}`
@@ -4573,6 +4648,7 @@ function openSettings(){
   const vt=$('set-ventana'); if(vt) vt.value = getPerfVentanaPref(TMODE_TF[TRADING_MODE]||'15m');
   const ce=$('set-costo-eq'); if(ce) ce.value = getCostoEqPref();
   const cc=$('set-costo-cr'); if(cc) cc.value = getCostoCrPref();
+  const lp=$('set-limite-personal'); if(lp) lp.value = getPersonalDailyLimit() || '';
   const msg=$('set-msg'); if(msg) msg.textContent='';
   $('settings-overlay')?.classList.add('show');
 }
@@ -4581,11 +4657,14 @@ function saveSettings(){
   const vt=Math.max(1,Math.min(60,parseInt($('set-ventana')?.value||'8',10)||8));
   const ce=Math.max(0,Math.min(1,parseFloat($('set-costo-eq')?.value||'0.02')||0));
   const cc=Math.max(0,Math.min(1,parseFloat($('set-costo-cr')?.value||'0.25')||0));
+  const lp=Math.max(0, parseFloat($('set-limite-personal')?.value||'0')||0);
   try{
     localStorage.setItem('st_perf_ventana', String(vt));
     localStorage.setItem('st_perf_costo_eq', String(ce));
     localStorage.setItem('st_perf_costo_cr', String(cc));
     localStorage.removeItem('st_perf_costo');   // limpiar clave vieja unificada
+    if(lp>0) localStorage.setItem('st_personal_daily_limit', String(lp));
+    else localStorage.removeItem('st_personal_daily_limit');
   }catch(e){}
   const msg=$('set-msg'); if(msg) msg.textContent='✓ Guardado. Aplica a todos los tickers.';
   // Refrescar el termómetro del ticker activo SI está mostrando un timeframe
