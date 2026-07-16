@@ -115,6 +115,7 @@ table.bt tr:last-child td{border-bottom:none;font-weight:700;background:rgba(255
 .side{color:var(--text2);font-weight:600}
 .side.buy{color:var(--green)} .side.sell{color:var(--red)}
 .pos{color:var(--green)} .neg{color:var(--red)} .na{color:var(--text3)}
+.obj{font-weight:400;color:var(--text3);font-size:9px;text-transform:none;letter-spacing:0}
 .chart-wrap{padding:10px;height:170px}
 .chart-wrap canvas{display:block}
 .empty{color:var(--text3);font-size:12px;text-align:center;padding:40px 0}
@@ -160,9 +161,9 @@ table.bt tr:last-child td{border-bottom:none;font-weight:700;background:rgba(255
     <span class="h-title">🧪 Control de backtest</span>
     <div class="seg">
       <button class="seg-btn on" id="seg-signal" onclick="setMode('signal')">Señal</button>
-      <button class="seg-btn" id="seg-forecast" disabled onclick="setMode('forecast')">Forecast</button>
+      <button class="seg-btn" id="seg-forecast" onclick="setMode('forecast')">Forecast</button>
     </div>
-    <span class="note" id="forecast-note">Forecast: próximamente — endpoint aún no construido.</span>
+    <span class="note" id="forecast-note">Señal: expectativa forward por horizonte (BUY / SELL / Total).</span>
   </div>
 
   <div class="form">
@@ -197,18 +198,18 @@ table.bt tr:last-child td{border-bottom:none;font-weight:700;background:rgba(255
         <label class="check"><input type="checkbox" id="f-h7"> 7D</label>
       </div>
     </div>
-    <div class="field">
-      <label for="f-scorer">Scorer</label>
+    <div class="field" id="field-scorer">
+      <label for="f-scorer" id="lbl-scorer">Scorer</label>
       <select id="f-scorer">
         <option value="v2">v2 · producción</option>
         <option value="v3">v3 · laboratorio</option>
       </select>
     </div>
-    <div class="field">
+    <div class="field" id="field-conf">
       <label for="f-conf">Confianza mínima (0–1)</label>
       <input type="number" id="f-conf" min="0" max="1" step="0.05" value="0">
     </div>
-    <div class="field">
+    <div class="field" id="field-lado">
       <label for="f-lado">Lado</label>
       <select id="f-lado">
         <option value="ambos">Ambos</option>
@@ -433,10 +434,31 @@ function parseManual(){
 }
 
 function setMode(m){
-  if(m === 'forecast') return;
   MODE = m;
   $('seg-signal').classList.toggle('on', m === 'signal');
   $('seg-forecast').classList.toggle('on', m === 'forecast');
+  const fc = (m === 'forecast');
+
+  // Lado y Confianza mínima no aplican a un pronóstico → ocultarlos en Forecast.
+  $('field-conf').style.display = fc ? 'none' : '';
+  $('field-lado').style.display = fc ? 'none' : '';
+
+  // El selector "Scorer" pasa a significar "Motor de forecast" (v2/v3) en este modo.
+  $('lbl-scorer').textContent = fc ? 'Motor de forecast' : 'Scorer';
+  const opts = $('f-scorer').options;
+  if(opts.length >= 2){
+    opts[0].textContent = fc ? 'v2 · paramétrico' : 'v2 · producción';
+    opts[1].textContent = fc ? 'v3 · no disponible aún' : 'v3 · laboratorio';
+  }
+
+  // Nota contextual del encabezado.
+  $('forecast-note').textContent = fc
+    ? 'Forecast: calibración del pronóstico p10/p50/p90 (cobertura vs objetivo 80%, sesgo del p50). No es win-rate.'
+    : 'Señal: expectativa forward por horizonte (BUY / SELL / Total).';
+
+  // Al cambiar de modo, limpia resultados (no mezclar tablas de distinto tipo).
+  const res = $('results');
+  if(res) res.innerHTML = '<div class="empty">Configura los filtros y corre un backtest para ver resultados.</div>';
 }
 
 function buildBody(){
@@ -449,10 +471,18 @@ function buildBody(){
     const l = presetTickers(TK_PRESET); tickers = l.length ? l : null;
   }
   const horizontes = ['1', '3', '7'].filter(h => $('f-h' + h).checked).map(Number);
+  const solo_tramo_limpio = !!$('f-limpio').checked;
+
+  if(MODE === 'forecast'){
+    // El selector "Scorer" es el motor de forecast en este modo. Lado/Confianza
+    // no aplican a un pronóstico.
+    const motor = $('f-scorer').value || 'v2';
+    return { desde, hasta, tickers, horizontes, motor, solo_tramo_limpio, incluir_pit: true };
+  }
+
   const scorer = $('f-scorer').value || 'v2';
   const confianza_min = parseFloat($('f-conf').value || '0') || 0;
   const lado = $('f-lado').value || 'ambos';
-  const solo_tramo_limpio = !!$('f-limpio').checked;
   return { desde, hasta, tickers, horizontes, scorer, confianza_min, lado, solo_tramo_limpio };
 }
 
@@ -472,7 +502,8 @@ async function run(){
 
   try{
     const token = getToken();
-    const r = await fetch(API + '/v1/backtest/recompute', {
+    const endpoint = (MODE === 'forecast') ? '/v1/backtest/forecast' : '/v1/backtest/recompute';
+    const r = await fetch(API + endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -484,10 +515,17 @@ async function run(){
     if(!r.ok){
       let detail = 'HTTP ' + r.status;
       try{ const j = await r.json(); if(j && j.detail) detail = j.detail; }catch(e){}
-      res.innerHTML = '<div class="error">No se pudo correr el backtest: ' + esc(detail) + '</div>';
+      // En Forecast, un 422 (p. ej. motor v3 aún no backtesteable) es informativo,
+      // no un fallo del sistema → banda amarilla en vez de error rojo.
+      if(MODE === 'forecast' && r.status === 422){
+        res.innerHTML = '<div class="adv"><strong>⚠ No se pudo correr</strong><ul><li>' + esc(detail) + '</li></ul></div>';
+      }else{
+        res.innerHTML = '<div class="error">No se pudo correr el backtest: ' + esc(detail) + '</div>';
+      }
       return;
     }
-    render(await r.json());
+    const data = await r.json();
+    if(MODE === 'forecast') renderForecast(data); else render(data);
   }catch(e){
     res.innerHTML = '<div class="error">Error de red. Revisa la conexión e inténtalo de nuevo.</div>';
   }finally{
@@ -579,6 +617,137 @@ function render(data){
 
   res.innerHTML = html || '<div class="empty">Sin datos para estos filtros.</div>';
   eqKeys.forEach(h => { if(Array.isArray(eq[h]) && eq[h].length) drawEquity('eq-' + h, eq[h]); });
+}
+
+/* ── Render · Forecast (calibración) ──────────────────────────────────── */
+function fmtPct(v){
+  return (v == null || isNaN(v)) ? '<span class="na">—</span>' : Number(v).toFixed(2) + '%';
+}
+function fmtSigned(v){
+  if(v == null || isNaN(v)) return '<span class="na">—</span>';
+  const s = Number(v);
+  return (s >= 0 ? '+' : '') + s.toFixed(2) + '%';
+}
+
+function renderForecast(data){
+  const res = $('results');
+  if(!data){ res.innerHTML = '<div class="error">Respuesta vacía del backend.</div>'; return; }
+  const p = data.params || {};
+  let html = '';
+
+  const advs = Array.isArray(data.advertencias) ? data.advertencias : [];
+  if(advs.length){
+    html += '<div class="adv"><strong>⚠ Advertencias</strong><ul>'
+      + advs.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul></div>';
+  }
+
+  const dias = data.dias, nTot = data.n_total;
+  if(dias != null && dias < 40){
+    html += '<div class="honest">Tramo corto (' + dias + ' días): '
+      + '<strong>la cobertura también es ruidosa</strong>. A n bajo, ±10–15 puntos de '
+      + 'cobertura son esperables por puro azar — trátalo como exploratorio, no como veredicto.</div>';
+  }
+
+  html += '<div class="meta">'
+    + '<span>Snapshots: <b>' + (nTot != null ? nTot : '—') + '</b></span>'
+    + '<span>Días: <b>' + (dias != null ? dias : '—') + '</b></span>'
+    + '<span>Tickers: <b>' + (data.tickers != null ? data.tickers : '—') + '</b></span>'
+    + '<span>Motor: <b>' + (p.motor || '—') + '</b></span>'
+    + (p.solo_tramo_limpio ? '<span>Solo tramo limpio</span>' : '')
+    + '</div>';
+
+  const ph = data.por_horizonte || {};
+  const horizons = Object.keys(ph).sort((a, b) => Number(a) - Number(b));
+  // ¿algún horizonte trae cobertura_50? (v2 no expone p25/p75 → columna oculta).
+  const has50 = horizons.some(h => ph[h] && ph[h].cobertura_50 != null);
+
+  if(!horizons.length){
+    html += '<div class="adv">Sin resultados por horizonte para estos filtros.</div>';
+  }else{
+    html += '<div class="hblock"><div class="hhdr">Calibración por horizonte</div>'
+      + '<table class="bt"><thead><tr>'
+      + '<th>Horizonte</th><th>n</th>'
+      + '<th>Cobertura 80% <span class="obj">(obj. 80)</span></th>'
+      + (has50 ? '<th>Cobertura 50% <span class="obj">(obj. 50)</span></th>' : '')
+      + '<th>Sesgo p50</th><th>MAE p50</th><th>Ancho medio</th>'
+      + '</tr></thead><tbody>';
+    horizons.forEach(h => {
+      const b = ph[h] || {};
+      html += '<tr>'
+        + '<td class="side">' + esc(h) + 'D</td>'
+        + '<td>' + (b.n != null ? b.n : '<span class="na">—</span>') + '</td>'
+        + '<td>' + fmtPct(b.cobertura_80) + '</td>'
+        + (has50 ? '<td>' + fmtPct(b.cobertura_50) + '</td>' : '')
+        + '<td>' + fmtSigned(b.sesgo_p50) + '</td>'
+        + '<td>' + fmtPct(b.mae_p50) + '</td>'
+        + '<td>' + fmtPct(b.ancho_medio_pct) + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // Nota honesta: cómo se lee la calibración (NO es win-rate).
+  if(horizons.length){
+    html += '<div class="sell-note"><b>Cómo leer esto.</b> Un forecast es probabilístico: '
+      + 'se evalúa por <b>calibración</b>, no por “acertó la dirección” (el win-rate <b>no aplica</b>). '
+      + '<b>Cobertura 80%</b> = % de precios reales que cayeron dentro de la banda [p10, p90]; el objetivo es ≈80%. '
+      + '<b>Sesgo p50</b> cerca de 0 = pronóstico central insesgado (positivo = el p50 quedó corto, el mercado subió más). '
+      + '<b>MAE p50</b> = error absoluto medio del centro. <b>Ancho medio</b> = nitidez de la banda (más angosta con buena cobertura = mejor). '
+      + 'Con muestra chica la cobertura es ruidosa — <b>no ajustes el motor por esto.</b></div>';
+  }
+
+  // EXTRA: histograma PIT por horizonte (opcional; el backend ya devuelve `pit`).
+  const pit = data.pit || {};
+  const pitKeys = horizons.filter(h => Array.isArray(pit[h]) && pit[h].reduce((s, x) => s + x, 0) > 0);
+  pitKeys.forEach(h => {
+    html += '<div class="hblock"><div class="hhdr">Histograma PIT · ' + esc(h) + 'D '
+      + '<span class="obj">(esperado 10 / 40 / 40 / 10 %)</span></div>'
+      + '<div class="chart-wrap"><canvas id="pit-' + esc(h) + '"></canvas></div></div>';
+  });
+
+  res.innerHTML = html || '<div class="empty">Sin datos para estos filtros.</div>';
+  pitKeys.forEach(h => drawPIT('pit-' + h, pit[h]));
+}
+
+/* Histograma PIT: 4 barras (zonas [<p10, p10–p50, p50–p90, >p90]) contra la
+   referencia esperada 10/40/40/10 %. Canvas nativo, sin librerías. */
+function drawPIT(canvasId, zonas){
+  const canvas = $(canvasId);
+  if(!canvas) return;
+  const wrap = canvas.parentElement;
+  const total = zonas.reduce((s, x) => s + x, 0);
+  if(!total){
+    const c0 = canvas.getContext('2d'); if(c0) c0.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+  const dpr = window.devicePixelRatio || 1;
+  const W = (wrap ? wrap.clientWidth : 320) - 20, H = 170 - 20;
+  if(W < 10 || H < 10) return;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
+
+  const props = zonas.map(x => x / total);
+  const expected = [0.10, 0.40, 0.40, 0.10];
+  const labels = ['<p10', 'p10–p50', 'p50–p90', '>p90'];
+  const PL = 8, PR = 8, PT = 10, PB = 20, cW = W - PL - PR, cH = H - PT - PB;
+  const maxP = Math.max(0.5, ...props, ...expected);
+  const n = 4, gap = 12, bw = (cW - gap * (n - 1)) / n;
+  const yAt = v => PT + cH - (v / maxP) * cH;
+
+  for(let i = 0; i < n; i++){
+    const bx = PL + i * (bw + gap);
+    const bh = (props[i] / maxP) * cH;
+    ctx.fillStyle = 'rgba(245,197,24,.55)';
+    ctx.fillRect(bx, PT + cH - bh, bw, bh);
+    // Referencia esperada (línea punteada).
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(bx, yAt(expected[i])); ctx.lineTo(bx + bw, yAt(expected[i])); ctx.stroke();
+    ctx.setLineDash([]);
+    // Etiqueta de zona.
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = '9px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(labels[i], bx + bw / 2, PT + cH + 14);
+  }
 }
 
 /* Agrupa por fecha (último valor del día = equity de cierre) y dibuja en canvas. */
