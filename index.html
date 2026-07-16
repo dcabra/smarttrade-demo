@@ -1354,6 +1354,9 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       <button class="usermenu-item" role="menuitem" onclick="openChangePassword()">
         <span class="umi-ico">🔑</span> Cambiar contraseña
       </button>
+      <button class="usermenu-item" role="menuitem" onclick="openBacktest()">
+        <span class="umi-ico">🧪</span> Control de backtest
+      </button>
       <div class="usermenu-div"></div>
       <button class="usermenu-item danger" role="menuitem" onclick="userMenuLogout()">
         <span class="umi-ico">↩</span> Cerrar sesión
@@ -2263,6 +2266,21 @@ function toggleUserMenu(e){
   $('usermenu')?.classList.toggle('show');
 }
 function closeUserMenu(){ $('usermenu')?.classList.remove('show'); }
+/* Abre el Control de backtest (página aparte) pasándole logo + universo del
+   founder por localStorage. El token de sesión NO se pasa por aquí: el
+   sessionStorage se copia a la pestaña nueva; si no, la página re-pide login. */
+function openBacktest(){
+  closeUserMenu();
+  try{
+    const logo = (document.querySelector('.topbar .logo-img') || document.querySelector('.logo-img'))?.src || '';
+    const portafolio = (typeof TICKERS   !== 'undefined' ? TICKERS   : []).filter(Boolean);
+    const watchlist  = (typeof WATCHLIST !== 'undefined' ? WATCHLIST : []).filter(Boolean);
+    let token = null;
+    try{ token = sessionStorage.getItem('st_broker_token') || null; }catch(e){}
+    localStorage.setItem('st_bt_handoff', JSON.stringify({ ts: Date.now(), logo, portafolio, watchlist, token }));
+  }catch(e){}
+  window.open('backtest.html', '_blank', 'noopener');
+}
 /* Cerrar al hacer click fuera */
 document.addEventListener('click', (e)=>{
   const w=$('usermenu-wrap');

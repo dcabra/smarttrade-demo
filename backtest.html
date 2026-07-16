@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>SmartTrade · Control de backtest</title>
+<style>
+:root{
+  --gold:#f5c518; --blue:#4d9ef7; --violet:#a855f7;
+  --green:#2ecc71; --red:#e74c3c; --orange:#f39c12;
+  --bg:#0c1220; --bg-left:#07080e; --bg2:#0a0b12; --bg3:#111a2e;
+  --border:rgba(255,255,255,0.06); --border2:rgba(255,255,255,0.10);
+  --text:#c8cde0; --text2:#7a90b0; --text3:#3d5070;
+  --mono:'SF Mono',ui-monospace,'Cascadia Code','Roboto Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px}
+body{display:flex;flex-direction:column;min-height:100%}
+a{color:var(--blue)}
+.spin{width:11px;height:11px;border:1.6px solid rgba(245,197,24,.3);border-top-color:var(--gold);
+  border-radius:50%;display:inline-block;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Topbar (logo a la derecha) ──────────────────────────────────────── */
+.topbar{display:flex;align-items:center;gap:12px;height:52px;padding:0 20px;
+  background:var(--bg-left);border-bottom:1px solid var(--border);flex-shrink:0}
+.brand{display:flex;align-items:baseline;gap:8px;font-weight:700;letter-spacing:.02em}
+.brand .flask{font-size:16px}
+.brand .name{font-size:15px}
+.brand .sub{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+.tb-spacer{flex:1}
+.badge{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 9px;border-radius:4px;border:1px solid var(--border2)}
+.badge.founder{color:var(--gold);background:rgba(245,197,24,.08);border-color:rgba(245,197,24,.22)}
+.tb-btn{background:rgba(255,255,255,.05);border:1px solid var(--border2);color:var(--text2);
+  border-radius:6px;padding:5px 11px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+.tb-btn:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.brand-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.logo-img{height:26px;width:auto;display:block;border-radius:4px}
+.logo-word{font-size:14px;font-weight:800;letter-spacing:.01em;color:var(--text)}
+.logo-word .st-mark{color:var(--gold)}
+
+/* ── Layout ──────────────────────────────────────────────────────────── */
+.page{flex:1;overflow:auto;padding:20px;max-width:1080px;width:100%;margin:0 auto}
+.head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.h-title{font-size:14px;font-weight:700;letter-spacing:.03em}
+.seg{display:inline-flex;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:2px}
+.seg-btn{font-size:12px;font-weight:600;padding:5px 14px;border-radius:6px;color:var(--text3);
+  cursor:pointer;border:none;background:none;font-family:inherit}
+.seg-btn.on{background:var(--blue);color:#fff}
+.seg-btn:disabled{cursor:not-allowed;opacity:.5}
+.note{font-size:11px;color:var(--text3);font-style:italic}
+
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px 16px;
+  align-items:end;background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:16px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field.wide{grid-column:1 / -1}
+.field label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)}
+.field input,.field select{background:var(--bg);border:1px solid var(--border2);color:var(--text);
+  border-radius:7px;padding:8px 10px;font-size:12px;font-family:inherit;width:100%}
+.field input:focus,.field select:focus{outline:none;border-color:var(--blue)}
+.field .hint{font-size:10px;color:var(--text3)}
+.checks{display:flex;flex-wrap:wrap;gap:12px}
+.check{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;user-select:none}
+.check input{width:auto}
+
+/* Presets de tickers */
+.preset-row{display:flex;flex-wrap:wrap;gap:8px}
+.preset{font-size:11px;font-weight:600;padding:6px 12px;border-radius:7px;cursor:pointer;font-family:inherit;
+  background:var(--bg);border:1px solid var(--border2);color:var(--text2)}
+.preset:hover:not(:disabled){border-color:var(--blue);color:var(--text)}
+.preset.on{background:rgba(77,158,247,.12);border-color:var(--blue);color:var(--blue)}
+.preset:disabled{opacity:.4;cursor:not-allowed}
+.preset .c{opacity:.7;font-weight:700;margin-left:3px}
+.tk-chips{display:flex;flex-wrap:wrap;gap:5px;min-height:18px}
+.chip{font-size:10.5px;font-family:var(--mono);color:var(--text2);background:var(--bg3);
+  border:1px solid var(--border);border-radius:5px;padding:2px 7px}
+.chip.all{color:var(--gold);border-color:rgba(245,197,24,.3);background:rgba(245,197,24,.06)}
+.chip.more{color:var(--text3)}
+.tk-manual{display:flex;flex-direction:column;gap:5px}
+
+.run{background:var(--gold);color:#111;border:none;border-radius:8px;padding:10px 18px;font-size:12px;
+  font-weight:700;letter-spacing:.03em;cursor:pointer;font-family:inherit;display:inline-flex;
+  align-items:center;justify-content:center;gap:7px;min-height:38px}
+.run:hover{filter:brightness(1.08)}
+.run:disabled{opacity:.7;cursor:default}
+
+/* ── Resultados ──────────────────────────────────────────────────────── */
+.results{margin-top:18px;display:flex;flex-direction:column;gap:14px}
+.loading{color:var(--text3);font-size:12px;padding:10px 0;display:flex;align-items:center;gap:8px}
+.error{background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);color:var(--red);
+  border-radius:9px;padding:12px 14px;font-size:12px}
+.adv{background:rgba(245,197,24,.09);border:1px solid rgba(245,197,24,.32);color:#e8c451;
+  border-radius:9px;padding:12px 14px;font-size:12px}
+.adv ul{margin:7px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.honest{background:rgba(231,76,60,.07);border-left:3px solid var(--red);color:var(--text2);
+  border-radius:5px;padding:10px 14px;font-size:12px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:12px;color:var(--text2);
+  padding:2px 0 4px;font-family:var(--mono)}
+.meta b{color:var(--text)}
+.hblock{border:1px solid var(--border);border-radius:11px;overflow:hidden;background:var(--bg2)}
+.hhdr{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text2);
+  padding:9px 14px;background:var(--bg-left);border-bottom:1px solid var(--border)}
+table.bt{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--mono)}
+table.bt th{text-align:right;font-weight:600;color:var(--text3);font-size:10px;text-transform:uppercase;
+  letter-spacing:.05em;padding:8px 14px;border-bottom:1px solid var(--border)}
+table.bt th:first-child,table.bt td:first-child{text-align:left}
+table.bt td{text-align:right;padding:9px 14px;border-bottom:1px solid var(--border);color:var(--text)}
+table.bt tr:last-child td{border-bottom:none;font-weight:700;background:rgba(255,255,255,.015)}
+.side{color:var(--text2);font-weight:600}
+.side.buy{color:var(--green)} .side.sell{color:var(--red)}
+.pos{color:var(--green)} .neg{color:var(--red)} .na{color:var(--text3)}
+.chart-wrap{padding:10px;height:170px}
+.chart-wrap canvas{display:block}
+.empty{color:var(--text3);font-size:12px;text-align:center;padding:40px 0}
+
+/* ── Gate de login ───────────────────────────────────────────────────── */
+.gate{position:fixed;inset:0;background:var(--bg-left);display:flex;align-items:center;
+  justify-content:center;z-index:1000;padding:20px}
+.gate.hide{display:none}
+.gate-card{width:100%;max-width:340px;text-align:center}
+.gate-logo{height:34px;margin-bottom:14px}
+.gate-brand{display:flex;align-items:baseline;justify-content:center;gap:8px;margin-bottom:6px;font-weight:700}
+.gate-brand .flask{font-size:20px}
+.gate-brand .name{font-size:17px}
+.gate-sub{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:22px}
+.gate input{width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--text);
+  border-radius:8px;padding:11px 13px;font-size:13px;font-family:inherit;margin-bottom:10px}
+.gate input:focus{outline:none;border-color:var(--gold)}
+.gate-btn{width:100%;background:var(--gold);color:#111;border:none;border-radius:8px;padding:11px;
+  font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+.gate-btn:disabled{opacity:.7;cursor:default}
+.gate-err{color:var(--red);font-size:12px;margin-top:10px;min-height:16px}
+.gate-note{color:var(--text3);font-size:11px;margin-top:16px}
+</style>
+</head>
+<body>
+
+<!-- ══ Consola ══ -->
+<div class="topbar">
+  <div class="brand">
+    <span class="flask">🧪</span>
+    <span class="sub">Control de backtest</span>
+  </div>
+  <span class="badge founder">Founder</span>
+  <div class="tb-spacer"></div>
+  <button class="tb-btn" id="logout-btn" onclick="logout()" style="display:none">Salir</button>
+  <div class="brand-right" id="brand-right">
+    <span class="logo-word"><span class="st-mark">Smart</span>Trade</span>
+  </div>
+</div>
+
+<div class="page" id="page" style="display:none">
+  <div class="head">
+    <span class="h-title">🧪 Control de backtest</span>
+    <div class="seg">
+      <button class="seg-btn on" id="seg-signal" onclick="setMode('signal')">Señal</button>
+      <button class="seg-btn" id="seg-forecast" disabled onclick="setMode('forecast')">Forecast</button>
+    </div>
+    <span class="note" id="forecast-note">Forecast: próximamente — endpoint aún no construido.</span>
+  </div>
+
+  <div class="form">
+    <div class="field">
+      <label for="f-desde">Desde</label>
+      <input type="date" id="f-desde">
+    </div>
+    <div class="field">
+      <label for="f-hasta">Hasta</label>
+      <input type="date" id="f-hasta">
+    </div>
+    <div class="field wide">
+      <label>Tickers</label>
+      <div class="preset-row" id="preset-row">
+        <button class="preset on" data-preset="universo" onclick="setPreset('universo')">Todo el universo</button>
+        <button class="preset" data-preset="portafolio" onclick="setPreset('portafolio')">Portafolio<span class="c" id="c-port">(0)</span></button>
+        <button class="preset" data-preset="watchlist" onclick="setPreset('watchlist')">Watchlist<span class="c" id="c-watch">(0)</span></button>
+        <button class="preset" data-preset="ambos" onclick="setPreset('ambos')">Ambos<span class="c" id="c-both">(0)</span></button>
+        <button class="preset" data-preset="manual" onclick="setPreset('manual')">Escribir a mano</button>
+      </div>
+      <div class="tk-chips" id="tk-chips"></div>
+      <div class="tk-manual" id="tk-manual" style="display:none">
+        <input type="text" id="f-tickers" placeholder="AAPL, MSFT, NVDA…" autocomplete="off" spellcheck="false">
+        <span class="hint" id="tk-hint"></span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Horizonte(s)</label>
+      <div class="checks">
+        <label class="check"><input type="checkbox" id="f-h1"> 1D</label>
+        <label class="check"><input type="checkbox" id="f-h3" checked> 3D</label>
+        <label class="check"><input type="checkbox" id="f-h7"> 7D</label>
+      </div>
+    </div>
+    <div class="field">
+      <label for="f-scorer">Scorer</label>
+      <select id="f-scorer">
+        <option value="v2">v2 · producción</option>
+        <option value="v3">v3 · laboratorio</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="f-conf">Confianza mínima (0–1)</label>
+      <input type="number" id="f-conf" min="0" max="1" step="0.05" value="0">
+    </div>
+    <div class="field">
+      <label for="f-lado">Lado</label>
+      <select id="f-lado">
+        <option value="ambos">Ambos</option>
+        <option value="compra">Compra</option>
+        <option value="venta">Venta</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Filtro</label>
+      <label class="check"><input type="checkbox" id="f-limpio" checked> Solo tramo limpio</label>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button class="run" id="run-btn" onclick="run()">Correr backtest</button>
+    </div>
+  </div>
+
+  <div class="results" id="results">
+    <div class="empty">Configura los filtros y corre un backtest para ver resultados.</div>
+  </div>
+</div>
+
+<!-- ══ Gate de login (founder) ══ -->
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <img class="gate-logo" id="gate-logo" alt="SmartTrade" style="display:none">
+    <div class="gate-brand"><span class="flask">🧪</span><span class="name">SmartTrade</span></div>
+    <div class="gate-sub">Control de backtest · Founder</div>
+    <input type="password" id="gate-input" placeholder="Contraseña de founder"
+           autocomplete="current-password" spellcheck="false"
+           onkeydown="if(event.key==='Enter')login()">
+    <button class="gate-btn" id="gate-btn" onclick="login()">Entrar →</button>
+    <div class="gate-err" id="gate-err"></div>
+    <div class="gate-note" id="gate-note"></div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════════
+   SmartTrade · Control de backtest (página aparte para founder)
+   Login propio: POST /v1/auth/login → { session_token, expires_in }
+   Backtest:     POST /v1/backtest/recompute  (Authorization: Bearer <token>)
+   Handoff desde la app (localStorage 'st_bt_handoff'): logo + portafolio + watchlist.
+   El JWT efímero va en sessionStorage (misma clave que la app). 401 ⇒ gate.
+   ══════════════════════════════════════════════════════════════════════════ */
+const API = 'https://smarttrade-backend-production-b8e7.up.railway.app';
+const TOKEN_KEY = 'st_broker_token';
+const HANDOFF_KEY = 'st_bt_handoff';
+const $ = id => document.getElementById(id);
+
+let MODE = 'signal';
+let RUNNING = false;
+let SESSION_TIMER = null;
+
+let PORT = [], WATCH = [], BOTH = [];   // universos del handoff
+let HAS_HANDOFF = false;
+let TK_PRESET = 'universo';              // universo | portafolio | watchlist | ambos | manual
+
+const getToken   = () => { try{ return sessionStorage.getItem(TOKEN_KEY) || null; }catch{ return null; } };
+const setToken   = t  => { try{ sessionStorage.setItem(TOKEN_KEY, t); }catch{} };
+const clearToken = () => { try{ sessionStorage.removeItem(TOKEN_KEY); }catch{} };
+const esc = s => String(s).replace(/</g, '&lt;');
+
+/* ── Handoff + logo (branding SmartTrade) ─────────────────────────────── */
+function readHandoff(){
+  let h = null;
+  try{ const raw = localStorage.getItem(HANDOFF_KEY); if(raw) h = JSON.parse(raw); }catch{}
+  const uniq = a => [...new Set((a || []).map(t => String(t).toUpperCase().trim()).filter(Boolean))];
+  PORT  = uniq(h && h.portafolio);
+  WATCH = uniq(h && h.watchlist);
+  BOTH  = uniq([...PORT, ...WATCH]);
+  HAS_HANDOFF = !!(h && (PORT.length || WATCH.length));
+
+  // Adoptar el token del handoff si esta pestaña aún no tiene sesión propia,
+  // y borrarlo de localStorage de inmediato (ventana de exposición mínima).
+  if(h && h.token && !getToken()){
+    setToken(h.token);
+    try{
+      delete h.token;
+      localStorage.setItem(HANDOFF_KEY, JSON.stringify(h));
+    }catch(e){}
+  }
+
+  // Logo real de SmartTrade en la esquina superior derecha (y en el gate).
+  const logo = h && h.logo;
+  if(logo){
+    const right = $('brand-right');
+    if(right) right.innerHTML = '<img class="logo-img" src="' + logo + '" alt="SmartTrade">';
+    const gl = $('gate-logo');
+    if(gl){ gl.src = logo; gl.style.display = 'inline-block'; }
+  }
+}
+
+/* ── Auth ─────────────────────────────────────────────────────────────── */
+async function login(){
+  const inp = $('gate-input'), btn = $('gate-btn'), err = $('gate-err');
+  const pwd = inp ? (inp.value || '') : '';
+  err.textContent = '';
+  if(!pwd){ err.textContent = 'Ingresa tu contraseña.'; return; }
+  btn.disabled = true; btn.textContent = 'Verificando…';
+  try{
+    const r = await fetch(API + '/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pwd })
+    });
+    if(r.status === 401){ err.textContent = 'Contraseña incorrecta.'; return; }
+    if(!r.ok){ err.textContent = 'No se pudo iniciar sesión (' + r.status + ').'; return; }
+    const s = await r.json();
+    if(!s || !s.session_token){ err.textContent = 'Respuesta inválida del servidor.'; return; }
+    setToken(s.session_token);
+    scheduleExpiry(s.expires_in);
+    if(inp) inp.value = '';
+    showApp();
+  }catch(e){
+    err.textContent = 'No se pudo contactar el backend.';
+  }finally{
+    btn.disabled = false; btn.textContent = 'Entrar →';
+  }
+}
+
+function scheduleExpiry(expiresIn){
+  if(SESSION_TIMER) clearTimeout(SESSION_TIMER);
+  const secs = Math.max(60, Number(expiresIn) || 1800);
+  SESSION_TIMER = setTimeout(() => showGate('Tu sesión expiró. Ingresa de nuevo.'), secs * 1000);
+}
+
+function logout(){
+  if(SESSION_TIMER){ clearTimeout(SESSION_TIMER); SESSION_TIMER = null; }
+  clearToken();
+  showGate();
+}
+
+function showGate(msg){
+  clearToken();
+  $('gate').classList.remove('hide');
+  $('page').style.display = 'none';
+  $('logout-btn').style.display = 'none';
+  $('gate-note').textContent = msg || '';
+  $('gate-err').textContent = '';
+  setTimeout(() => $('gate-input') && $('gate-input').focus(), 50);
+}
+
+function showApp(){
+  $('gate').classList.add('hide');
+  $('page').style.display = 'block';
+  $('logout-btn').style.display = '';
+  initForm();
+}
+
+/* ── Formulario ───────────────────────────────────────────────────────── */
+let FORM_INITED = false;
+function initForm(){
+  if(FORM_INITED) return;
+  FORM_INITED = true;
+  const hoy = new Date();
+  const hace = new Date(hoy.getTime() - 30 * 86400000);
+  const iso = d => d.toISOString().slice(0, 10);
+  if($('f-hasta') && !$('f-hasta').value) $('f-hasta').value = iso(hoy);
+  if($('f-desde') && !$('f-desde').value) $('f-desde').value = iso(hace);
+
+  // Contadores de presets
+  $('c-port').textContent  = '(' + PORT.length + ')';
+  $('c-watch').textContent = '(' + WATCH.length + ')';
+  $('c-both').textContent  = '(' + BOTH.length + ')';
+
+  // Sin handoff: presets de portafolio/watchlist/ambos deshabilitados
+  if(!HAS_HANDOFF){
+    ['portafolio', 'watchlist', 'ambos'].forEach(p => {
+      const b = document.querySelector('.preset[data-preset="' + p + '"]');
+      if(b) b.disabled = true;
+    });
+    $('tk-hint').textContent = 'Abre el Control de backtest desde el menú de SmartTrade para elegir portafolio o watchlist sin escribir.';
+  }else{
+    $('tk-hint').textContent = 'Puedes ajustar la lista a mano si lo necesitas.';
+  }
+
+  // Preset por defecto: Ambos si hay handoff con tickers; si no, Universo.
+  setPreset(HAS_HANDOFF && BOTH.length ? 'ambos' : 'universo');
+}
+
+function presetTickers(p){
+  if(p === 'portafolio') return PORT;
+  if(p === 'watchlist')  return WATCH;
+  if(p === 'ambos')      return BOTH;
+  return [];   // universo | manual (manual se lee del input)
+}
+
+function setPreset(p){
+  TK_PRESET = p;
+  document.querySelectorAll('.preset').forEach(b =>
+    b.classList.toggle('on', b.dataset.preset === p));
+  $('tk-manual').style.display = (p === 'manual') ? 'flex' : 'none';
+  renderChips();
+}
+
+function renderChips(){
+  const host = $('tk-chips');
+  if(!host) return;
+  if(TK_PRESET === 'universo'){
+    host.innerHTML = '<span class="chip all">Todo el universo</span>';
+    return;
+  }
+  if(TK_PRESET === 'manual'){
+    const list = parseManual();
+    host.innerHTML = list.length
+      ? list.map(t => '<span class="chip">' + esc(t) + '</span>').join('')
+      : '<span class="chip more">Escribe símbolos abajo…</span>';
+    return;
+  }
+  const list = presetTickers(TK_PRESET);
+  if(!list.length){ host.innerHTML = '<span class="chip more">Lista vacía</span>'; return; }
+  const CAP = 30;
+  let html = list.slice(0, CAP).map(t => '<span class="chip">' + esc(t) + '</span>').join('');
+  if(list.length > CAP) html += '<span class="chip more">+' + (list.length - CAP) + ' más</span>';
+  host.innerHTML = html;
+}
+
+function parseManual(){
+  const raw = ($('f-tickers') && $('f-tickers').value || '').toUpperCase();
+  return [...new Set(raw.split(/[\s,]+/).map(t => t.trim()).filter(Boolean))];
+}
+
+function setMode(m){
+  if(m === 'forecast') return;
+  MODE = m;
+  $('seg-signal').classList.toggle('on', m === 'signal');
+  $('seg-forecast').classList.toggle('on', m === 'forecast');
+}
+
+function buildBody(){
+  const desde = $('f-desde').value || null;
+  const hasta = $('f-hasta').value || null;
+  let tickers = null;                      // universo = null
+  if(TK_PRESET === 'manual'){
+    const l = parseManual(); tickers = l.length ? l : null;
+  }else if(TK_PRESET !== 'universo'){
+    const l = presetTickers(TK_PRESET); tickers = l.length ? l : null;
+  }
+  const horizontes = ['1', '3', '7'].filter(h => $('f-h' + h).checked).map(Number);
+  const scorer = $('f-scorer').value || 'v2';
+  const confianza_min = parseFloat($('f-conf').value || '0') || 0;
+  const lado = $('f-lado').value || 'ambos';
+  const solo_tramo_limpio = !!$('f-limpio').checked;
+  return { desde, hasta, tickers, horizontes, scorer, confianza_min, lado, solo_tramo_limpio };
+}
+
+async function run(){
+  if(RUNNING) return;
+  const body = buildBody();
+  const res = $('results');
+  if(!body.horizontes.length){
+    res.innerHTML = '<div class="adv">⚠ Elige al menos un horizonte (1D / 3D / 7D).</div>';
+    return;
+  }
+  const btn = $('run-btn');
+  RUNNING = true;
+  btn.disabled = true; btn.dataset.lbl = btn.textContent;
+  btn.innerHTML = '<span class="spin"></span> Corriendo…';
+  res.innerHTML = '<div class="loading"><span class="spin"></span> Ejecutando backtest…</div>';
+
+  try{
+    const token = getToken();
+    const r = await fetch(API + '/v1/backtest/recompute', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+      },
+      body: JSON.stringify(body)
+    });
+    if(r.status === 401){ showGate('Sesión expirada. Vuelve a ingresar.'); return; }
+    if(!r.ok){
+      let detail = 'HTTP ' + r.status;
+      try{ const j = await r.json(); if(j && j.detail) detail = j.detail; }catch(e){}
+      res.innerHTML = '<div class="error">No se pudo correr el backtest: ' + esc(detail) + '</div>';
+      return;
+    }
+    render(await r.json());
+  }catch(e){
+    res.innerHTML = '<div class="error">Error de red. Revisa la conexión e inténtalo de nuevo.</div>';
+  }finally{
+    RUNNING = false;
+    btn.disabled = false; btn.textContent = btn.dataset.lbl || 'Correr backtest';
+  }
+}
+
+/* ── Render ───────────────────────────────────────────────────────────── */
+function num(v, kind){
+  if(v == null || isNaN(v)) return '<span class="na">—</span>';
+  if(kind === 'pct') return Number(v).toFixed(2) + '%';
+  if(kind === 'ret'){ const c = v >= 0 ? 'pos' : 'neg'; return '<span class="' + c + '">' + (v >= 0 ? '+' : '') + Number(v).toFixed(4) + '</span>'; }
+  return String(v);
+}
+
+function sideRow(lbl, cls, o){
+  o = o || {};
+  return '<tr>'
+    + '<td class="side ' + cls + '">' + lbl + '</td>'
+    + '<td>' + num(o.n) + '</td>'
+    + '<td>' + num(o.win_rate, 'pct') + '</td>'
+    + '<td>' + num(o.retorno_promedio, 'ret') + '</td>'
+    + '<td>' + num(o.expectancy, 'ret') + '</td>'
+    + '</tr>';
+}
+
+function render(data){
+  const res = $('results');
+  if(!data){ res.innerHTML = '<div class="error">Respuesta vacía del backend.</div>'; return; }
+  const p = data.params || {};
+  let html = '';
+
+  const advs = Array.isArray(data.advertencias) ? data.advertencias : [];
+  if(advs.length){
+    html += '<div class="adv"><strong>⚠ Advertencias</strong><ul>'
+      + advs.map(a => '<li>' + esc(a) + '</li>').join('') + '</ul></div>';
+  }
+
+  const dias = data.dias, nTot = data.n_total;
+  if((dias != null && dias < 40) || (nTot != null && nTot < 40)){
+    html += '<div class="honest">Tramo corto ('
+      + (dias != null ? dias + ' días' : '') + (dias != null && nTot != null ? ' · ' : '')
+      + (nTot != null ? nTot + ' trades' : '')
+      + '): <strong>conclusiones no confiables aún</strong>. Trátalo como exploratorio, no como evidencia.</div>';
+  }
+
+  html += '<div class="meta">'
+    + '<span>Muestra: <b>' + (nTot != null ? nTot : '—') + '</b> trades</span>'
+    + '<span>Días: <b>' + (dias != null ? dias : '—') + '</b></span>'
+    + '<span>Tickers: <b>' + (data.tickers != null ? data.tickers : '—') + '</b></span>'
+    + '<span>Scorer: <b>' + (p.scorer || '—') + '</b></span>'
+    + '<span>Lado: <b>' + (p.lado || '—') + '</b></span>'
+    + (p.solo_tramo_limpio ? '<span>Solo tramo limpio</span>' : '')
+    + '</div>';
+
+  const ph = data.por_horizonte || {};
+  const horizons = Object.keys(ph).sort((a, b) => Number(a) - Number(b));
+  if(!horizons.length) html += '<div class="adv">Sin resultados por horizonte para estos filtros.</div>';
+  horizons.forEach(h => {
+    const b = ph[h] || {};
+    html += '<div class="hblock">'
+      + '<div class="hhdr">Horizonte ' + esc(h) + 'D</div>'
+      + '<table class="bt"><thead><tr><th>Lado</th><th>n</th><th>Win rate</th><th>Ret. prom.</th><th>Expectancy</th></tr></thead><tbody>'
+      + sideRow('BUY', 'buy', b.buy)
+      + sideRow('SELL', 'sell', b.sell)
+      + sideRow('Total', '', b.total)
+      + '</tbody></table></div>';
+  });
+
+  const eq = data.curva_equity || {};
+  const eqKeys = Object.keys(eq).sort((a, b) => Number(a) - Number(b));
+  eqKeys.forEach(h => {
+    if(Array.isArray(eq[h]) && eq[h].length){
+      html += '<div class="hblock"><div class="hhdr">Curva de equity · ' + esc(h) + 'D</div>'
+        + '<div class="chart-wrap"><canvas id="eq-' + esc(h) + '"></canvas></div></div>';
+    }
+  });
+
+  res.innerHTML = html || '<div class="empty">Sin datos para estos filtros.</div>';
+  eqKeys.forEach(h => { if(Array.isArray(eq[h]) && eq[h].length) drawEquity('eq-' + h, eq[h]); });
+}
+
+/* Agrupa por fecha (último valor del día = equity de cierre) y dibuja en canvas. */
+function drawEquity(canvasId, points){
+  const canvas = $(canvasId);
+  if(!canvas) return;
+  const wrap = canvas.parentElement;
+
+  const byDate = new Map();
+  points.forEach(pt => { if(pt && pt.fecha != null && pt.valor != null) byDate.set(pt.fecha, Number(pt.valor)); });
+  const vals = [...byDate.values()];
+  if(vals.length < 2){
+    const c0 = canvas.getContext('2d'); if(c0) c0.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
+  const dpr = window.devicePixelRatio || 1;
+  const W = (wrap ? wrap.clientWidth : 320) - 20, H = 170 - 20;
+  if(W < 10 || H < 10) return;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.clearRect(0, 0, W, H);
+
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = (hi - lo) || 1;
+  const PL = 8, PR = 8, PT = 10, PB = 16, cW = W - PL - PR, cH = H - PT - PB;
+  const x = i => PL + (vals.length <= 1 ? cW / 2 : i / (vals.length - 1) * cW);
+  const y = v => PT + cH - ((v - lo) / span) * cH;
+
+  const up = vals[vals.length - 1] >= vals[0];
+  const col = up ? '46,204,113' : '231,76,60';
+
+  if(lo <= 100 && hi >= 100){
+    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(PL, y(100)); ctx.lineTo(PL + cW, y(100)); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
+  vals.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.lineTo(x(vals.length - 1), PT + cH); ctx.lineTo(x(0), PT + cH); ctx.closePath();
+  const grad = ctx.createLinearGradient(0, PT, 0, PT + cH);
+  grad.addColorStop(0, 'rgba(' + col + ',.28)'); grad.addColorStop(1, 'rgba(' + col + ',0)');
+  ctx.fillStyle = grad; ctx.fill();
+
+  ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
+  vals.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+  ctx.strokeStyle = 'rgb(' + col + ')'; ctx.lineWidth = 1.6; ctx.stroke();
+}
+
+/* Actualizar chips mientras se escribe en modo manual. */
+document.addEventListener('input', e => { if(e.target && e.target.id === 'f-tickers') renderChips(); });
+
+/* ── Arranque ─────────────────────────────────────────────────────────── */
+(function boot(){
+  readHandoff();
+  if(getToken()) showApp();
+  else showGate();
+})();
+</script>
+</body>
+</html>
