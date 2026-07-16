@@ -97,6 +97,9 @@ a{color:var(--blue)}
 .adv ul{margin:7px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
 .honest{background:rgba(231,76,60,.07);border-left:3px solid var(--red);color:var(--text2);
   border-radius:5px;padding:10px 14px;font-size:12px}
+.sell-note{background:rgba(77,158,247,.06);border-left:3px solid var(--blue);color:var(--text2);
+  border-radius:5px;padding:10px 14px;font-size:11.5px;line-height:1.5}
+.sell-note b{color:var(--text)}
 .meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:12px;color:var(--text2);
   padding:2px 0 4px;font-family:var(--mono)}
 .meta b{color:var(--text)}
@@ -550,10 +553,20 @@ function render(data){
       + '<div class="hhdr">Horizonte ' + esc(h) + 'D</div>'
       + '<table class="bt"><thead><tr><th>Lado</th><th>n</th><th>Win rate</th><th>Ret. prom.</th><th>Expectancy</th></tr></thead><tbody>'
       + sideRow('BUY', 'buy', b.buy)
-      + sideRow('SELL', 'sell', b.sell)
+      + sideRow('SELL · salir/evitar', 'sell', b.sell)
       + sideRow('Total', '', b.total)
       + '</tbody></table></div>';
   });
+
+  // Nota honesta sobre el SELL: sistema long-only, retorno con signo de short.
+  if(horizons.length){
+    html += '<div class="sell-note"><b>Cómo leer el SELL.</b> El sistema es '
+      + '<b>long-only: no shortea.</b> Un SELL es señal de <b>salir / no comprar</b>, no una '
+      + 'posición corta. Su retorno se calcula con convención de short (signo invertido): '
+      + '“acierta” cuando el activo cae. Por eso un SELL negativo <b>no es plata perdida</b> — '
+      + 'es costo de oportunidad (evitaste o saliste de algo que luego subió) y la métrica solo '
+      + 'caracteriza la dirección de la señal. Para P&amp;L real, mira la fila <b>BUY</b>.</div>';
+  }
 
   const eq = data.curva_equity || {};
   const eqKeys = Object.keys(eq).sort((a, b) => Number(a) - Number(b));
