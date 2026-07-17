@@ -200,9 +200,9 @@ table.bt tr:last-child td{border-bottom:none;font-weight:700;background:rgba(255
     </div>
     <div class="field" id="field-scorer">
       <label for="f-scorer" id="lbl-scorer">Scorer</label>
-      <select id="f-scorer">
+      <select id="f-scorer" title="El motor v3 del pre-registro (F5/F6) se evalúa en la sombra/forward, no en este panel; aquí «v3-lab» es el scorer de auditoría del 10-jul.">
         <option value="v2">v2 · producción</option>
-        <option value="v3">v3 · laboratorio</option>
+        <option value="v3">v3-lab · scorer auditoría 10-jul (≠ motor v3 de F5/F6)</option>
       </select>
     </div>
     <div class="field" id="field-conf">
@@ -226,6 +226,8 @@ table.bt tr:last-child td{border-bottom:none;font-weight:700;background:rgba(255
       <button class="run" id="run-btn" onclick="run()">Correr backtest</button>
     </div>
   </div>
+
+  <div class="honest" id="fc-cripto-note" style="display:none"></div>
 
   <div class="results" id="results">
     <div class="empty">Configura los filtros y corre un backtest para ver resultados.</div>
@@ -259,6 +261,17 @@ const API = 'https://smarttrade-backend-production-b8e7.up.railway.app';
 const TOKEN_KEY = 'st_broker_token';
 const HANDOFF_KEY = 'st_bt_handoff';
 const $ = id => document.getElementById(id);
+
+/* Lectura NETA del modo Señal (hallazgo #4). 0.15% round-trip = costo pesimista
+   de M8 (esquina más adversa del barrido §4: slippage 7.5 bps/lado × 2 lados,
+   fee 0). MISMAS unidades que retorno_promedio: el backend expone el promedio ya
+   en porcentaje (prom = 100·media_de_retornos), así que un BUY de +0.10% llega
+   como 0.1000 y su neto es 0.1000 − 0.15 = −0.05. El neto se calcula 100% en el
+   cliente sobre la respuesta existente: NO se toca el endpoint ni su forma. */
+const COSTO_RT_PCT = 0.15;
+/* Única cripto en el libro; S6b la saca del universo ~23-jul. Mientras siga,
+   el modo Forecast la excluye de las listas explícitas (default sin cripto). */
+const CRIPTO = ['BTC-USD'];
 
 let MODE = 'signal';
 let RUNNING = false;
@@ -398,12 +411,25 @@ function presetTickers(p){
   return [];   // universo | manual (manual se lee del input)
 }
 
+function updateCriptoNote(){
+  const el = $('fc-cripto-note');
+  if(!el) return;
+  const show = (MODE === 'forecast' && TK_PRESET === 'universo');
+  el.style.display = show ? '' : 'none';
+  if(show){
+    el.innerHTML = '<b>Forecast · «Todo el universo» aún incluye ' + CRIPTO.join(', ') + '.</b> '
+      + 'Sale del libro ~23-jul (S6b). Para un agregado sin cripto, elige un preset explícito '
+      + '(Portafolio / Watchlist / Ambos) o escribe la lista a mano.';
+  }
+}
+
 function setPreset(p){
   TK_PRESET = p;
   document.querySelectorAll('.preset').forEach(b =>
     b.classList.toggle('on', b.dataset.preset === p));
   $('tk-manual').style.display = (p === 'manual') ? 'flex' : 'none';
   renderChips();
+  updateCriptoNote();
 }
 
 function renderChips(){
@@ -448,8 +474,11 @@ function setMode(m){
   const opts = $('f-scorer').options;
   if(opts.length >= 2){
     opts[0].textContent = fc ? 'v2 · paramétrico' : 'v2 · producción';
-    opts[1].textContent = fc ? 'v3 · no disponible aún' : 'v3 · laboratorio';
+    opts[1].textContent = fc ? 'v3 · no disponible aún' : 'v3-lab · scorer auditoría 10-jul (≠ motor v3 de F5/F6)';
   }
+  // Tooltip solo en Señal: aclara que el motor v3 del pre-registro no se evalúa aquí.
+  $('f-scorer').title = fc ? '' :
+    'El motor v3 del pre-registro (F5/F6) se evalúa en la sombra/forward, no en este panel; aquí «v3-lab» es el scorer de auditoría del 10-jul.';
 
   // Nota contextual del encabezado.
   $('forecast-note').textContent = fc
@@ -459,6 +488,7 @@ function setMode(m){
   // Al cambiar de modo, limpia resultados (no mezclar tablas de distinto tipo).
   const res = $('results');
   if(res) res.innerHTML = '<div class="empty">Configura los filtros y corre un backtest para ver resultados.</div>';
+  updateCriptoNote();
 }
 
 function buildBody(){
@@ -477,7 +507,15 @@ function buildBody(){
     // El selector "Scorer" es el motor de forecast en este modo. Lado/Confianza
     // no aplican a un pronóstico.
     const motor = $('f-scorer').value || 'v2';
-    return { desde, hasta, tickers, horizontes, motor, solo_tramo_limpio, incluir_pit: true };
+    // Default sin cripto (S6b): mientras BTC-USD siga en el libro, el modo
+    // Forecast la excluye de las LISTAS EXPLÍCITAS para no leer agregados
+    // contaminados. El caso "Todo el universo" (tickers=null) se maneja con un
+    // aviso aparte — el cliente no enumera el universo, así que no se puede
+    // restar BTC-USD de un null sin inventar la lista (ver nota de sesión).
+    const tickersFC = Array.isArray(tickers)
+      ? tickers.filter(t => !CRIPTO.includes(String(t).toUpperCase().trim()))
+      : tickers;
+    return { desde, hasta, tickers: tickersFC, horizontes, motor, solo_tramo_limpio, incluir_pit: true };
   }
 
   const scorer = $('f-scorer').value || 'v2';
@@ -544,11 +582,14 @@ function num(v, kind){
 
 function sideRow(lbl, cls, o){
   o = o || {};
+  const bruto = o.retorno_promedio;
+  const neto = (bruto == null || isNaN(bruto)) ? null : bruto - COSTO_RT_PCT;
   return '<tr>'
     + '<td class="side ' + cls + '">' + lbl + '</td>'
     + '<td>' + num(o.n) + '</td>'
     + '<td>' + num(o.win_rate, 'pct') + '</td>'
-    + '<td>' + num(o.retorno_promedio, 'ret') + '</td>'
+    + '<td>' + num(bruto, 'ret') + '</td>'
+    + '<td>' + num(neto, 'ret') + '</td>'
     + '<td>' + num(o.expectancy, 'ret') + '</td>'
     + '</tr>';
 }
@@ -589,12 +630,21 @@ function render(data){
     const b = ph[h] || {};
     html += '<div class="hblock">'
       + '<div class="hhdr">Horizonte ' + esc(h) + 'D</div>'
-      + '<table class="bt"><thead><tr><th>Lado</th><th>n</th><th>Win rate</th><th>Ret. prom.</th><th>Expectancy</th></tr></thead><tbody>'
+      + '<table class="bt"><thead><tr><th>Lado</th><th>n</th><th>Win rate</th><th>Ret. prom.</th><th>Ret. neto</th><th>Expectancy</th></tr></thead><tbody>'
       + sideRow('BUY', 'buy', b.buy)
       + sideRow('SELL · salir/evitar', 'sell', b.sell)
       + sideRow('Total', '', b.total)
       + '</tbody></table></div>';
   });
+
+  // Nota del neto de costos (hallazgo #4): la doctrina vive en el instrumento.
+  if(horizons.length){
+    html += '<div class="sell-note"><b>Ret. neto = Ret. bruta − 0.15% round-trip.</b> '
+      + 'El 0.15% es el costo pesimista de M8 (esquina más adversa del barrido §4: '
+      + 'slippage 7.5 bps/lado, fee 0). Un BUY de +0.10% bruto queda en <b>−0.05% neto</b> — '
+      + 'por debajo de costos. La columna neta se calcula en el cliente sobre la respuesta '
+      + 'existente; el endpoint no cambia.</div>';
+  }
 
   // Nota honesta sobre el SELL: sistema long-only, retorno con signo de short.
   if(horizons.length){
