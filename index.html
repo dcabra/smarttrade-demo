@@ -8136,7 +8136,7 @@ function stratDefaultParams(perfil){
   return {
     timeframe:'1D',
     universo:{modo:'portafolio_watchlist', tickers:[]},
-    entrada:{confianza_min:65, concordancia_forecast:true, horizonte_ref:'3D', direccion:'solo_buy', rr_min:0, min_ratio_tp_peaje:null},
+    entrada:{confianza_min:0.65, concordancia_forecast:true, horizonte_ref:'3D', direccion:'solo_buy', rr_min:0, min_ratio_tp_peaje:null},
     salida:{obedecer_sl:true, obedecer_tp:true, tp_nivel:'tp1', salida_por_vencimiento:true, trailing_pct:0, cerrar_si_senal_invierte:false},
     riesgo:{perfil:perfil||'moderado', pct_capital_por_senal:S.p, max_posiciones:S.m, max_exposicion_clase:{equity:70,crypto:30}, drawdown_max_pct:0, cooldown_ciclos:0, ring_fence_pct:100, riesgo_por_trade_pct:0},
     temporalidad:{vigencia_fin:null, solo_market_hours:true, evitar_eventos:[], ventana_evento_horas:48, ventanas_bloqueo:[]},
@@ -8292,7 +8292,7 @@ function stratRenderDetail(d){
        <div class="stratp-chips">
          <div class="stratp-chip"><div class="k">Temporalidad</div><div class="v">${stratTfLabel((p.timeframe)||'1D')}</div></div>
          <div class="stratp-chip"><div class="k">Universo</div><div class="v">${u} · ${(p.universo.tickers||[]).length} tk</div></div>
-         <div class="stratp-chip"><div class="k">Entrada</div><div class="v">BUY · conf ≥${p.entrada.confianza_min} · ${p.entrada.horizonte_ref}${rrTxt}${peajeTxt}</div></div>
+         <div class="stratp-chip"><div class="k">Entrada</div><div class="v">BUY · prob ≥${p.entrada.confianza_min} · ${p.entrada.horizonte_ref}${rrTxt}${peajeTxt}</div></div>
          <div class="stratp-chip"><div class="k">Riesgo</div><div class="v">${p.riesgo.perfil} · ${p.riesgo.pct_capital_por_senal}%/señal · máx ${p.riesgo.max_posiciones}${rptTxt}</div></div>
          <div class="stratp-chip"><div class="k">Salida</div><div class="v">SL ✓ (oblig.) · ${p.salida.tp_nivel.toUpperCase()} ${p.salida.salida_por_vencimiento?'· vencim.':''}${invTxt}</div></div>
        </div>
@@ -8390,7 +8390,7 @@ function stratRulesStrip(d){
     ? `<span class="smon-rule" title="Filtro de calendario activo">📅 <b>evita ${p.temporalidad.evitar_eventos.join('/')}</b></span>` : '';
   return `<div class="smon-rules">
     <span class="smon-rule">Universo <b>${u}${nt?` · ${nt} tk`:''}</b></span>
-    <span class="smon-rule">Entrada <b>conf ≥${p.entrada.confianza_min} · ${p.entrada.horizonte_ref}</b></span>
+    <span class="smon-rule">Entrada <b>prob ≥${p.entrada.confianza_min} · ${p.entrada.horizonte_ref}</b></span>
     <span class="smon-rule">Riesgo <b>${p.riesgo.pct_capital_por_senal}%/señal · máx ${p.riesgo.max_posiciones}</b></span>
     <span class="smon-rule">Salida <b>SL ✓ · ${(p.salida.tp_nivel||'').toUpperCase()}</b></span>
     ${ev}
@@ -8641,7 +8641,7 @@ function stratModalForm(d){
    <details class="smf-acc">
      <summary>🪄 Definir por descripción (IA)</summary>
      <div class="smf-acc-body">
-       <textarea class="smf-prompt" id="smf-prompt" placeholder="Ej: Estrategia conservadora sobre mi watchlist a 7 días, confianza mínima 70, 5% por señal.">${d.prompt_llm||''}</textarea>
+       <textarea class="smf-prompt" id="smf-prompt" placeholder="Ej: Estrategia conservadora sobre mi watchlist a 7 días, probabilidad mínima de acierto 0.70, 5% por señal.">${d.prompt_llm||''}</textarea>
        <button class="smf-prompt-btn" onclick="stratModalFromPrompt()">Traducir a parámetros →</button>
      </div>
    </details>
@@ -8667,9 +8667,9 @@ function stratModalForm(d){
          <div class="smf-field" id="smf-tk-wrap" style="${p.universo.modo==='explicito'?'':'display:none'}"><label>Tickers (coma)</label>
            <input id="smf-tickers" value="${tk}" placeholder="AAPL, MSFT, TSLA"></div>
        </div></div>
-       <div class="smf-grp"><h4>📥 Entrada ${smfHelp('Condiciones para ABRIR una posición: confianza mínima de la señal IA, horizonte del forecast y relación premio/riesgo mínima (R/B).')}</h4>
+       <div class="smf-grp"><h4>📥 Entrada ${smfHelp('Condiciones para ABRIR una posición: probabilidad mínima de acierto de la señal IA (0–1, p.ej. 0.65 = 65%), horizonte del forecast y relación premio/riesgo mínima (R/B).')}</h4>
        <div class="smf-row">
-         <div class="smf-field"><label>Confianza mín (50–95)</label><input type="number" id="smf-conf" min="50" max="95" value="${p.entrada.confianza_min}"></div>
+         <div class="smf-field"><label>Probabilidad mínima de acierto (0–1)</label><input type="number" id="smf-conf" min="0" max="1" step="0.01" value="${p.entrada.confianza_min}"></div>
          <div class="smf-field"><label>Horizonte</label><select id="smf-hz">${['1D','3D','7D'].map(h=>`<option ${p.entrada.horizonte_ref===h?'selected':''}>${h}</option>`).join('')}</select></div>
        </div>
        <div class="smf-row">
@@ -8865,7 +8865,7 @@ function stratModalRead(){
     params:{
       timeframe:($('smf-tf')?$('smf-tf').value:'1D'),
       universo:{modo, tickers:stratResolveUniverse(modo,explic)},
-      entrada:{confianza_min:parseInt($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, evitar_alta_correlacion:$('smf-corr').checked, horizonte_ref:$('smf-hz').value, direccion:prevDir, rr_min:stratReadRR(), min_ratio_tp_peaje:stratReadPeaje()},
+      entrada:{confianza_min:parseFloat($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, evitar_alta_correlacion:$('smf-corr').checked, horizonte_ref:$('smf-hz').value, direccion:prevDir, rr_min:stratReadRR(), min_ratio_tp_peaje:stratReadPeaje()},
       salida:{obedecer_sl:true, obedecer_tp:$('smf-tpchk').checked, tp_nivel:$('smf-tp').value, salida_por_vencimiento:$('smf-venc').checked, trailing_pct:stratRiskVal('smf-trail',1,50,0), cerrar_si_senal_invierte:$('smf-cinv').checked},
       riesgo:{perfil:$('smf-perfil').value, pct_capital_por_senal:parseFloat($('smf-pct').value), max_posiciones:parseInt($('smf-maxp').value), max_exposicion_clase:{equity:stratClamp($('smf-exp-eq').value,0,100,70), crypto:crVal}, drawdown_max_pct:stratRiskVal('smf-dd',1,90,0), cooldown_ciclos:stratRiskVal('smf-cd',1,30,0), ring_fence_pct:stratRiskVal('smf-rf',1,100,100), riesgo_por_trade_pct:stratRiskValFloat('smf-rpt',0.1,10,0)},
       temporalidad:{vigencia_fin:null, solo_market_hours:$('smf-mh').checked, evitar_eventos:stratReadEvitar(), ventana_evento_horas:parseInt($('smf-ev-win').value)||48, ventanas_bloqueo:(STRAT.modalBlackout||[])},
@@ -8894,7 +8894,7 @@ const SMF_DIFF_MAP = [
   ['timeframe',                          'smf-tf',     'Temporalidad'],
   ['universo.modo',                      'smf-modo',   'Universo'],
   ['universo.tickers',                   'smf-tickers','Tickers'],
-  ['entrada.confianza_min',              'smf-conf',   'Confianza mín'],
+  ['entrada.confianza_min',              'smf-conf',   'Probabilidad mín. de acierto'],
   ['entrada.horizonte_ref',              'smf-hz',     'Horizonte'],
   /* E1 (11-jul-2026): 'entrada.direccion' retirado del mapa — el campo ya no
      existe en el formulario (campo muerto; el motor nunca lo leyó). */
