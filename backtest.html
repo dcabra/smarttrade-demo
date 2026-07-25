@@ -100,6 +100,16 @@ a{color:var(--blue)}
 .sell-note{background:rgba(77,158,247,.06);border-left:3px solid var(--blue);color:var(--text2);
   border-radius:5px;padding:10px 14px;font-size:11.5px;line-height:1.5}
 .sell-note b{color:var(--text)}
+.analysis{background:rgba(77,158,247,.05);border:1px solid var(--border2);border-left:3px solid var(--blue);
+  border-radius:8px;padding:12px 16px;font-size:12px;line-height:1.55;color:var(--text2)}
+.analysis .an-hdr{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text3);margin-bottom:6px}
+.analysis p{margin:6px 0}
+.analysis p:last-child{margin-bottom:0}
+.analysis b{color:var(--text)}
+.analysis .sem{font-weight:700;font-family:var(--mono);font-size:11px}
+.analysis .sem.red{color:var(--red)}
+.analysis .sem.amber{color:var(--orange)}
 .meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:12px;color:var(--text2);
   padding:2px 0 4px;font-family:var(--mono)}
 .meta b{color:var(--text)}
@@ -227,8 +237,6 @@ table.bt tr:last-child td{border-bottom:none;font-weight:700;background:rgba(255
     </div>
   </div>
 
-  <div class="honest" id="fc-cripto-note" style="display:none"></div>
-
   <div class="results" id="results">
     <div class="empty">Configura los filtros y corre un backtest para ver resultados.</div>
   </div>
@@ -269,8 +277,11 @@ const $ = id => document.getElementById(id);
    como 0.1000 y su neto es 0.1000 − 0.15 = −0.05. El neto se calcula 100% en el
    cliente sobre la respuesta existente: NO se toca el endpoint ni su forma. */
 const COSTO_RT_PCT = 0.15;
-/* Única cripto en el libro; S6b la saca del universo ~23-jul. Mientras siga,
-   el modo Forecast la excluye de las listas explícitas (default sin cripto). */
+/* BTC-USD se desactivó del libro el 24-jul (universe_tickers 120→116); el job
+   nocturno ya no graba filas nuevas de cripto. Este filtro queda como guarda
+   defensiva inocua: si alguien escribe BTC-USD a mano en una lista explícita de
+   Forecast, se excluye del agregado (el backend tampoco tiene datos nuevos). El
+   aviso visible de S5 ("aún incluye BTC-USD, sale ~23-jul") se retiró en S5b. */
 const CRIPTO = ['BTC-USD'];
 
 let MODE = 'signal';
@@ -411,25 +422,12 @@ function presetTickers(p){
   return [];   // universo | manual (manual se lee del input)
 }
 
-function updateCriptoNote(){
-  const el = $('fc-cripto-note');
-  if(!el) return;
-  const show = (MODE === 'forecast' && TK_PRESET === 'universo');
-  el.style.display = show ? '' : 'none';
-  if(show){
-    el.innerHTML = '<b>Forecast · «Todo el universo» aún incluye ' + CRIPTO.join(', ') + '.</b> '
-      + 'Sale del libro ~23-jul (S6b). Para un agregado sin cripto, elige un preset explícito '
-      + '(Portafolio / Watchlist / Ambos) o escribe la lista a mano.';
-  }
-}
-
 function setPreset(p){
   TK_PRESET = p;
   document.querySelectorAll('.preset').forEach(b =>
     b.classList.toggle('on', b.dataset.preset === p));
   $('tk-manual').style.display = (p === 'manual') ? 'flex' : 'none';
   renderChips();
-  updateCriptoNote();
 }
 
 function renderChips(){
@@ -488,7 +486,6 @@ function setMode(m){
   // Al cambiar de modo, limpia resultados (no mezclar tablas de distinto tipo).
   const res = $('results');
   if(res) res.innerHTML = '<div class="empty">Configura los filtros y corre un backtest para ver resultados.</div>';
-  updateCriptoNote();
 }
 
 function buildBody(){
@@ -507,11 +504,12 @@ function buildBody(){
     // El selector "Scorer" es el motor de forecast en este modo. Lado/Confianza
     // no aplican a un pronóstico.
     const motor = $('f-scorer').value || 'v2';
-    // Default sin cripto (S6b): mientras BTC-USD siga en el libro, el modo
-    // Forecast la excluye de las LISTAS EXPLÍCITAS para no leer agregados
-    // contaminados. El caso "Todo el universo" (tickers=null) se maneja con un
-    // aviso aparte — el cliente no enumera el universo, así que no se puede
-    // restar BTC-USD de un null sin inventar la lista (ver nota de sesión).
+    // Guarda defensiva (post-24-jul): BTC-USD ya salió del libro, pero si alguien
+    // la escribe a mano en una lista explícita de Forecast, se excluye igual del
+    // agregado. El caso "Todo el universo" (tickers=null) no se toca aquí: el
+    // cliente no enumera el universo, así que no se puede restar de un null. El
+    // universo del backtest = lo que haya en el libro (histórico incluido; por eso
+    // un tramo NO-limpio sobre fechas ≤23-jul aún puede traer filas viejas de BTC).
     const tickersFC = Array.isArray(tickers)
       ? tickers.filter(t => !CRIPTO.includes(String(t).toUpperCase().trim()))
       : tickers;
@@ -594,6 +592,103 @@ function sideRow(lbl, cls, o){
     + '</tr>';
 }
 
+/* ── Lectura guiada (S5b) ─────────────────────────────────────────────────
+   Análisis determinista, calculado EN EL CLIENTE sobre la respuesta que ya
+   llega. Sin LLM, sin red, sin fechas ni aleatoriedad: ante los mismos números
+   dice lo mismo. Funciones PURAS (data → string HTML), sin tocar el DOM, para
+   poder verificarlas con un arnés Node offline. Un instrumento debe leer igual
+   los mismos números. */
+function analysisSignal(data){
+  const ph = (data && data.por_horizonte) || {};
+  const horizons = Object.keys(ph).sort((a, b) => Number(a) - Number(b));
+  if(!horizons.length) return '';
+  const p = data.params || {};
+  const evaluados = (data.n_total != null) ? data.n_total : null;   // filas leídas
+  // accionables = mayor n de la fila Total entre los horizontes mostrados
+  // (mismo criterio que `total_señales_evaluadas` del backend; es un número que
+  // ya aparece en alguna fila Total de la tabla → coherente con lo visible).
+  let accionables = 0;
+  horizons.forEach(h => { const t = (ph[h] && ph[h].total) || {}; if(t.n != null && t.n > accionables) accionables = t.n; });
+  const pedidos   = Array.isArray(p.tickers) ? p.tickers.length : null;   // null = universo
+  const aportaron = (data.tickers != null) ? data.tickers : null;         // tickers con filas
+  const dias = data.dias;
+  const chico = (dias != null && dias < 40) || (evaluados != null && evaluados < 40);
+
+  const frases = [];
+  // 1) accionables vs evaluados + HOLD (selectivo por diseño).
+  if(evaluados != null && evaluados > 0){
+    const noAcc = Math.max(0, evaluados - accionables);
+    const pct = Math.round(100 * noAcc / evaluados);
+    frases.push('<b>' + accionables + ' accionables</b> de ' + evaluados
+      + ' filas evaluadas (~' + pct + '% sin señal accionable / HOLD): selectividad <b>por diseño</b>, no un fallo.');
+  }
+  // 2) tickers que aportan filas limpias vs pedidos en el preset.
+  if(aportaron != null){
+    if(pedidos != null){
+      const faltan = Math.max(0, pedidos - aportaron);
+      frases.push(aportaron + ' de ' + pedidos + ' tickers del preset aportaron filas limpias'
+        + (faltan > 0 ? ' — los otros ' + faltan + ' no tienen tramo limpio en el rango.' : '.'));
+    }else{
+      frases.push(aportaron + ' tickers del universo del libro aportaron filas limpias en el rango '
+        + '(el cliente no enumera el universo; se lee lo que hay en el libro).');
+    }
+  }
+  // 3) doctrina BUY-decide / SELL-caracteriza.
+  const doctrina = '<b>BUY decide, SELL caracteriza:</b> el P&amp;L real vive en la fila BUY; '
+    + 'el SELL (long-only, no shortea) solo describe la dirección de la señal.';
+  // 4) semáforo de muestra (mismo umbral 40 que el bloque honesto de arriba).
+  const sem = chico
+    ? '<span class="sem red">● muestra exploratoria (n&lt;40)</span> — trátalo como prueba de mecanismo, no como evidencia.'
+    : '<span class="sem amber">● muestra preliminar (n&ge;40)</span> — el panel <b>mide</b>, no es una perilla: no ajustes el motor por esto.';
+
+  return '<div class="analysis"><div class="an-hdr">Lectura guiada · Señal</div>'
+    + (frases.length ? '<p>' + frases.join(' ') + '</p>' : '')
+    + '<p>' + doctrina + '</p>'
+    + '<p>' + sem + '</p></div>';
+}
+
+function analysisForecast(data){
+  const ph = (data && data.por_horizonte) || {};
+  const horizons = Object.keys(ph).sort((a, b) => Number(a) - Number(b));
+  if(!horizons.length) return '';
+  // Horizonte representativo = el de mayor n (más datos), como `max_n_evaluado`.
+  let hRep = null, best = -1;
+  horizons.forEach(h => { const n = ph[h] && ph[h].n; if(n != null && n > best){ best = n; hRep = h; } });
+  if(hRep == null) hRep = horizons[0];
+  const b = ph[hRep] || {};
+  const dias = data.dias;
+  const chico = (dias != null && dias < 40);
+
+  const frases = [];
+  // 1) cobertura vs objetivo 80 en lenguaje llano.
+  if(b.cobertura_80 != null){
+    const cob = Number(b.cobertura_80);
+    let lectura;
+    if(cob >= 85)      lectura = 'por encima del objetivo 80% → bandas <b>conservadoras</b> (más anchas de lo necesario), <b>no rotas</b>';
+    else if(cob <= 75) lectura = 'por debajo del objetivo 80% → bandas <b>optimistas</b> (cubren menos de lo que prometen)';
+    else               lectura = 'cerca del objetivo 80% → bandas <b>bien calibradas</b>';
+    frases.push('Cobertura 80% = <b>' + Math.round(cob) + '%</b> (' + esc(hRep) + 'D, n=' + (b.n != null ? b.n : '—') + '): ' + lectura + '.');
+  }
+  // 2) sesgo p50 en lenguaje llano (mismos 2 decimales que la tabla).
+  if(b.sesgo_p50 != null){
+    const sg = Number(b.sesgo_p50);
+    let dir;
+    if(Math.abs(sg) < 0.10) dir = 'el centro p50 quedó prácticamente <b>insesgado</b>';
+    else if(sg > 0)         dir = 'el centro p50 quedó <b>corto</b> (el mercado subió más de lo previsto)';
+    else                    dir = 'el centro p50 quedó <b>largo</b> (el mercado subió menos / cayó más de lo previsto)';
+    frases.push('Sesgo p50 = <b>' + (sg >= 0 ? '+' : '') + sg.toFixed(2) + '%</b>: ' + dir + '.');
+  }
+  // 3) recordatorio de categoría + no-perilla / semáforo.
+  const categoria = 'Un forecast se juzga por <b>calibración</b>, no por win-rate.';
+  const sem = chico
+    ? '<span class="sem red">● muestra exploratoria (' + dias + ' días &lt; 40)</span> — a n bajo, ±10–15 puntos de cobertura son azar: <b>no ajustes el motor por esto.</b>'
+    : '<span class="sem amber">● muestra preliminar</span> — el panel <b>mide</b> calibración, no es una perilla del motor.';
+
+  return '<div class="analysis"><div class="an-hdr">Lectura guiada · Forecast</div>'
+    + (frases.length ? '<p>' + frases.join(' ') + '</p>' : '')
+    + '<p>' + categoria + ' ' + sem + '</p></div>';
+}
+
 function render(data){
   const res = $('results');
   if(!data){ res.innerHTML = '<div class="error">Respuesta vacía del backend.</div>'; return; }
@@ -664,6 +759,9 @@ function render(data){
         + '<div class="chart-wrap"><canvas id="eq-' + esc(h) + '"></canvas></div></div>';
     }
   });
+
+  // Lectura guiada (S5b): debajo de tablas y curvas.
+  html += analysisSignal(data);
 
   res.innerHTML = html || '<div class="empty">Sin datos para estos filtros.</div>';
   eqKeys.forEach(h => { if(Array.isArray(eq[h]) && eq[h].length) drawEquity('eq-' + h, eq[h]); });
@@ -754,6 +852,9 @@ function renderForecast(data){
       + '<span class="obj">(esperado 10 / 40 / 40 / 10 %)</span></div>'
       + '<div class="chart-wrap"><canvas id="pit-' + esc(h) + '"></canvas></div></div>';
   });
+
+  // Lectura guiada (S5b): debajo de tablas, notas y PIT.
+  html += analysisForecast(data);
 
   res.innerHTML = html || '<div class="empty">Sin datos para estos filtros.</div>';
   pitKeys.forEach(h => drawPIT('pit-' + h, pit[h]));
