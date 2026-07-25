@@ -9297,6 +9297,13 @@ function phSliceReset(){
   phPaintValueChart();
 }
 
+/* Resalta por símbolo (desde la tabla de posiciones) reutilizando la misma ruta
+   que el hover del donut: encuentra la rebanada y delega en phSlice. */
+function phHiliteSym(sym){
+  const i = (PH_SLICES||[]).findIndex(s=>s.label===sym);
+  if(i>=0) phSlice(i); else { PH_ACTIVE_TICKER=null; phPaintValueChart(); }
+}
+
 /* ── Tabla de posiciones ─────────────────────────────────────────────── */
 function phClassChip(ac){
   if(!ac) return '';
@@ -9326,7 +9333,7 @@ function renderHomeTable(){
     if(pl!=null && !isNaN(pl)) tPl+=pl;
     const plCls = (pl!=null && pl<0) ? 'ph-neg' : 'ph-pos';
     const wPct = (eq && v!=null) ? (v/eq*100) : null;
-    return `<tr onclick="pick('${p.symbol}')" title="Abrir ${p.symbol} en la gráfica">
+    return `<tr onclick="pick('${p.symbol}')" onmouseover="phHiliteSym('${p.symbol}')" onmouseout="phSliceReset()" title="Abrir ${p.symbol} en la gráfica">
       <td><span class="ph-row-sym">${p.symbol}</span>${phClassChip(p.asset_class)}</td>
       <td>${p.qty!=null && !isNaN(p.qty) ? (+p.qty).toLocaleString('en-US',{maximumFractionDigits:6}) : '—'}</td>
       <td>${fP(p.avg_entry_price)}</td>
@@ -9446,24 +9453,37 @@ function phPaintValueChart(){
   const ctx=canvas.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
 
-  // Escala: cuenta + SPY (NO las líneas de ticker) → estado por defecto idéntico a hoy.
+  // Escala ESTANDARIZADA: cuenta + SPY + TODAS las líneas de ticker. Como cada
+  // ticker se rebasa al valor inicial de la cuenta (misma base que SPY), todas
+  // las series comparten un único eje de "retorno" y caben en el mismo rango sin
+  // recortarse. Antes el eje se calculaba solo con cuenta+SPY y las líneas de
+  // ticker (p.ej. TSLA con volatilidad muy superior a la cuenta) se salían del
+  // área y el clip() las cortaba. Un pequeño padding evita que la serie más
+  // extrema toque el borde.
   let lo=Math.min(...vals), hi=Math.max(...vals);
   if(spy){ lo=Math.min(lo, ...spy); hi=Math.max(hi, ...spy); }
+  if(tickerLines && tickerLines.length){
+    tickerLines.forEach(L=>{ for(const v of L.vals){ if(v<lo)lo=v; if(v>hi)hi=v; } });
+  }
+  const pad=((hi-lo)||1)*0.04; lo-=pad; hi+=pad;
   const span=(hi-lo)||1;
   const PL=8, PR=8, PT=10, PB=18, cW=W-PL-PR, cH=H-PT-PB;
   const xN=(i,n)=> PL + (n<=1 ? cW/2 : i/(n-1)*cW);
   const x=i=> xN(i, vals.length);
   const y=v=> PT + cH - ((v-lo)/span)*cH;
 
-  // área de la cuenta
+  // Hay un ticker (no SPY) resaltado → se atenúa el resumen de la cuenta y SPY
+  // para que la línea del ticker señalado destaque ("sombrear" el fondo).
+  const active = PH_ACTIVE_TICKER;
+  const tickerFocus = !!(active && active!=='SPY');
+
+  // área de la cuenta (se atenúa el relleno cuando manda un ticker)
   ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
   vals.forEach((v,i)=>ctx.lineTo(x(i), y(v)));
   ctx.lineTo(x(vals.length-1), PT+cH); ctx.lineTo(x(0), PT+cH); ctx.closePath();
   const grad=ctx.createLinearGradient(0,PT,0,PT+cH);
   grad.addColorStop(0,'rgba(77,158,247,.28)'); grad.addColorStop(1,'rgba(77,158,247,0)');
-  ctx.fillStyle=grad; ctx.fill();
-
-  const active = PH_ACTIVE_TICKER;
+  ctx.fillStyle=grad; ctx.globalAlpha = tickerFocus ? 0.3 : 1; ctx.fill(); ctx.globalAlpha=1;
 
   // líneas de ticker de fondo (tenues), recortadas al área de la curva
   if(tickerLines && tickerLines.length){
@@ -9483,6 +9503,7 @@ function phPaintValueChart(){
     ctx.beginPath();
     spy.forEach((v,j)=>{ const xx=xN(j,spy.length), yy=y(v); j?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy); });
     if(active==='SPY'){ ctx.setLineDash([]); ctx.strokeStyle='rgba(245,197,24,1)'; ctx.lineWidth=1.9; }
+    else if(tickerFocus){ ctx.setLineDash([4,3]); ctx.strokeStyle='rgba(245,197,24,.2)'; ctx.lineWidth=1; }
     else { ctx.setLineDash([4,3]); ctx.strokeStyle='rgba(245,197,24,.55)'; ctx.lineWidth=1.2; }
     ctx.stroke(); ctx.setLineDash([]);
   }
@@ -9499,10 +9520,13 @@ function phPaintValueChart(){
     }
   }
 
-  // línea de la cuenta (SIEMPRE resaltada, al frente de todo)
+  // línea de la cuenta: resaltada por defecto; atenuada (sombreada) cuando se
+  // señala un ticker, para que la línea del ticker mande.
   ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
   vals.forEach((v,i)=>ctx.lineTo(x(i), y(v)));
-  ctx.strokeStyle='#4d9ef7'; ctx.lineWidth=1.6; ctx.lineJoin='round'; ctx.stroke();
+  if(tickerFocus){ ctx.strokeStyle='rgba(77,158,247,.3)'; ctx.lineWidth=1.1; }
+  else { ctx.strokeStyle='#4d9ef7'; ctx.lineWidth=1.6; }
+  ctx.lineJoin='round'; ctx.stroke();
 
   // leyenda (idéntica a hoy)
   if(legendEl){
