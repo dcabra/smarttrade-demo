@@ -1020,6 +1020,24 @@ body.home-mode #cp-home{display:flex}
 .ph-empty-icon{font-size:22px;opacity:.45}
 .ph-empty-msg{font-size:12.5px;color:var(--text2);max-width:300px;line-height:1.5}
 .ph-empty-note{font-size:10px;color:var(--text3)}
+/* ── Eficiencia del modelo (S2 · roadmap home) · card autocontenida ── */
+.phe-motor{font-size:10px;font-weight:600;color:var(--orange);background:rgba(243,156,18,.10);border:1px solid rgba(243,156,18,.28);border-radius:4px;padding:2px 7px}
+.phe-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+@media (max-width:640px){.phe-body{grid-template-columns:1fr}}
+.phe-half{padding:14px 16px;min-width:0}
+.phe-half + .phe-half{border-left:1px solid var(--border)}
+@media (max-width:640px){.phe-half + .phe-half{border-left:none;border-top:1px solid var(--border)}}
+.phe-lbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.phe-hero{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.phe-num{font-size:30px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;line-height:1}
+.phe-unit{font-size:11px;color:var(--text3)}
+.phe-sub2{margin-top:5px;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text2)}
+.phe-delta{font-size:10px;font-weight:700;border-radius:4px;padding:2px 6px;white-space:nowrap}
+.phe-foot{margin-top:7px;font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums}
+.phe-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:150px;gap:6px}
+.phe-empty-msg{font-size:12px;color:var(--text2);font-weight:600;max-width:250px;line-height:1.4}
+.phe-empty-note{font-size:10px;color:var(--text3);max-width:270px;line-height:1.5}
+.phe-skel{padding:20px 16px;font-size:11px;color:var(--text3)}
 
 /* asignación (donut SVG) */
 .ph-alloc{display:flex;flex-direction:column;gap:12px;padding:14px;align-items:center}
@@ -1577,6 +1595,29 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
           <span class="ph-card-sub" id="ph-pos-count"></span>
         </div>
         <div class="ph-table-wrap" id="ph-table"></div>
+      </div>
+
+      <!-- ═══ Eficiencia del modelo (S2 · roadmap home) ══════════════════════
+           Frontend puro. Motor VIVO leído por-respuesta (pheMotorVivo → confMotor
+           sobre CACHE, default v2 · espejo de motorBadge). NO toca MOTOR_V3 /
+           motor_flags / usa_v3() / data_fetcher. Fetch one-shot con TTL fuera del
+           hot-path de renderHome. Forecast v3 → 422 → degrada solo su mitad con el
+           detail real. Revert trivial: bloque autocontenido (esta card + CSS phe-*
+           + funciones phe* + 1 línea en renderHome). -->
+      <div class="ph-card" id="phe-card" style="display:none">
+        <div class="ph-card-hdr">
+          <div class="ph-card-hdr-left">
+            <span class="ph-card-title">Eficiencia del modelo</span>
+            <span class="phe-motor" id="phe-motor" style="display:none">motor v3</span>
+            <span class="ph-card-sub" id="phe-sub"></span>
+          </div>
+          <div class="ph-range" id="phe-hz">
+            <button class="ph-rbtn" data-h="1" onclick="pheSetHz(this)">1D</button>
+            <button class="ph-rbtn on" data-h="3" onclick="pheSetHz(this)">3D</button>
+            <button class="ph-rbtn" data-h="7" onclick="pheSetHz(this)">7D</button>
+          </div>
+        </div>
+        <div class="phe-body" id="phe-body"></div>
       </div>
     </div>
 
@@ -9079,6 +9120,196 @@ function renderHome(){
   renderHomeTable();
   renderPortfolioValueChart(PH_RANGE);
   ensureSpyBenchmark();   // el OHLCV de SPY no se cachea solo en Home-first boot
+  pheLoad();              // S2 · eficiencia del modelo · one-shot con TTL, fire-and-forget
+}
+
+/* ═══ S2 · Eficiencia del modelo (señal + forecast) ═══════════════════════════
+   Frontend puro sobre dos endpoints de LECTURA (POST /v1/backtest/recompute y
+   /v1/backtest/forecast, ambos require_session → brokerFetch). NO toca el motor.
+   El motor se lee VIVO y por-respuesta (pheMotorVivo, espejo de motorBadge): con
+   MOTOR_V3 apagado ningún payload trae motor_version ⇒ 'v2' y el chip no pinta.
+   Tras el flip, forecast v3 responde 422 y degrada SOLO su mitad. */
+let PHE_STATE = null;          // { motor, at, rc, fc, fcError, error }
+let PHE_HZ = '3';              // horizonte titular (1|3|7) · cambia sin re-pegar POST
+let PHE_LOADING = false;
+const PHE_TTL_MS = 5 * 60 * 1000;
+
+function pheEsc(s){
+  return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+/* Motor vivo del libro, leído de las señales cacheadas. Espeja la doctrina de
+   confMotor: por-respuesta, nunca un flag global; sin etiqueta ⇒ v2. Si algún
+   ticker del portafolio corre v3, la card se declara v3 (y el forecast degradará). */
+function pheMotorVivo(){
+  try{
+    const ts = (typeof TICKERS !== 'undefined' && TICKERS) ? TICKERS : [];
+    for(const t of ts){
+      const s = (typeof CACHE !== 'undefined' && CACHE[t]) ? CACHE[t].sig : null;
+      if(s && typeof confMotor === 'function' && confMotor(s) === 'v3') return 'v3';
+    }
+  }catch(e){}
+  return 'v2';
+}
+
+/* Sparkline de la curva de equity (mismo patrón SVG que el resto del front). */
+function pheSpark(curva, positive){
+  if(!curva || curva.length < 2) return '<div class="phe-foot" style="text-align:center;padding:14px 0">sin curva en el tramo</div>';
+  const W = 300, H = 40;
+  const vals = curva.map(p => p.valor);
+  const min = Math.min(...vals), max = Math.max(...vals), rng = (max - min) || 1;
+  const pts = curva.map((p, i) => {
+    const x = (i / (curva.length - 1)) * W;
+    const y = H - 2 - ((p.valor - min) / rng) * (H - 4);
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  }).join(' ');
+  const col = positive ? 'var(--green)' : 'var(--red)';
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:40px;display:block;margin-top:10px">'
+       + '<line x1="0" y1="' + (H/2) + '" x2="' + W + '" y2="' + (H/2) + '" stroke="var(--border)" stroke-width="1"/>'
+       + '<polyline points="' + pts + '" fill="none" stroke="' + col + '" stroke-width="1.4" vector-effect="non-scaling-stroke"/>'
+       + '</svg>';
+}
+
+/* Mini-histograma PIT (4 zonas) con la guía punteada de calibración ideal 10/40/40/10. */
+function phePit(pit){
+  const W = 300, H = 40, bw = 54, gap = (W - bw * 4) / 5;
+  const total = pit.reduce((a, b) => a + b, 0) || 1;
+  const pct = pit.map(c => 100 * c / total);
+  const ideal = [10, 40, 40, 10];
+  const max = Math.max(...pct, ...ideal) || 1;
+  let bars = '';
+  for(let i = 0; i < 4; i++){
+    const x = gap + i * (bw + gap);
+    const hA = (pct[i] / max) * (H - 4), hI = (ideal[i] / max) * (H - 4);
+    bars += '<rect x="' + x.toFixed(1) + '" y="' + (H - hA).toFixed(1) + '" width="' + bw + '" height="' + hA.toFixed(1) + '" fill="var(--blue)" opacity="0.85" rx="1"/>';
+    bars += '<line x1="' + x.toFixed(1) + '" y1="' + (H - hI).toFixed(1) + '" x2="' + (x + bw).toFixed(1) + '" y2="' + (H - hI).toFixed(1) + '" stroke="var(--text2)" stroke-width="1.2" stroke-dasharray="3 2"/>';
+  }
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:40px;display:block;margin-top:10px">' + bars + '</svg>'
+       + '<div style="display:flex;justify-content:space-between;margin-top:2px;font-size:9px;color:var(--text3)"><span>&lt;p10</span><span>p10&ndash;p50</span><span>p50&ndash;p90</span><span>&ge;p90</span></div>';
+}
+
+/* Pinta la card desde PHE_STATE + PHE_HZ. Idempotente · CERO fetch. */
+function pheRender(){
+  const body = $('phe-body'); if(!body) return;
+  const st = PHE_STATE;
+  const motorEl = $('phe-motor'), subEl = $('phe-sub');
+
+  if(motorEl) motorEl.style.display = (st && st.motor === 'v3') ? '' : 'none';
+
+  if(!st){ body.innerHTML = '<div class="phe-skel">Cargando eficiencia del modelo&hellip;</div>'; if(subEl) subEl.textContent=''; return; }
+
+  if(st.error){
+    if(subEl) subEl.textContent = '';
+    body.innerHTML = '<div class="phe-empty" style="grid-column:1/-1"><div class="phe-empty-msg">Eficiencia no disponible</div><div class="phe-empty-note">' + pheEsc(st.error) + '</div></div>';
+    return;
+  }
+
+  const hz = PHE_HZ;
+  const rc = st.rc;
+
+  /* ── Mitad A · Acierto de señal ─────────────────────────────────────────── */
+  let sigHtml;
+  const ph = rc && rc.por_horizonte && rc.por_horizonte[hz];
+  const tot = ph && ph.total;
+  if(!tot || tot.n === 0 || tot.win_rate == null){
+    sigHtml = '<div class="phe-half"><div class="phe-lbl">Acierto de se&ntilde;al</div><div class="phe-empty"><div class="phe-empty-msg">Sin se&ntilde;ales en el tramo</div><div class="phe-empty-note">El libro no registr&oacute; operaciones evaluables a ' + hz + 'D.</div></div></div>';
+  }else{
+    const exp = tot.retorno_promedio;
+    const pos = (exp != null) && exp >= 0;
+    const expTxt = (exp == null) ? '&mdash;' : (pos ? '+' : '') + Number(exp).toFixed(2) + '% / operaci&oacute;n';
+    const expCol = (exp == null) ? 'var(--text2)' : (pos ? 'var(--green)' : 'var(--red)');
+    const buyN = (ph.buy && ph.buy.n) || 0, sellN = (ph.sell && ph.sell.n) || 0, tt = buyN + sellN;
+    const buyPct = tt ? Math.round(100 * buyN / tt) : 0, sellPct = tt ? (100 - buyPct) : 0;
+    const curva = rc.curva_equity && rc.curva_equity[hz];
+    sigHtml = '<div class="phe-half">'
+      + '<div class="phe-lbl">Acierto de se&ntilde;al</div>'
+      + '<div class="phe-hero"><span class="phe-num">' + Math.round(tot.win_rate) + '%</span><span class="phe-unit">win-rate</span></div>'
+      + '<div class="phe-sub2">expectancy <span style="color:' + expCol + ';font-weight:700">' + expTxt + '</span></div>'
+      + pheSpark(curva, pos)
+      + '<div class="phe-foot">n=' + tot.n + ' &middot; BUY ' + buyPct + '% &middot; SELL ' + sellPct + '% &middot; P&amp;L acumulado, normalizado a 100</div>'
+      + '</div>';
+  }
+
+  /* ── Mitad B · Calibración del forecast ─────────────────────────────────── */
+  let fcHtml;
+  if(st.fcError){
+    fcHtml = '<div class="phe-half"><div class="phe-lbl">Calibraci&oacute;n del forecast</div><div class="phe-empty"><div class="phe-empty-msg">Forecast ' + (st.motor === 'v3' ? 'v3 ' : '') + 'no backtesteable desde el libro</div><div class="phe-empty-note">' + pheEsc(st.fcError) + '</div></div></div>';
+  }else{
+    const fph = st.fc && st.fc.por_horizonte && st.fc.por_horizonte[hz];
+    if(!fph || fph.n === 0 || fph.cobertura_80 == null){
+      fcHtml = '<div class="phe-half"><div class="phe-lbl">Calibraci&oacute;n del forecast</div><div class="phe-empty"><div class="phe-empty-msg">Sin forecast evaluable</div><div class="phe-empty-note">No hay puntos de calibraci&oacute;n a ' + hz + 'D en el tramo.</div></div></div>';
+    }else{
+      const cov = fph.cobertura_80;
+      const dv = Math.round(cov - 80), under = dv < 0;
+      const dCol = under ? 'var(--orange)' : 'var(--green)';
+      const dBg  = under ? 'rgba(243,156,18,.10)' : 'rgba(46,204,113,.10)';
+      const dBd  = under ? 'rgba(243,156,18,.25)' : 'rgba(46,204,113,.28)';
+      const sesgo = fph.sesgo_p50, mae = fph.mae_p50, ancho = fph.ancho_medio_pct;
+      const tip = 'sesgo p50 ' + (sesgo == null ? '\u2014' : (sesgo >= 0 ? '+' : '') + Number(sesgo).toFixed(1) + '%') + ' \u00b7 MAE ' + (mae == null ? '\u2014' : Number(mae).toFixed(1) + '%');
+      const pitArr = (st.fc.pit && st.fc.pit[hz]) ? st.fc.pit[hz] : [0, 0, 0, 0];
+      fcHtml = '<div class="phe-half" title="' + pheEsc(tip) + '">'
+        + '<div class="phe-lbl">Calibraci&oacute;n del forecast</div>'
+        + '<div class="phe-hero"><span class="phe-num">' + Math.round(cov) + '%</span><span class="phe-unit">cobertura p10&ndash;p90</span>'
+        + '<span class="phe-delta" style="color:' + dCol + ';background:' + dBg + ';border:1px solid ' + dBd + '">' + (dv >= 0 ? '+' : '') + dv + ' vs 80</span></div>'
+        + phePit(pitArr)
+        + '<div class="phe-foot">n=' + fph.n + ' &middot; ancho medio ' + (ancho == null ? '&mdash;' : Number(ancho).toFixed(1) + '%') + ' &middot; gu&iacute;a = calibraci&oacute;n ideal 10/40/40/10</div>'
+        + '</div>';
+    }
+  }
+
+  /* Sub-cabecera: ventana + aviso de muestra chica (detalle en el title). */
+  if(subEl){
+    const dias = rc && rc.dias, tks = rc && rc.tickers;
+    const adv = (rc && rc.advertencias) || [];
+    let subTxt = (dias != null ? dias + 'd' : '') + (tks != null ? ' \u00b7 ' + tks + ' tickers' : '');
+    subEl.innerHTML = pheEsc(subTxt) + (adv.length ? ' <span style="color:var(--orange)" title="' + pheEsc(adv.join(' | ')) + '">&#9888;</span>' : '');
+  }
+
+  body.innerHTML = sigHtml + fcHtml;
+}
+
+/* Toggle de horizonte · re-pinta desde datos cacheados, sin tocar la red. */
+function pheSetHz(btn){
+  document.querySelectorAll('#phe-hz .ph-rbtn').forEach(b => b.classList.toggle('on', b === btn));
+  PHE_HZ = btn.getAttribute('data-h') || '3';
+  pheRender();
+}
+
+/* Carga one-shot con TTL. Fuera del hot-path: renderHome la dispara fire-and-forget;
+   dentro del TTL (y con el mismo motor) NO re-pega los POST. Los estados de error
+   NO se consideran frescos ⇒ se reintentan en el próximo renderHome. */
+async function pheLoad(){
+  const card = $('phe-card'); if(!card) return;
+  card.style.display = '';
+  const motor = pheMotorVivo();
+  const fresh = PHE_STATE && !PHE_STATE.error && PHE_STATE.motor === motor && (Date.now() - PHE_STATE.at) < PHE_TTL_MS;
+  if(fresh){ pheRender(); return; }
+  if(PHE_LOADING) return;
+  PHE_LOADING = true;
+  if(!PHE_STATE) pheRender();   // skeleton
+
+  const base = { horizontes: [1, 3, 7], solo_tramo_limpio: true };
+  const next = { motor: motor, at: Date.now(), rc: null, fc: null, fcError: null, error: null };
+
+  try{
+    next.rc = await brokerFetch('/v1/backtest/recompute', { method: 'POST', body: Object.assign({}, base, { scorer: motor, lado: 'ambos' }) });
+  }catch(e){
+    if(e.code === 'NO_TOKEN' || e.code === 'UNAUTHORIZED'){ card.style.display = 'none'; PHE_LOADING = false; return; }
+    next.error = e.message || 'No se pudo recomputar el modelo.';
+  }
+
+  if(!next.error){
+    try{
+      next.fc = await brokerFetch('/v1/backtest/forecast', { method: 'POST', body: Object.assign({}, base, { motor: motor, incluir_pit: true }) });
+    }catch(e){
+      if(e.code === 'NO_TOKEN' || e.code === 'UNAUTHORIZED'){ card.style.display = 'none'; PHE_LOADING = false; return; }
+      next.fcError = e.message || 'Forecast no disponible.';   // 422 (v3) u otro → degrada solo esta mitad
+    }
+  }
+
+  PHE_STATE = next;
+  PHE_LOADING = false;
+  pheRender();
 }
 
 /* El benchmark SPY usa el OHLCV de SPY. En arranque directo al Home ese cache
