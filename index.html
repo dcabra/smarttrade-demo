@@ -9035,7 +9035,7 @@ let PH_TICKER_TRIED = {}; // control de reintento del fetch de historia por sím
 /* Paleta categórica neutra (tintes de marca). NO usa los colores semánticos
    de trading (verde=BUY, rojo=SELL, etc.) para no dar lecturas falsas en las
    rebanadas. "Efectivo" va aparte, en un gris azulado apagado. */
-const PH_SLICE_COLORS = ['#4d9ef7','#f5c518','#a855f7','#2dd4bf','#6366f1','#e879a6','#38bdf8','#fbbf24','#c084fc','#7dd3fc'];
+const PH_SLICE_COLORS = ['#22d3ee','#f5c518','#a855f7','#2dd4bf','#6366f1','#e879a6','#38bdf8','#fbbf24','#c084fc','#7dd3fc'];
 const PH_CASH_COLOR   = '#3d5070';
 
 /* Monto con signo explícito (P&L): +$123.45 / −$67.80 */
@@ -9601,6 +9601,9 @@ function phPaintValueChart(){
   const active = PH_ACTIVE_TICKER;
   const focus = !!active;
   const tickerFocus = !!(active && active!=='SPY');
+  // Color de SPY tomado de su rebanada en la dona → correspondencia 1:1 entre la
+  // línea (benchmark) y el donut. Fallback si SPY no está entre las posiciones.
+  const spyColor = ((PH_SLICES||[]).find(s=>s.label==='SPY')||{}).color || '#22d3ee';
 
   // área de la cuenta (se atenúa el relleno cuando manda una serie seleccionada)
   ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
@@ -9623,14 +9626,16 @@ function phPaintValueChart(){
     ctx.restore();
   }
 
-  // benchmark SPY: dashed/tenue por defecto; pleno si el segmento SPY está activo
+  // benchmark SPY: mismo color que su rebanada en la dona. Punteado/tenue por
+  // defecto; pleno si SPY está seleccionado; muy tenue si manda otro ticker.
   if(spy){
     ctx.beginPath();
     spy.forEach((v,j)=>{ const xx=xN(j,spy.length), yy=y(v); j?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy); });
-    if(active==='SPY'){ ctx.setLineDash([]); ctx.strokeStyle='rgba(245,197,24,1)'; ctx.lineWidth=1.9; }
-    else if(tickerFocus){ ctx.setLineDash([4,3]); ctx.strokeStyle='rgba(245,197,24,.2)'; ctx.lineWidth=1; }
-    else { ctx.setLineDash([4,3]); ctx.strokeStyle='rgba(245,197,24,.55)'; ctx.lineWidth=1.2; }
-    ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle=spyColor;
+    if(active==='SPY'){ ctx.setLineDash([]); ctx.globalAlpha=1; ctx.lineWidth=1.9; }
+    else if(tickerFocus){ ctx.setLineDash([4,3]); ctx.globalAlpha=.22; ctx.lineWidth=1; }
+    else { ctx.setLineDash([4,3]); ctx.globalAlpha=.6; ctx.lineWidth=1.2; }
+    ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1;
   }
 
   // ticker activo (color pleno, al frente pero por debajo de la línea de cuenta)
@@ -9674,8 +9679,7 @@ function phPaintValueChart(){
   if(legendEl){
     legendEl.innerHTML = `
       <span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:#4d9ef7"></span>Cuenta</span>`
-      + (spy ? `<span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:rgba(245,197,24,.7);border-top-style:dashed"></span>Mercado · S&amp;P 500 (ref.)</span>` : '')
-      + phOverlayStatusHTML();
+      + (spy ? `<span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:${spyColor};border-top-style:dashed"></span>SPY · S&amp;P 500 (ref.)</span>` : '');
   }
 
   // puntos pixelados para el tooltip (coordenadas CSS px)
