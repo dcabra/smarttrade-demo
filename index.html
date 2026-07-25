@@ -9284,7 +9284,26 @@ function phSlice(i){
   // Encender la línea del ticker en la curva (mismo color del donut). 'SPY' resalta
   // el benchmark; Efectivo / modo 'class' → sin línea que encender.
   PH_ACTIVE_TICKER = (PH_ALLOC_MODE==='pos' && s.label && s.label!=='Efectivo') ? s.label : null;
+  if(PH_ACTIVE_TICKER && PH_ACTIVE_TICKER!=='SPY') phLazyTickerHistory(PH_ACTIVE_TICKER);
   phPaintValueChart();
+}
+
+/* Carga bajo demanda de la historia de un ticker al señalarlo, por si aún no
+   llegó por el prefetch de fondo (phEnsureTickerHistories). Trae el OHLCV, lo
+   cachea y repinta con la línea ya presente. Guarda contra fetches duplicados. */
+const PH_LAZY_INFLIGHT = {};
+function phLazyTickerHistory(sym){
+  if(!sym || sym==='SPY') return;
+  const cached = CACHE[sym] && CACHE[sym].ohlcv && CACHE[sym].ohlcv.candles && CACHE[sym].ohlcv.candles.length;
+  if(cached || PH_LAZY_INFLIGHT[sym]) return;
+  PH_LAZY_INFLIGHT[sym] = true;
+  get(buildOhlcvUrl(sym)).then(o=>{
+    if(o && o.candles && o.candles.length){
+      if(!CACHE[sym]) CACHE[sym]={};
+      CACHE[sym].ohlcv = o;
+      if(CP_VIEW==='home' && PH_DRAW){ PH_DRAW.tickerLines = phBuildTickerLines(); phPaintValueChart(); }
+    }
+  }).catch(()=>{}).finally(()=>{ PH_LAZY_INFLIGHT[sym]=false; });
 }
 function phSliceReset(){
   document.querySelectorAll('.ph-donut-wrap svg circle').forEach(c=>c.setAttribute('stroke-width','22'));
@@ -9384,7 +9403,11 @@ function phRebasedCloses(symbol, startValue, t0, t1){
   if(t0!=null && t1!=null){
     const lo=Math.min(t0,t1), hi=Math.max(t0,t1);
     const win = candles.filter(c=>{ const ms=candleMs(c); return !isNaN(ms) && ms>=lo && ms<=hi; });
-    if(win.length>=2) sub = win; else return null;
+    // FAIL-OPEN: el overlay es cosmético/aproximado. Si la ventana [t0,t1] no
+    // cubre ≥2 velas (fechas desalineadas, rango muy corto, caché parcial), en
+    // vez de ocultar la línea se usan TODAS las velas disponibles. Mejor mostrar
+    // la forma aproximada del ticker que no mostrar nada.
+    if(win.length>=2) sub = win;
   }
   const closes = sub.map(c=>c.close).filter(v=>v!=null && !isNaN(v));
   if(closes.length<2 || !closes[0]) return null;
