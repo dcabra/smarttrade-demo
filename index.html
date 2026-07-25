@@ -9026,6 +9026,9 @@ let PH_SLICES = [];       // rebanadas actuales (para el hover de la dona)
 let PH_DAYPL_SEQ = 0;     // guard del fetch de P&L del día
 let PH_PTS = [];          // puntos pixelados de la curva (para el tooltip)
 let PH_SPY_PTS = [];      // puntos pixelados del benchmark SPY (para el tooltip)
+let PH_ACTIVE_TICKER = null; // ticker con la línea "encendida" por hover del donut ('SPY' = benchmark)
+let PH_DRAW = null;       // estado de dibujo de la curva (repintado en hover SIN red)
+let PH_TICKER_TRIED = {}; // control de reintento del fetch de historia por símbolo
 
 /* Paleta categórica neutra (tintes de marca). NO usa los colores semánticos
    de trading (verde=BUY, rojo=SELL, etc.) para no dar lecturas falsas en las
@@ -9259,6 +9262,11 @@ function phSetAllocMode(btn){
   PH_ALLOC_MODE = btn.dataset.m;
   document.querySelectorAll('#ph-alloc-toggle .ph-tbtn').forEach(b=>b.classList.toggle('on', b===btn));
   renderHomeAllocation();
+  // El overlay de líneas solo aplica en modo 'pos' (rebanada = ticker, color 1:1).
+  // En 'class' se limpia (curva idéntica a hoy); al volver a 'pos' se reconstruye.
+  PH_ACTIVE_TICKER = null;
+  if(PH_DRAW){ PH_DRAW.tickerLines = phBuildTickerLines(); phPaintValueChart(); }
+  if(PH_ALLOC_MODE==='pos') phEnsureTickerHistories();
 }
 
 /* Hover/tap de una rebanada → resaltar + detalle en el centro de la dona. */
@@ -9273,6 +9281,10 @@ function phSlice(i){
     c.innerHTML = `<span class="v" style="font-size:13px">${s.label}</span>
       <span class="l">${s.pct.toFixed(1)}% · ${fP(s.value)}</span>${plLine}`;
   }
+  // Encender la línea del ticker en la curva (mismo color del donut). 'SPY' resalta
+  // el benchmark; Efectivo / modo 'class' → sin línea que encender.
+  PH_ACTIVE_TICKER = (PH_ALLOC_MODE==='pos' && s.label && s.label!=='Efectivo') ? s.label : null;
+  phPaintValueChart();
 }
 function phSliceReset(){
   document.querySelectorAll('.ph-donut-wrap svg circle').forEach(c=>c.setAttribute('stroke-width','22'));
@@ -9280,6 +9292,9 @@ function phSliceReset(){
   const c=$('ph-donut-center');
   const total=PH_SLICES.reduce((a,s)=>a+s.value,0);
   if(c) c.innerHTML = `<span class="v">${fP(total)}</span><span class="l">Total</span>`;
+  // Apagar cualquier línea encendida → estado por defecto (todas tenues).
+  PH_ACTIVE_TICKER = null;
+  phPaintValueChart();
 }
 
 /* ── Tabla de posiciones ─────────────────────────────────────────────── */
@@ -9340,6 +9355,168 @@ function renderHomeTable(){
     </table>`;
 }
 
+/* ── Overlay de líneas de ticker (sombreadas, encendidas por hover del donut) ──
+   COSMÉTICO. No toca red nueva ni la forma del request: la historia de cada
+   ticker sale del MISMO endpoint de la vista de ticker (buildOhlcvUrl), cacheada
+   en CACHE[sym].ohlcv. El color sale de la ÚNICA fuente: la rebanada del donut. */
+
+/* Cierres de un símbolo rebasados EXACTAMENTE como el benchmark SPY: al valor
+   inicial de la cuenta y recortados a la ventana [t0,t1] del rango activo.
+   Misma normalización que getSpyBenchmark → misma escala. null si no hay datos. */
+function phRebasedCloses(symbol, startValue, t0, t1){
+  if(startValue==null || isNaN(startValue)) return null;
+  const candles = (CACHE[symbol] && CACHE[symbol].ohlcv && CACHE[symbol].ohlcv.candles) || null;
+  if(!candles || candles.length<2) return null;
+  const candleMs = c => {
+    const raw = (c.time!=null) ? c.time : c.date;
+    if(raw==null) return NaN;
+    if(typeof raw==='number') return raw*1000;
+    const ms = Date.parse(raw); return isNaN(ms) ? NaN : ms;
+  };
+  let sub = candles;
+  if(t0!=null && t1!=null){
+    const lo=Math.min(t0,t1), hi=Math.max(t0,t1);
+    const win = candles.filter(c=>{ const ms=candleMs(c); return !isNaN(ms) && ms>=lo && ms<=hi; });
+    if(win.length>=2) sub = win; else return null;
+  }
+  const closes = sub.map(c=>c.close).filter(v=>v!=null && !isNaN(v));
+  if(closes.length<2 || !closes[0]) return null;
+  return closes.map(c=> startValue * (c/closes[0]));
+}
+
+/* Mapa símbolo→color tomado 1:1 de las rebanadas del donut. Solo en modo 'pos'
+   (rebanada = ticker). SPY (ya es el benchmark) y Efectivo quedan fuera. */
+function phTickerColorMap(){
+  if(PH_ALLOC_MODE!=='pos') return {};
+  const m={};
+  (PH_SLICES||[]).forEach(s=>{ if(s.label && s.label!=='Efectivo' && s.label!=='SPY') m[s.label]=s.color; });
+  return m;
+}
+
+/* Arma las líneas rebaseadas a partir de PH_DRAW (ventana/valor inicial) y de lo
+   que YA esté cacheado. Un ticker sin historia disponible simplemente no aparece. */
+function phBuildTickerLines(){
+  if(!PH_DRAW) return [];
+  const { startVal, t0, t1 } = PH_DRAW;
+  const cmap = phTickerColorMap();
+  const lines=[];
+  Object.keys(cmap).forEach(sym=>{
+    const vals = phRebasedCloses(sym, startVal, t0, t1);
+    if(vals && vals.length>=2) lines.push({ symbol:sym, color:cmap[sym], vals });
+  });
+  return lines;
+}
+
+/* Trae en segundo plano la historia de los tickers que falten (N fetch con
+   límite de concurrencia), UNA sola vez por símbolo, y repinta cuando llegan.
+   Nada de red en hover: esto corre al entrar/renderizar la Vista Portafolio. */
+async function phEnsureTickerHistories(){
+  if(PH_ALLOC_MODE!=='pos') return;
+  const syms = (POSITIONS||[]).map(p=>p.symbol).filter(Boolean)
+    .filter(s=> s!=='SPY')  // SPY ya se asegura por ensureSpyBenchmark (es el benchmark)
+    .filter(s=> !(CACHE[s] && CACHE[s].ohlcv && CACHE[s].ohlcv.candles && CACHE[s].ohlcv.candles.length))
+    .filter(s=> !PH_TICKER_TRIED[s]);
+  if(!syms.length) return;
+  syms.forEach(s=> PH_TICKER_TRIED[s]=true);
+  const CONC=3; let idx=0, any=false;
+  async function worker(){
+    while(idx<syms.length){
+      const s=syms[idx++];
+      try{
+        const o=await get(buildOhlcvUrl(s));
+        if(o && o.candles && o.candles.length){ if(!CACHE[s]) CACHE[s]={}; CACHE[s].ohlcv=o; any=true; }
+        else PH_TICKER_TRIED[s]=false;   // permitir reintento posterior
+      }catch(e){ PH_TICKER_TRIED[s]=false; }
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(CONC,syms.length)}, worker));
+  if(any && CP_VIEW==='home' && PH_DRAW){ PH_DRAW.tickerLines = phBuildTickerLines(); phPaintValueChart(); }
+}
+
+/* Pintor PURO de la curva: lee PH_DRAW + PH_ACTIVE_TICKER y repinta el canvas.
+   NO hace red. La escala se calcula SOLO con cuenta + SPY (idéntica a hoy): las
+   líneas de ticker se recortan al área y nunca expanden el eje. Orden de capas:
+   área → tickers tenues → SPY → ticker activo (pleno) → línea de cuenta (siempre
+   al frente). */
+function phPaintValueChart(){
+  const wrap=$('ph-valuechart-wrap'), canvas=$('ph-value-canvas'), legendEl=$('ph-chart-legend');
+  if(!wrap || !canvas || !PH_DRAW) return;
+  if(canvas.style.display==='none') return;
+  const { series, vals, spy, tickerLines, dpr, W, H } = PH_DRAW;
+  const ctx=canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+
+  // Escala: cuenta + SPY (NO las líneas de ticker) → estado por defecto idéntico a hoy.
+  let lo=Math.min(...vals), hi=Math.max(...vals);
+  if(spy){ lo=Math.min(lo, ...spy); hi=Math.max(hi, ...spy); }
+  const span=(hi-lo)||1;
+  const PL=8, PR=8, PT=10, PB=18, cW=W-PL-PR, cH=H-PT-PB;
+  const xN=(i,n)=> PL + (n<=1 ? cW/2 : i/(n-1)*cW);
+  const x=i=> xN(i, vals.length);
+  const y=v=> PT + cH - ((v-lo)/span)*cH;
+
+  // área de la cuenta
+  ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
+  vals.forEach((v,i)=>ctx.lineTo(x(i), y(v)));
+  ctx.lineTo(x(vals.length-1), PT+cH); ctx.lineTo(x(0), PT+cH); ctx.closePath();
+  const grad=ctx.createLinearGradient(0,PT,0,PT+cH);
+  grad.addColorStop(0,'rgba(77,158,247,.28)'); grad.addColorStop(1,'rgba(77,158,247,0)');
+  ctx.fillStyle=grad; ctx.fill();
+
+  const active = PH_ACTIVE_TICKER;
+
+  // líneas de ticker de fondo (tenues), recortadas al área de la curva
+  if(tickerLines && tickerLines.length){
+    ctx.save(); ctx.beginPath(); ctx.rect(PL,PT,cW,cH); ctx.clip();
+    tickerLines.forEach(L=>{
+      if(L.symbol===active) return; // la activa se pinta al final, al frente
+      ctx.beginPath();
+      L.vals.forEach((v,j)=>{ const xx=xN(j,L.vals.length), yy=y(v); j?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy); });
+      ctx.globalAlpha=0.18; ctx.strokeStyle=L.color; ctx.lineWidth=1; ctx.lineJoin='round'; ctx.stroke();
+      ctx.globalAlpha=1;
+    });
+    ctx.restore();
+  }
+
+  // benchmark SPY: dashed/tenue por defecto; pleno si el segmento SPY está activo
+  if(spy){
+    ctx.beginPath();
+    spy.forEach((v,j)=>{ const xx=xN(j,spy.length), yy=y(v); j?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy); });
+    if(active==='SPY'){ ctx.setLineDash([]); ctx.strokeStyle='rgba(245,197,24,1)'; ctx.lineWidth=1.9; }
+    else { ctx.setLineDash([4,3]); ctx.strokeStyle='rgba(245,197,24,.55)'; ctx.lineWidth=1.2; }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  // ticker activo (color pleno, al frente pero por debajo de la línea de cuenta)
+  if(active && active!=='SPY' && tickerLines){
+    const L = tickerLines.find(t=>t.symbol===active);
+    if(L){
+      ctx.save(); ctx.beginPath(); ctx.rect(PL,PT,cW,cH); ctx.clip();
+      ctx.beginPath();
+      L.vals.forEach((v,j)=>{ const xx=xN(j,L.vals.length), yy=y(v); j?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy); });
+      ctx.globalAlpha=1; ctx.strokeStyle=L.color; ctx.lineWidth=1.9; ctx.lineJoin='round'; ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // línea de la cuenta (SIEMPRE resaltada, al frente de todo)
+  ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
+  vals.forEach((v,i)=>ctx.lineTo(x(i), y(v)));
+  ctx.strokeStyle='#4d9ef7'; ctx.lineWidth=1.6; ctx.lineJoin='round'; ctx.stroke();
+
+  // leyenda (idéntica a hoy)
+  if(legendEl){
+    legendEl.innerHTML = `
+      <span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:#4d9ef7"></span>Cuenta</span>`
+      + (spy ? `<span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:rgba(245,197,24,.7);border-top-style:dashed"></span>Mercado · S&amp;P 500 (ref.)</span>` : '');
+  }
+
+  // puntos pixelados para el tooltip (coordenadas CSS px)
+  PH_PTS = vals.map((v,i)=>({ px:x(i), py:y(v), t:series[i].t, v }));
+  PH_SPY_PTS = spy ? spy.map((v,j)=>({ px:xN(j,spy.length), v })) : [];
+  phBindChartHover();
+}
+
 /* ── Curva de valor (canvas nativo) ──────────────────────────────────── */
 function phSetRange(btn){
   PH_RANGE = btn.dataset.r;
@@ -9392,7 +9569,6 @@ async function renderPortfolioValueChart(range){
   if(W<10||H<10) return;
   canvas.width=W*dpr; canvas.height=H*dpr;
   canvas.style.width=W+'px'; canvas.style.height=H+'px';
-  const ctx=canvas.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,W,H);
 
   const vals=h.series.map(p=>p.v);
   const startVal=vals[0];
@@ -9404,46 +9580,14 @@ async function renderPortfolioValueChart(range){
   const t0 = h.series[0].t, t1 = h.series[h.series.length-1].t;
   const spy = getSpyBenchmark(startVal, t0, t1);
 
-  let lo=Math.min(...vals), hi=Math.max(...vals);
-  if(spy){ lo=Math.min(lo, ...spy); hi=Math.max(hi, ...spy); }
-  const span=(hi-lo)||1;
-  const PL=8, PR=8, PT=10, PB=18, cW=W-PL-PR, cH=H-PT-PB;
-  const xN=(i,n)=> PL + (n<=1 ? cW/2 : i/(n-1)*cW);
-  const x=i=> xN(i, vals.length);
-  const y=v=> PT + cH - ((v-lo)/span)*cH;
-
-  // área de la cuenta
-  ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
-  vals.forEach((v,i)=>ctx.lineTo(x(i), y(v)));
-  ctx.lineTo(x(vals.length-1), PT+cH); ctx.lineTo(x(0), PT+cH); ctx.closePath();
-  const grad=ctx.createLinearGradient(0,PT,0,PT+cH);
-  grad.addColorStop(0,'rgba(77,158,247,.28)'); grad.addColorStop(1,'rgba(77,158,247,0)');
-  ctx.fillStyle=grad; ctx.fill();
-
-  // benchmark SPY (línea punteada, tenue)
-  if(spy){
-    ctx.beginPath();
-    spy.forEach((v,j)=>{ const xx=xN(j,spy.length), yy=y(v); j?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy); });
-    ctx.setLineDash([4,3]); ctx.strokeStyle='rgba(245,197,24,.55)'; ctx.lineWidth=1.2; ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  // línea de la cuenta (encima)
-  ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
-  vals.forEach((v,i)=>ctx.lineTo(x(i), y(v)));
-  ctx.strokeStyle='#4d9ef7'; ctx.lineWidth=1.6; ctx.lineJoin='round'; ctx.stroke();
-
-  // leyenda
-  if(legendEl){
-    legendEl.innerHTML = `
-      <span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:#4d9ef7"></span>Cuenta</span>`
-      + (spy ? `<span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:rgba(245,197,24,.7);border-top-style:dashed"></span>Mercado · S&amp;P 500 (ref.)</span>` : '');
-  }
-
-  // Puntos pixelados para el tooltip (coordenadas CSS px, ctx ya escalado por dpr).
-  PH_PTS = vals.map((v,i)=>({ px:x(i), py:y(v), t:h.series[i].t, v }));
-  PH_SPY_PTS = spy ? spy.map((v,j)=>({ px:xN(j,spy.length), v })) : [];
-  phBindChartHover();
+  // Un render nuevo resetea el ticker activo (evita punteros colgantes si cambió
+  // la cartera). Se ensambla el estado de dibujo y se delega al pintor puro; las
+  // líneas de ticker se arman con lo cacheado y las que falten llegan en 2º plano.
+  PH_ACTIVE_TICKER = null;
+  PH_DRAW = { series:h.series, vals, spy, startVal, t0, t1, dpr, W, H, tickerLines:[] };
+  PH_DRAW.tickerLines = phBuildTickerLines();
+  phPaintValueChart();
+  phEnsureTickerHistories();
 }
 
 /* ── Tooltip de la curva (fecha + valor; SPY si está) ──────────────────── */
