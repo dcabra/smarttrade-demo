@@ -9027,6 +9027,7 @@ let PH_DAYPL_SEQ = 0;     // guard del fetch de P&L del día
 let PH_PTS = [];          // puntos pixelados de la curva (para el tooltip)
 let PH_SPY_PTS = [];      // puntos pixelados del benchmark SPY (para el tooltip)
 let PH_ACTIVE_TICKER = null; // ticker con la línea "encendida" por hover del donut ('SPY' = benchmark)
+let PH_LOCKED = null;        // índice de rebanada FIJADA por click (persiste al salir el mouse); null = sin fijar
 let PH_DRAW = null;       // estado de dibujo de la curva (repintado en hover SIN red)
 let PH_TICKER_TRIED = {}; // control de reintento del fetch de historia por símbolo
 
@@ -9210,6 +9211,7 @@ function phAllocSlices(){
 
 function renderHomeAllocation(){
   const wrap=$('ph-alloc'); if(!wrap) return;
+  PH_LOCKED = null; // re-render → los índices cambian; soltar cualquier fijado previo
   const slices = phAllocSlices();
   const total = slices.reduce((s,x)=>s+x.value,0);
   PH_SLICES = slices.map(s=>({ ...s, pct: total? s.value/total*100 : 0 }));
@@ -9231,11 +9233,11 @@ function renderHomeAllocation(){
     acc+=frac;
     return `<circle id="ph-arc-${i}" cx="${C}" cy="${C}" r="${R}" fill="none" stroke="${s.color}" stroke-width="${SW}"
               stroke-dasharray="${dash}" stroke-dashoffset="${offset}" transform="rotate(-90 ${C} ${C})"
-              onmouseover="phSlice(${i})" onmouseout="phSliceReset()" onclick="phSlice(${i})"/>`;
+              onmouseover="phSlice(${i})" onmouseout="phSliceLeave()" onclick="phLockSlice(${i})"/>`;
   }).join('');
 
   const legend = PH_SLICES.map((s,i)=>`
-    <div class="ph-leg-row" id="ph-leg-${i}" onmouseover="phSlice(${i})" onmouseout="phSliceReset()" onclick="phSlice(${i})">
+    <div class="ph-leg-row" id="ph-leg-${i}" onmouseover="phSlice(${i})" onmouseout="phSliceLeave()" onclick="phLockSlice(${i})">
       <span class="ph-leg-dot" style="background:${s.color}"></span>
       <span class="ph-leg-sym">${s.label}</span>
       <span class="ph-leg-pct">${s.pct.toFixed(1)}%</span>
@@ -9265,6 +9267,7 @@ function phSetAllocMode(btn){
   // El overlay de líneas solo aplica en modo 'pos' (rebanada = ticker, color 1:1).
   // En 'class' se limpia (curva idéntica a hoy); al volver a 'pos' se reconstruye.
   PH_ACTIVE_TICKER = null;
+  PH_LOCKED = null;
   if(PH_DRAW){ PH_DRAW.tickerLines = phBuildTickerLines(); phPaintValueChart(); }
   if(PH_ALLOC_MODE==='pos') phEnsureTickerHistories();
 }
@@ -9316,6 +9319,33 @@ function phSliceReset(){
   phPaintValueChart();
 }
 
+/* Click en una rebanada → FIJAR esa selección (persiste al salir el mouse).
+   Click en la ya fijada → soltar y volver al promedio del portafolio. */
+function phLockSlice(i){
+  const s=PH_SLICES[i]; if(!s) return;
+  if(PH_LOCKED===i){ PH_LOCKED=null; phSliceReset(); }
+  else { PH_LOCKED=i; phSlice(i); }
+}
+
+/* Al salir el mouse de una rebanada/fila: si hay una fijada, se vuelve a ella;
+   si no, al estado base (promedio del portafolio). */
+function phSliceLeave(){
+  if(PH_LOCKED!=null && PH_SLICES[PH_LOCKED]) phSlice(PH_LOCKED);
+  else phSliceReset();
+}
+
+/* Click fuera de la dona/leyenda → soltar el fijado y volver al estado inicial. */
+function phBindOutsideUnlock(){
+  if(phBindOutsideUnlock._done) return; phBindOutsideUnlock._done = true;
+  document.addEventListener('click', (e)=>{
+    if(PH_LOCKED==null || CP_VIEW!=='home') return;
+    const t=e.target;
+    const inside = t && t.closest && (t.closest('.ph-donut-wrap') || t.closest('.ph-legend'));
+    if(!inside){ PH_LOCKED=null; phSliceReset(); }
+  }, true);
+}
+phBindOutsideUnlock();
+
 /* Resalta por símbolo (desde la tabla de posiciones) reutilizando la misma ruta
    que el hover del donut: encuentra la rebanada y delega en phSlice. */
 function phHiliteSym(sym){
@@ -9352,7 +9382,7 @@ function renderHomeTable(){
     if(pl!=null && !isNaN(pl)) tPl+=pl;
     const plCls = (pl!=null && pl<0) ? 'ph-neg' : 'ph-pos';
     const wPct = (eq && v!=null) ? (v/eq*100) : null;
-    return `<tr onclick="pick('${p.symbol}')" onmouseover="phHiliteSym('${p.symbol}')" onmouseout="phSliceReset()" title="Abrir ${p.symbol} en la gráfica">
+    return `<tr onclick="pick('${p.symbol}')" onmouseover="phHiliteSym('${p.symbol}')" onmouseout="phSliceLeave()" title="Abrir ${p.symbol} en la gráfica">
       <td><span class="ph-row-sym">${p.symbol}</span>${phClassChip(p.asset_class)}</td>
       <td>${p.qty!=null && !isNaN(p.qty) ? (+p.qty).toLocaleString('en-US',{maximumFractionDigits:6}) : '—'}</td>
       <td>${fP(p.avg_entry_price)}</td>
@@ -9538,18 +9568,23 @@ function phPaintValueChart(){
     ctx.fillText(phFmtAxisMoney(tv), PL+cW+6, yy);
   });
 
-  // Hay un ticker (no SPY) resaltado → se atenúa el resumen de la cuenta y SPY
-  // para que la línea del ticker señalado destaque ("sombrear" el fondo).
+  // Hay una serie seleccionada → se atenúa el resumen de la cuenta para que la
+  // serie elegida destaque. 'focus' cubre CUALQUIER selección (incluida SPY):
+  // un benchmark solo tiene sentido comparado contra el portafolio, así que la
+  // cuenta no desaparece, pasa a segundo plano (sombreada) y SPY manda al frente.
+  // 'tickerFocus' distingue la atenuación EXTRA de la línea SPY cuando el foco es
+  // otro ticker distinto de SPY.
   const active = PH_ACTIVE_TICKER;
+  const focus = !!active;
   const tickerFocus = !!(active && active!=='SPY');
 
-  // área de la cuenta (se atenúa el relleno cuando manda un ticker)
+  // área de la cuenta (se atenúa el relleno cuando manda una serie seleccionada)
   ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
   vals.forEach((v,i)=>ctx.lineTo(x(i), y(v)));
   ctx.lineTo(x(vals.length-1), PT+cH); ctx.lineTo(x(0), PT+cH); ctx.closePath();
   const grad=ctx.createLinearGradient(0,PT,0,PT+cH);
   grad.addColorStop(0,'rgba(77,158,247,.28)'); grad.addColorStop(1,'rgba(77,158,247,0)');
-  ctx.fillStyle=grad; ctx.globalAlpha = tickerFocus ? 0.3 : 1; ctx.fill(); ctx.globalAlpha=1;
+  ctx.fillStyle=grad; ctx.globalAlpha = focus ? 0.3 : 1; ctx.fill(); ctx.globalAlpha=1;
 
   // líneas de ticker de fondo (tenues), recortadas al área de la curva
   if(tickerLines && tickerLines.length){
@@ -9586,11 +9621,11 @@ function phPaintValueChart(){
     }
   }
 
-  // línea de la cuenta: resaltada por defecto; atenuada (sombreada) cuando se
-  // señala un ticker, para que la línea del ticker mande.
+  // línea de la cuenta: resaltada por defecto; atenuada (sombreada) cuando hay
+  // una serie seleccionada (ticker o SPY), para que esa serie mande.
   ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
   vals.forEach((v,i)=>ctx.lineTo(x(i), y(v)));
-  if(tickerFocus){ ctx.strokeStyle='rgba(77,158,247,.3)'; ctx.lineWidth=1.1; }
+  if(focus){ ctx.strokeStyle='rgba(77,158,247,.3)'; ctx.lineWidth=1.1; }
   else { ctx.strokeStyle='#4d9ef7'; ctx.lineWidth=1.6; }
   ctx.lineJoin='round'; ctx.stroke();
 
