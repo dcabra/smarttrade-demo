@@ -9762,12 +9762,12 @@ async function renderPortfolioValueChart(range){
 }
 
 /* ── Tooltip de la curva (fecha + valor; SPY si está) ──────────────────── */
+/* PASO 1 (roadmap home): popup de hover DESACTIVADO a pedido. El binder queda
+   como no-op para no tocar phPaintValueChart ni PH_PTS; el recuadro #ph-chart-tt
+   y el punto #ph-chart-dot nunca se enganchan → no aparece nada al pasar el
+   cursor. Para revertir: restaurar el cuerpo original (git revert de este commit). */
 function phBindChartHover(){
-  const canvas=$('ph-value-canvas');
-  if(!canvas || canvas.dataset.ttBound) return;
-  canvas.dataset.ttBound='1';
-  canvas.addEventListener('mousemove', phChartHover);
-  canvas.addEventListener('mouseleave', phChartLeave);
+  return; // hover desactivado (sin popup ni punto)
 }
 function phChartHover(e){
   const wrap=$('ph-valuechart-wrap'), canvas=$('ph-value-canvas'), tt=$('ph-chart-tt'), dot=$('ph-chart-dot');
