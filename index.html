@@ -9028,6 +9028,7 @@ let PH_PTS = [];          // puntos pixelados de la curva (para el tooltip)
 let PH_SPY_PTS = [];      // puntos pixelados del benchmark SPY (para el tooltip)
 let PH_ACTIVE_TICKER = null; // ticker con la línea "encendida" por hover del donut ('SPY' = benchmark)
 let PH_LOCKED = null;        // índice de rebanada FIJADA por click (persiste al salir el mouse); null = sin fijar
+let PH_OVERLAY_STATUS = {};  // sym -> 'ok' | 'fail' | 'loading' : diagnóstico de carga OHLCV del overlay
 let PH_DRAW = null;       // estado de dibujo de la curva (repintado en hover SIN red)
 let PH_TICKER_TRIED = {}; // control de reintento del fetch de historia por símbolo
 
@@ -9085,11 +9086,13 @@ function renderHome(){
 let PH_SPY_TRIED = false;
 async function ensureSpyOhlcv(){
   if(typeof CACHE==='undefined') return false;
-  if(CACHE['SPY'] && CACHE['SPY'].ohlcv && CACHE['SPY'].ohlcv.candles && CACHE['SPY'].ohlcv.candles.length) return true;
+  if(CACHE['SPY'] && CACHE['SPY'].ohlcv && CACHE['SPY'].ohlcv.candles && CACHE['SPY'].ohlcv.candles.length){ PH_OVERLAY_STATUS['SPY']='ok'; return true; }
+  PH_OVERLAY_STATUS['SPY']='loading';
   try{
     const o = await get(buildOhlcvUrl('SPY'));
-    if(o){ if(!CACHE['SPY']) CACHE['SPY']={}; CACHE['SPY'].ohlcv=o; return !!(o.candles && o.candles.length); }
+    if(o){ if(!CACHE['SPY']) CACHE['SPY']={}; CACHE['SPY'].ohlcv=o; const ok=!!(o.candles && o.candles.length); PH_OVERLAY_STATUS['SPY']= ok?'ok':'fail'; return ok; }
   }catch(e){}
+  PH_OVERLAY_STATUS['SPY']='fail';
   return false;
 }
 async function ensureSpyBenchmark(){
@@ -9300,13 +9303,15 @@ function phLazyTickerHistory(sym){
   const cached = CACHE[sym] && CACHE[sym].ohlcv && CACHE[sym].ohlcv.candles && CACHE[sym].ohlcv.candles.length;
   if(cached || PH_LAZY_INFLIGHT[sym]) return;
   PH_LAZY_INFLIGHT[sym] = true;
+  PH_OVERLAY_STATUS[sym] = 'loading';
   get(buildOhlcvUrl(sym)).then(o=>{
     if(o && o.candles && o.candles.length){
       if(!CACHE[sym]) CACHE[sym]={};
       CACHE[sym].ohlcv = o;
+      PH_OVERLAY_STATUS[sym] = 'ok';
       if(CP_VIEW==='home' && PH_DRAW){ PH_DRAW.tickerLines = phBuildTickerLines(); phPaintValueChart(); }
-    }
-  }).catch(()=>{}).finally(()=>{ PH_LAZY_INFLIGHT[sym]=false; });
+    } else { PH_OVERLAY_STATUS[sym]='fail'; if(CP_VIEW==='home' && PH_DRAW) phPaintValueChart(); }
+  }).catch(()=>{ PH_OVERLAY_STATUS[sym]='fail'; }).finally(()=>{ PH_LAZY_INFLIGHT[sym]=false; });
 }
 function phSliceReset(){
   document.querySelectorAll('.ph-donut-wrap svg circle').forEach(c=>c.setAttribute('stroke-width','22'));
@@ -9478,19 +9483,22 @@ async function phEnsureTickerHistories(){
     .filter(s=> !PH_TICKER_TRIED[s]);
   if(!syms.length) return;
   syms.forEach(s=> PH_TICKER_TRIED[s]=true);
+  syms.forEach(s=> { if(!PH_OVERLAY_STATUS[s]) PH_OVERLAY_STATUS[s]='loading'; });
   const CONC=3; let idx=0, any=false;
   async function worker(){
     while(idx<syms.length){
       const s=syms[idx++];
       try{
         const o=await get(buildOhlcvUrl(s));
-        if(o && o.candles && o.candles.length){ if(!CACHE[s]) CACHE[s]={}; CACHE[s].ohlcv=o; any=true; }
-        else PH_TICKER_TRIED[s]=false;   // permitir reintento posterior
-      }catch(e){ PH_TICKER_TRIED[s]=false; }
+        if(o && o.candles && o.candles.length){ if(!CACHE[s]) CACHE[s]={}; CACHE[s].ohlcv=o; any=true; PH_OVERLAY_STATUS[s]='ok'; }
+        else { PH_TICKER_TRIED[s]=false; PH_OVERLAY_STATUS[s]='fail'; }   // permitir reintento posterior
+      }catch(e){ PH_TICKER_TRIED[s]=false; PH_OVERLAY_STATUS[s]='fail'; }
     }
   }
   await Promise.all(Array.from({length:Math.min(CONC,syms.length)}, worker));
-  if(any && CP_VIEW==='home' && PH_DRAW){ PH_DRAW.tickerLines = phBuildTickerLines(); phPaintValueChart(); }
+  // Repinta SIEMPRE (aunque todo falle) para que el indicador de estado del
+  // overlay refleje ✓/✗ por símbolo y no quede en '⋯' colgado.
+  if(CP_VIEW==='home' && PH_DRAW){ if(any) PH_DRAW.tickerLines = phBuildTickerLines(); phPaintValueChart(); }
 }
 
 /* Pintor PURO de la curva: lee PH_DRAW + PH_ACTIVE_TICKER y repinta el canvas.
@@ -9524,6 +9532,22 @@ function phFmtAxisDate(ms){
   if(PH_RANGE==='1S') return d.toLocaleDateString('es-ES',{weekday:'short', day:'numeric'});
   if(PH_RANGE==='1A') return d.toLocaleDateString('es-ES',{month:'short',year:'2-digit'});
   return d.toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+}
+
+/* Indicador de estado del overlay (diagnóstico): por símbolo muestra si su
+   historia OHLCV cargó (✓), falló (✗) o está en curso (⋯). Solo en modo 'pos'. */
+function phOverlayStatusHTML(){
+  if(PH_ALLOC_MODE!=='pos') return '';
+  const syms = (PH_SLICES||[]).map(s=>s.label).filter(l=>l && l!=='Efectivo');
+  if(!syms.length) return '';
+  const parts = syms.map(s=>{
+    const cached = CACHE[s] && CACHE[s].ohlcv && CACHE[s].ohlcv.candles && CACHE[s].ohlcv.candles.length;
+    const st = cached ? 'ok' : (PH_OVERLAY_STATUS[s] || 'loading');
+    const mark = st==='ok' ? '✓' : st==='loading' ? '⋯' : '✗';
+    const col = st==='ok' ? '#22c55e' : st==='loading' ? 'var(--text3,#8a94a6)' : '#ef4444';
+    return `<span style="color:${col}">${s}${mark}</span>`;
+  });
+  return `<span class="ph-cl-item" style="opacity:.8;font-size:10px;letter-spacing:.02em">overlay · ${parts.join(' ')}</span>`;
 }
 
 function phPaintValueChart(){
@@ -9650,7 +9674,8 @@ function phPaintValueChart(){
   if(legendEl){
     legendEl.innerHTML = `
       <span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:#4d9ef7"></span>Cuenta</span>`
-      + (spy ? `<span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:rgba(245,197,24,.7);border-top-style:dashed"></span>Mercado · S&amp;P 500 (ref.)</span>` : '');
+      + (spy ? `<span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:rgba(245,197,24,.7);border-top-style:dashed"></span>Mercado · S&amp;P 500 (ref.)</span>` : '')
+      + phOverlayStatusHTML();
   }
 
   // puntos pixelados para el tooltip (coordenadas CSS px)
