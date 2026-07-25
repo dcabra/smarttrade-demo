@@ -9133,6 +9133,7 @@ let PHE_STATE = null;          // { motor, at, rc, fc, fcError, error }
 let PHE_HZ = '3';              // horizonte titular (1|3|7) · cambia sin re-pegar POST
 let PHE_LOADING = false;
 const PHE_TTL_MS = 5 * 60 * 1000;
+const PHE_VENTANA_DIAS = 120;  // acota recompute/forecast (libro entero = timeout del gateway); el backend avisa si la muestra queda chica
 
 function pheEsc(s){
   return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -9288,7 +9289,8 @@ async function pheLoad(){
   PHE_LOADING = true;
   if(!PHE_STATE) pheRender();   // skeleton
 
-  const base = { horizontes: [1, 3, 7], solo_tramo_limpio: true };
+  const desde = new Date(Date.now() - PHE_VENTANA_DIAS * 86400000).toISOString().slice(0, 10);
+  const base = { horizontes: [1, 3, 7], solo_tramo_limpio: true, desde: desde };
   const next = { motor: motor, at: Date.now(), rc: null, fc: null, fcError: null, error: null };
 
   try{
