@@ -9468,6 +9468,33 @@ async function phEnsureTickerHistories(){
    líneas de ticker se recortan al área y nunca expanden el eje. Orden de capas:
    área → tickers tenues → SPY → ticker activo (pleno) → línea de cuenta (siempre
    al frente). */
+/* ── Ejes de la curva de valor ───────────────────────────────────────────
+   Ticks "redondos" para el eje Y y formateadores compactos para Y (dinero) y
+   X (fecha), sensibles al rango activo. */
+function phNiceTicks(min,max,n){
+  const span=(max-min)||1;
+  const raw=span/Math.max(1,n);
+  const mag=Math.pow(10,Math.floor(Math.log10(raw)));
+  const norm=raw/mag;
+  let step = norm<1.5?1 : norm<3?2 : norm<7?5 : 10;
+  step*=mag;
+  const start=Math.ceil(min/step)*step;
+  const out=[];
+  for(let v=start; v<=max+1e-6 && out.length<12; v+=step) out.push(v);
+  return out;
+}
+function phFmtAxisMoney(v){
+  const a=Math.abs(v);
+  if(a>=1000) return '$'+(v/1000).toFixed(a>=100000?0:1)+'k';
+  return '$'+v.toFixed(0);
+}
+function phFmtAxisDate(ms){
+  const d=new Date(ms);
+  if(PH_RANGE==='1S') return d.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+  if(PH_RANGE==='1A') return d.toLocaleDateString('es-ES',{month:'short',year:'2-digit'});
+  return d.toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+}
+
 function phPaintValueChart(){
   const wrap=$('ph-valuechart-wrap'), canvas=$('ph-value-canvas'), legendEl=$('ph-chart-legend');
   if(!wrap || !canvas || !PH_DRAW) return;
@@ -9490,10 +9517,25 @@ function phPaintValueChart(){
   }
   const pad=((hi-lo)||1)*0.04; lo-=pad; hi+=pad;
   const span=(hi-lo)||1;
-  const PL=8, PR=8, PT=10, PB=18, cW=W-PL-PR, cH=H-PT-PB;
+  // Márgenes: se reserva la derecha para los valores (eje Y) y abajo para las
+  // fechas (eje X).
+  const PL=8, PR=52, PT=10, PB=22, cW=W-PL-PR, cH=H-PT-PB;
   const xN=(i,n)=> PL + (n<=1 ? cW/2 : i/(n-1)*cW);
   const x=i=> xN(i, vals.length);
   const y=v=> PT + cH - ((v-lo)/span)*cH;
+
+  // ── Ejes: cuadrícula tenue + etiquetas de valor (Y, dólares de la cuenta) ──
+  ctx.font='10px -apple-system, system-ui, "Segoe UI", sans-serif';
+  ctx.textBaseline='middle';
+  const yTicks=phNiceTicks(lo, hi, 4);
+  yTicks.forEach(tv=>{
+    const yy=y(tv);
+    if(yy<PT-1 || yy>PT+cH+1) return;
+    ctx.beginPath(); ctx.moveTo(PL, yy); ctx.lineTo(PL+cW, yy);
+    ctx.strokeStyle='rgba(255,255,255,.05)'; ctx.lineWidth=1; ctx.setLineDash([]); ctx.stroke();
+    ctx.fillStyle='rgba(180,192,208,.5)'; ctx.textAlign='left';
+    ctx.fillText(phFmtAxisMoney(tv), PL+cW+6, yy);
+  });
 
   // Hay un ticker (no SPY) resaltado → se atenúa el resumen de la cuenta y SPY
   // para que la línea del ticker señalado destaque ("sombrear" el fondo).
@@ -9551,7 +9593,24 @@ function phPaintValueChart(){
   else { ctx.strokeStyle='#4d9ef7'; ctx.lineWidth=1.6; }
   ctx.lineJoin='round'; ctx.stroke();
 
-  // leyenda (idéntica a hoy)
+  // ── Eje X: fechas (5 marcas equiespaciadas por índice) ──
+  if(series && series.length){
+    ctx.font='10px -apple-system, system-ui, "Segoe UI", sans-serif';
+    ctx.textBaseline='alphabetic'; ctx.fillStyle='rgba(180,192,208,.5)';
+    const n=series.length, nT=Math.min(5, n);
+    for(let k=0;k<nT;k++){
+      const idx = nT<=1 ? 0 : Math.round(k/(nT-1)*(n-1));
+      const xx=x(idx), label=phFmtAxisDate(series[idx].t);
+      // marca vertical tenue
+      ctx.beginPath(); ctx.moveTo(xx, PT); ctx.lineTo(xx, PT+cH);
+      ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.lineWidth=1; ctx.stroke();
+      // etiqueta (extremos alineados hacia dentro para no cortarse)
+      if(k===0) ctx.textAlign='left';
+      else if(k===nT-1) ctx.textAlign='right';
+      else ctx.textAlign='center';
+      ctx.fillText(label, xx, PT+cH+13);
+    }
+  }
   if(legendEl){
     legendEl.innerHTML = `
       <span class="ph-cl-item"><span class="ph-cl-line" style="border-top-color:#4d9ef7"></span>Cuenta</span>`
