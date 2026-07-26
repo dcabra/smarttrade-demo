@@ -9134,6 +9134,38 @@ let PHE_HZ = '3';              // horizonte titular (1|3|7) · cambia sin re-peg
 let PHE_LOADING = false;
 const PHE_TTL_MS = 5 * 60 * 1000;
 const PHE_VENTANA_DIAS = 120;  // acota recompute/forecast (libro entero = timeout del gateway); el backend avisa si la muestra queda chica
+const PHE_TIMEOUT_MS = 25000;  // corte de cliente: si el gateway cuelga, la tarjeta reporta "timeout" en vez de un "NETWORK" opaco
+const PHE_MOTOR_PREF = 'v3';   // motor que EVALÚA la tarjeta. 'v3' = candidato F7 (v2 no muestra edge). null = leer el motor vivo (pheMotorVivo). NO toca el ruteo del flip: sólo elige el scorer que se pide al backtest de LECTURA.
+
+/* Fetch local SOLO para los dos POST de la tarjeta (no toca brokerFetch). Emite
+   errores ESPECÍFICOS para diagnóstico honesto: TIMEOUT | HTTP <status>:<detail> |
+   red/CORS:<msg>. Mismo Bearer efímero que el resto. */
+async function pheFetch(path, body){
+  const token = (typeof getBrokerToken === 'function') ? getBrokerToken() : null;
+  if(!token){ const e = new Error('sin sesión'); e.code = 'NO_TOKEN'; throw e; }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), PHE_TIMEOUT_MS);
+  let r;
+  try{
+    r = await fetch(API + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+  }catch(err){
+    clearTimeout(timer);
+    if(err && err.name === 'AbortError'){ const e = new Error('timeout tras ' + (PHE_TIMEOUT_MS/1000) + 's (el recompute no respondió a tiempo)'); e.code = 'TIMEOUT'; throw e; }
+    const e = new Error('red/CORS: ' + ((err && err.message) ? err.message : 'fetch falló')); e.code = 'NETWORK'; throw e;
+  }
+  clearTimeout(timer);
+  if(r.status === 401){ const e = new Error('sesión expirada'); e.code = 'UNAUTHORIZED'; throw e; }
+  if(!r.ok){
+    let detail = null; try{ detail = (await r.json()).detail; }catch(_){}
+    const e = new Error('HTTP ' + r.status + (detail ? ': ' + detail : '')); e.code = 'HTTP'; e.status = r.status; throw e;
+  }
+  try{ return await r.json(); }catch(_){ return null; }
+}
 
 function pheEsc(s){
   return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -9234,7 +9266,12 @@ function pheRender(){
   /* ── Mitad B · Calibración del forecast ─────────────────────────────────── */
   let fcHtml;
   if(st.fcError){
-    fcHtml = '<div class="phe-half"><div class="phe-lbl">Calibraci&oacute;n del forecast</div><div class="phe-empty"><div class="phe-empty-msg">Forecast ' + (st.motor === 'v3' ? 'v3 ' : '') + 'no backtesteable desde el libro</div><div class="phe-empty-note">' + pheEsc(st.fcError) + '</div></div></div>';
+    var _v3 = (st.motor === 'v3');
+    var _msg = _v3 ? 'Calibraci&oacute;n de v3 &mdash; en desarrollo' : 'Forecast no disponible';
+    var _note = _v3
+      ? 'Los cuantiles por bucket (F4) a&uacute;n no se persisten para backtestear el forecast v3 desde el libro. Se activa al cerrar ese punto del roadmap. La mitad de se&ntilde;al (v3) s&iacute; est&aacute; viva.'
+      : pheEsc(st.fcError);
+    fcHtml = '<div class="phe-half" title="' + pheEsc(st.fcError) + '"><div class="phe-lbl">Calibraci&oacute;n del forecast</div><div class="phe-empty"><span class="phe-empty-msg">' + _msg + '</span><div class="phe-empty-note">' + _note + '</div></div></div>';
   }else{
     const fph = st.fc && st.fc.por_horizonte && st.fc.por_horizonte[hz];
     if(!fph || fph.n === 0 || fph.cobertura_80 == null){
@@ -9282,7 +9319,7 @@ function pheSetHz(btn){
 async function pheLoad(){
   const card = $('phe-card'); if(!card) return;
   card.style.display = '';
-  const motor = pheMotorVivo();
+  const motor = PHE_MOTOR_PREF || pheMotorVivo();   // fijado a v3; si algún día se quiere el vivo, PHE_MOTOR_PREF=null
   const fresh = PHE_STATE && !PHE_STATE.error && PHE_STATE.motor === motor && (Date.now() - PHE_STATE.at) < PHE_TTL_MS;
   if(fresh){ pheRender(); return; }
   if(PHE_LOADING) return;
@@ -9294,7 +9331,7 @@ async function pheLoad(){
   const next = { motor: motor, at: Date.now(), rc: null, fc: null, fcError: null, error: null };
 
   try{
-    next.rc = await brokerFetch('/v1/backtest/recompute', { method: 'POST', body: Object.assign({}, base, { scorer: motor, lado: 'ambos' }) });
+    next.rc = await pheFetch('/v1/backtest/recompute', Object.assign({}, base, { scorer: motor, lado: 'ambos' }));
   }catch(e){
     if(e.code === 'NO_TOKEN' || e.code === 'UNAUTHORIZED'){ card.style.display = 'none'; PHE_LOADING = false; return; }
     next.error = e.message || 'No se pudo recomputar el modelo.';
@@ -9302,7 +9339,7 @@ async function pheLoad(){
 
   if(!next.error){
     try{
-      next.fc = await brokerFetch('/v1/backtest/forecast', { method: 'POST', body: Object.assign({}, base, { motor: motor, incluir_pit: true }) });
+      next.fc = await pheFetch('/v1/backtest/forecast', Object.assign({}, base, { motor: motor, incluir_pit: true }));
     }catch(e){
       if(e.code === 'NO_TOKEN' || e.code === 'UNAUTHORIZED'){ card.style.display = 'none'; PHE_LOADING = false; return; }
       next.fcError = e.message || 'Forecast no disponible.';   // 422 (v3) u otro → degrada solo esta mitad
