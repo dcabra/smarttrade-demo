@@ -1061,6 +1061,23 @@ body.home-mode #cp-home{display:flex}
 .phd-drift-badge{font-size:11px;font-weight:800;border-radius:5px;padding:4px 10px;white-space:nowrap;text-transform:uppercase;letter-spacing:.05em}
 .phd-drift-nums{font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}
 .phd-drift-detail{font-size:10px;color:var(--text3);flex-basis:100%;font-variant-numeric:tabular-nums;line-height:1.5}
+/* S4 · Próximos eventos (calendario macro/earnings del portafolio) · card compacta */
+.phcal-body{padding:6px 8px 10px}
+.phcal-item{display:flex;align-items:flex-start;gap:9px;padding:7px 8px}
+.phcal-item + .phcal-item{border-top:1px solid var(--border)}
+.phcal-ico{font-size:14px;line-height:1.35;flex-shrink:0}
+.phcal-main{min-width:0;flex:1}
+.phcal-r1{font-size:12px;color:var(--text);font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.phcal-tk{font-size:9px;font-weight:700;color:var(--blue);background:rgba(77,158,247,.12);border-radius:3px;padding:1px 5px;letter-spacing:.03em}
+.phcal-tk.macro{color:var(--text3);background:rgba(255,255,255,.05)}
+.phcal-desc{font-size:10px;color:var(--text3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.phcal-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;text-align:right}
+.phcal-imp{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;line-height:1}
+.phcal-dr{font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.phcal-dr.urgent{color:var(--orange);font-weight:800}
+.phcal-more{width:100%;margin-top:6px;background:none;border:1px dashed var(--border2);border-radius:6px;color:var(--text2);font-size:11px;padding:6px;cursor:pointer}
+.phcal-more:hover{color:var(--text);border-color:var(--text3)}
+.phcal-empty,.phcal-skel{padding:16px 8px;text-align:center;font-size:11px;color:var(--text3)}
 .phd-warn{color:var(--orange)}
 .phd-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:110px;gap:6px}
 .phd-empty-msg{font-size:12px;color:var(--text2);font-weight:600;max-width:280px;line-height:1.4}
@@ -1662,6 +1679,21 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
           </div>
         </div>
         <div class="phd-body" id="phd-body"></div>
+      </div>
+
+      <!-- S4 · Próximos eventos (calendario macro/earnings del portafolio).
+           Bloque autocontenido (CSS phcal-* · card HTML · funciones phcal* · 1
+           línea en renderHome). Frontend puro sobre GET /v1/strategies/calendar/
+           events (LECTURA); reusa el patrón de loadCalendar (brokerGet, CAL_ICON/
+           CAL_LABEL). NO toca MOTOR_V3/motor_flags/usa_v3/data_fetcher. -->
+      <div class="ph-card" id="phcal-card" style="display:none">
+        <div class="ph-card-hdr">
+          <div class="ph-card-hdr-left">
+            <span class="ph-card-title">Próximos eventos</span>
+            <span class="ph-card-sub" id="phcal-sub"></span>
+          </div>
+        </div>
+        <div class="phcal-body" id="phcal-body"></div>
       </div>
     </div>
 
@@ -9166,6 +9198,101 @@ function renderHome(){
   ensureSpyBenchmark();   // el OHLCV de SPY no se cachea solo en Home-first boot
   pheLoad();              // S2 · eficiencia del modelo · one-shot con TTL, fire-and-forget
   phdLoad();              // S3 · pulso del modelo hoy + drift · one-shot con TTL, fire-and-forget
+  phcalLoad();            // S4 · próximos eventos (calendario) · one-shot con TTL, fire-and-forget
+}
+
+/* ═══ S4 · Próximos eventos (calendario macro/earnings del portafolio) ═════════
+   Frontend puro sobre GET /v1/strategies/calendar/events (LECTURA). Reusa el
+   patrón de loadCalendar (brokerGet, CAL_ICON/CAL_LABEL). Vistazo compacto: solo
+   tickers del portafolio, 7 días, tope 6 + link a la pestaña completa. Fetch
+   one-shot con TTL fuera del hot-path de renderHome. NO toca el motor. */
+let PHCAL_STATE = null;            // { at, eventos, error }
+let PHCAL_LOADING = false;
+const PHCAL_TTL_MS = 10 * 60 * 1000;  // el calendario cambia lento
+const PHCAL_DIAS = 7;                  // riesgo de la semana (la pestaña completa cubre 14)
+const PHCAL_CAP = 6;                   // vistazo compacto
+
+function phcalEsc(s){
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function phcalRender(){
+  const body = $('phcal-body'); if(!body) return;
+  const st = PHCAL_STATE, subEl = $('phcal-sub');
+
+  if(!st){ body.innerHTML = '<div class="phcal-skel">Cargando eventos&hellip;</div>'; if(subEl) subEl.textContent = ''; return; }
+  if(st.error){ if(subEl) subEl.textContent = ''; body.innerHTML = '<div class="phcal-empty">No se pudieron cargar los eventos.</div>'; return; }
+
+  const evs = (st.eventos || []).slice().sort((a, b) =>
+    ((a.dias_restantes ?? 999) - (b.dias_restantes ?? 999)) || String(a.fecha || '').localeCompare(String(b.fecha || '')));
+
+  if(!evs.length){
+    if(subEl) subEl.textContent = 'próximos ' + PHCAL_DIAS + ' días';
+    body.innerHTML = '<div class="phcal-empty">Sin eventos en los próximos ' + PHCAL_DIAS + ' días.</div>';
+    return;
+  }
+  if(subEl) subEl.textContent = 'próximos ' + PHCAL_DIAS + ' días · ' + evs.length;
+
+  const shown = evs.slice(0, PHCAL_CAP);
+  const rest = evs.length - shown.length;
+  let html = shown.map(e => {
+    const tipo = String(e.tipo || '').toLowerCase();
+    const ico = (typeof CAL_ICON !== 'undefined' && CAL_ICON[tipo]) || '📅';
+    const lbl = (typeof CAL_LABEL !== 'undefined' && CAL_LABEL[tipo]) || (e.tipo || 'evento');
+    const tag = e.ticker
+      ? '<span class="phcal-tk">' + phcalEsc(e.ticker) + '</span>'
+      : '<span class="phcal-tk macro">macro</span>';
+    const imp = String(e.impacto || '').toLowerCase();
+    const impCol = imp === 'alto' ? 'var(--orange)' : imp === 'medio' ? 'var(--blue)' : 'var(--text3)';
+    const dr = e.dias_restantes <= 0 ? 'hoy' : (e.dias_restantes === 1 ? 'mañana' : ('en ' + e.dias_restantes + 'd'));
+    const drCls = (e.dias_restantes <= 1) ? 'phcal-dr urgent' : 'phcal-dr';  // lo inminente grita
+    return '<div class="phcal-item">'
+      + '<span class="phcal-ico">' + ico + '</span>'
+      + '<div class="phcal-main">'
+      +   '<div class="phcal-r1">' + phcalEsc(lbl) + ' ' + tag + '</div>'
+      +   (e.descripcion ? '<div class="phcal-desc">' + phcalEsc(e.descripcion) + '</div>' : '')
+      + '</div>'
+      + '<div class="phcal-right">'
+      +   (imp ? '<span class="phcal-imp" style="color:' + impCol + '">' + phcalEsc(imp) + '</span>' : '')
+      +   '<span class="' + drCls + '">' + dr + '</span>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+  if(rest > 0){
+    html += '<button class="phcal-more" onclick="switchTab(\'cal\')">+' + rest + ' más · ver calendario →</button>';
+  }
+  body.innerHTML = html;
+}
+
+async function phcalLoad(){
+  const card = $('phcal-card'); if(!card) return;
+  card.style.display = '';
+  const fresh = PHCAL_STATE && !PHCAL_STATE.error && (Date.now() - PHCAL_STATE.at) < PHCAL_TTL_MS;
+  if(fresh){ phcalRender(); return; }
+  if(PHCAL_LOADING) return;
+  PHCAL_LOADING = true;
+  if(!PHCAL_STATE) phcalRender();   // skeleton
+
+  const next = { at: Date.now(), eventos: null, error: null };
+  try{
+    const tickers = [...new Set((typeof TICKERS !== 'undefined' && TICKERS ? TICKERS : []).filter(Boolean))];
+    if(!tickers.length){
+      next.eventos = [];   // sin posiciones → los macro (FOMC/CPI) igual podrían venir, pero sin tickers el endpoint solo trae macro; lo dejamos honesto
+      const qs = '?tickers=&dias=' + PHCAL_DIAS;
+      const data = await brokerGet('/v1/strategies/calendar/events' + qs);
+      next.eventos = (data && data.eventos) || [];
+    }else{
+      const qs = '?tickers=' + encodeURIComponent(tickers.join(',')) + '&dias=' + PHCAL_DIAS;
+      const data = await brokerGet('/v1/strategies/calendar/events' + qs);
+      if(data === null){ next.error = 'nodata'; }   // sin sesión o transitorio (brokerGet ya gestiona el gate); reintenta por TTL
+      else { next.eventos = (data.eventos) || []; }
+    }
+  }catch(e){
+    next.error = 'error';
+  }
+  PHCAL_STATE = next;
+  PHCAL_LOADING = false;
+  phcalRender();
 }
 
 /* ═══ S2 · Eficiencia del modelo (señal + forecast) ═══════════════════════════
