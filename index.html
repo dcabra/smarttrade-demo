@@ -1054,6 +1054,8 @@ body.home-mode #cp-home{display:flex}
 .phd-sig-dir{font-weight:800;width:12px;text-align:center}
 .phd-sig-tk{font-weight:700;color:var(--text);min-width:54px}
 .phd-sig-meta{color:var(--text3);font-size:11px}
+.phd-conflict{background:rgba(243,156,18,.07);border-radius:5px;padding:5px 8px;margin:3px 0}
+.phd-muted{color:var(--text3);margin-top:10px;border-top:1px dashed var(--border);padding-top:7px}
 .phd-foot{margin-top:7px;font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums}
 .phd-drift{border-top:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .phd-drift-badge{font-size:11px;font-weight:800;border-radius:5px;padding:4px 10px;white-space:nowrap;text-transform:uppercase;letter-spacing:.05em}
@@ -9422,6 +9424,17 @@ function phdConf(v){
   return n <= 1 ? Math.round(n * 100) : Math.round(n);
 }
 
+/* Mercado por heurística de sufijo del ticker (el endpoint /señales no expone
+   'mercado'): sin punto ⇒ US; sufijo ".CL" ⇒ BVC (Colombia); otro sufijo ⇒ el
+   sufijo tal cual. Solo para rotular el resto del libro, nunca para operar. */
+function phdMercado(tk){
+  const s = String(tk || '');
+  const dot = s.lastIndexOf('.');
+  if(dot < 0) return 'US';
+  const suf = s.slice(dot + 1).toUpperCase();
+  return suf === 'CL' ? 'BVC' : (suf || 'US');
+}
+
 /* Mapea horizonte_ref "3D" → clave "3" del por_horizonte del recompute. */
 function phdHzKey(hRef){
   const m = String(hRef || '3D').match(/\d+/);
@@ -9484,7 +9497,12 @@ function phdRender(){
   }
   if(subEl) subEl.textContent = st.sigJobDate ? ('último cierre · ' + st.sigJobDate) : '';
 
-  // ── (a) señales del último job ──────────────────────────────────────────
+  // ── (a) señales del último cierre · CONFLICT-FIRST cruzadas contra tu cartera ─
+  //   El libro es un universo de investigación multi-mercado (US + BVC Colombia);
+  //   tu cuenta Alpaca es US. El único evento accionable es CONFLICTO: el modelo
+  //   pide salir de algo que tenés. Ese es el titular. Confirmaciones (refuerzo)
+  //   y el resto del libro (no operable / datos ralos) van degradados al pie, en
+  //   gris. No depende del motor ni de la escala de confianza ⇒ a prueba del flip.
   let sigHtml;
   if(st.sig === null){
     sigHtml = '<div class="phd-foot">No se pudieron leer las señales del libro.</div>';
@@ -9493,22 +9511,62 @@ function phdRender(){
         ? 'Sin señales accionables en el cierre del ' + pheEsc(st.sigJobDate) + ' (todo HOLD).'
         : 'El job de cierre aún no corrió hoy (corre 23:00 UTC).') + '</div>';
   } else {
-    const nBuy = st.sig.filter(s => s['señal'] === 'BUY').length;
-    const nSell = st.sig.length - nBuy;
-    const rows = st.sig.slice(0, PHD_SIG_MAX).map(s => {
-      const buy = s['señal'] === 'BUY';
-      const col = buy ? 'var(--green)' : 'var(--red)';
-      const arr = buy ? '▲' : '▼';
-      const c = phdConf(s.confianza);
-      const px = (s.precio_entrada != null && !isNaN(s.precio_entrada)) ? ('$' + Number(s.precio_entrada).toFixed(2)) : '—';
-      return '<div class="phd-sig"><span class="phd-sig-dir" style="color:' + col + '">' + arr + '</span>'
-        + '<span class="phd-sig-tk">' + pheEsc(s.ticker) + '</span>'
-        + '<span class="phd-sig-meta">conf ' + c + ' · ' + px + '</span></div>';
-    }).join('');
-    const mas = st.sig.length > PHD_SIG_MAX ? '<div class="phd-foot">+' + (st.sig.length - PHD_SIG_MAX) + ' más</div>' : '';
-    sigHtml = '<div class="phd-hero"><span class="phd-num">' + st.sig.length + '</span>'
-      + '<span class="phd-unit">señales · ' + nBuy + ' BUY / ' + nSell + ' SELL</span></div>'
-      + '<div style="margin-top:8px">' + rows + '</div>' + mas;
+    const pos = (typeof POSITIONS !== 'undefined' && Array.isArray(POSITIONS)) ? POSITIONS : [];
+    const mkFoot = (arr) => { const mk = {}; arr.forEach(s => { const m = phdMercado(s.ticker); mk[m] = (mk[m] || 0) + 1; });
+                              return Object.keys(mk).sort().map(m => m + ' ' + mk[m]).join(' · '); };
+
+    if(pos.length === 0){
+      // Sin cartera conectada para cruzar: mostrar el libro como investigación, rotulado.
+      const nBuy = st.sig.filter(s => s['señal'] === 'BUY').length, nSell = st.sig.length - nBuy;
+      sigHtml = '<div class="phd-hero"><span class="phd-num">' + st.sig.length + '</span>'
+        + '<span class="phd-unit">señales de investigación · ' + nBuy + ' BUY / ' + nSell + ' SELL</span></div>'
+        + '<div class="phd-foot phd-muted">Sin cartera conectada para cruzar · ' + mkFoot(st.sig) + '</div>';
+    } else {
+      const posBy = {}; pos.forEach(p => { if(p && p.symbol) posBy[p.symbol] = p; });
+      const held = st.sig.filter(s => posBy[s.ticker]);
+      const rest = st.sig.filter(s => !posBy[s.ticker]);
+      const esConflicto = s => { const p = posBy[s.ticker]; const largo = (p.qty == null) ? true : (p.qty >= 0);
+        return (largo && s['señal'] === 'SELL') || (!largo && s['señal'] === 'BUY'); };
+      const conflictos = held.filter(esConflicto);
+      const confirmas  = held.filter(s => !esConflicto(s));
+
+      const nC = conflictos.length;
+      const headCol = nC > 0 ? 'var(--orange)' : 'var(--green)';
+      let html = '<div class="phd-hero"><span class="phd-num" style="color:' + headCol + '">' + nC + '</span>'
+        + '<span class="phd-unit">' + (nC > 0
+            ? 'señal(es) del modelo contra tus posiciones'
+            : 'el modelo no contradice tus posiciones hoy') + '</span></div>';
+
+      if(nC > 0){
+        html += '<div style="margin-top:8px">' + conflictos.map(s => {
+          const p = posBy[s.ticker];
+          const buy = s['señal'] === 'BUY';
+          const arr = buy ? '▲' : '▼';
+          const dcol = buy ? 'var(--green)' : 'var(--red)';
+          const largo = (p.qty == null) ? true : (p.qty >= 0);
+          let pnlTxt = '', pcol = 'var(--text2)';
+          if(p.unrealized_pl != null && !isNaN(p.unrealized_pl)){
+            const neg = p.unrealized_pl < 0; pcol = neg ? 'var(--red)' : 'var(--green)';
+            pnlTxt = ' · ' + (neg ? '−' : '+') + '$' + Math.abs(p.unrealized_pl).toLocaleString('en-US', {maximumFractionDigits:0});
+            if(p.unrealized_plpc != null && !isNaN(p.unrealized_plpc))
+              pnlTxt += ' (' + (p.unrealized_plpc < 0 ? '' : '+') + (p.unrealized_plpc * 100).toFixed(1) + '%)';
+          }
+          return '<div class="phd-sig phd-conflict"><span class="phd-sig-dir" style="color:' + dcol + '">' + arr + '</span>'
+            + '<span class="phd-sig-tk">' + pheEsc(s.ticker) + '</span>'
+            + '<span class="phd-sig-meta"><b style="color:var(--orange)">⚠ ' + s['señal'] + ' · lo tenés ' + (largo ? 'largo' : 'corto') + '</b>'
+            + '<span style="color:' + pcol + '">' + pnlTxt + '</span></span></div>';
+        }).join('') + '</div>';
+      } else {
+        html += '<div class="phd-foot">Ninguna de tus ' + pos.length + ' posiciones tiene señal de salida hoy.</div>';
+      }
+
+      const foot = [];
+      if(confirmas.length) foot.push(confirmas.length + ' confirma' + (confirmas.length > 1 ? 'n' : '') + ' tu posición');
+      if(rest.length) foot.push(rest.length + ' de investigación (' + mkFoot(rest) + ')');
+      if(foot.length) html += '<div class="phd-foot phd-muted">' + foot.join(' · ') + '</div>';
+
+      sigHtml = html;
+    }
   }
 
   // ── (b) P&L de la estrategia ────────────────────────────────────────────
