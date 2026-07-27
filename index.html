@@ -1078,6 +1078,21 @@ body.home-mode #cp-home{display:flex}
 .phcal-more{width:100%;margin-top:6px;background:none;border:1px dashed var(--border2);border-radius:6px;color:var(--text2);font-size:11px;padding:6px;cursor:pointer}
 .phcal-more:hover{color:var(--text);border-color:var(--text3)}
 .phcal-empty,.phcal-skel{padding:16px 8px;text-align:center;font-size:11px;color:var(--text3)}
+/* S5 · Noticias de mis posiciones · fan-out por ticker, cache-first, progresivo */
+.phnews-body{padding:4px 8px 10px}
+.phnews-group{padding:8px 0}
+.phnews-group + .phnews-group{border-top:1px solid var(--border)}
+.phnews-tk{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:0 2px 5px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text);text-align:left}
+.phnews-tk:hover{color:var(--blue)}
+.phnews-sent{font-size:9px;font-weight:700;text-transform:capitalize;letter-spacing:.02em}
+.phnews-arrow{margin-left:auto;color:var(--text3);font-size:12px}
+.phnews-item{display:flex;gap:7px;padding:3px 2px 3px 4px}
+.phnews-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.phnews-txt{min-width:0;flex:1}
+.phnews-tit{font-size:11px;color:var(--text);line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.phnews-src{font-size:9px;color:var(--text3);margin-top:1px}
+.phnews-mini{font-size:10px;color:var(--text3);padding:2px 4px 4px 6px}
+.phnews-empty{padding:16px 8px;text-align:center;font-size:11px;color:var(--text3)}
 .phd-warn{color:var(--orange)}
 .phd-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:110px;gap:6px}
 .phd-empty-msg{font-size:12px;color:var(--text2);font-weight:600;max-width:280px;line-height:1.4}
@@ -1694,6 +1709,21 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
           </div>
         </div>
         <div class="phcal-body" id="phcal-body"></div>
+      </div>
+
+      <!-- S5 · Noticias de mis posiciones. Bloque autocontenido (CSS phnews-* ·
+           card HTML · funciones phnews* · 1 línea en renderHome). Frontend puro:
+           fan-out GET /v1/context/{ticker} (LECTURA) reusando fetchContext /
+           CONTEXT_CACHE / sentColor, cache-first + pool de 3, render progresivo.
+           NO toca MOTOR_V3/motor_flags/usa_v3/data_fetcher. -->
+      <div class="ph-card" id="phnews-card" style="display:none">
+        <div class="ph-card-hdr">
+          <div class="ph-card-hdr-left">
+            <span class="ph-card-title">Noticias de mis posiciones</span>
+            <span class="ph-card-sub" id="phnews-sub"></span>
+          </div>
+        </div>
+        <div class="phnews-body" id="phnews-body"></div>
       </div>
     </div>
 
@@ -9199,6 +9229,7 @@ function renderHome(){
   pheLoad();              // S2 · eficiencia del modelo · one-shot con TTL, fire-and-forget
   phdLoad();              // S3 · pulso del modelo hoy + drift · one-shot con TTL, fire-and-forget
   phcalLoad();            // S4 · próximos eventos (calendario) · one-shot con TTL, fire-and-forget
+  phnewsLoad();           // S5 · noticias de mis posiciones · fan-out cache-first, progresivo
 }
 
 /* ═══ S4 · Próximos eventos (calendario macro/earnings del portafolio) ═════════
@@ -9293,6 +9324,109 @@ async function phcalLoad(){
   PHCAL_STATE = next;
   PHCAL_LOADING = false;
   phcalRender();
+}
+
+/* ═══ S5 · Noticias de mis posiciones ═════════════════════════════════════════
+   Fan-out de GET /v1/context/{ticker} (LECTURA) reusando fetchContext /
+   CONTEXT_CACHE / sentColor (todo ya existe). Cache-first: pinta al instante los
+   tickers ya cacheados (el home suele prefetchear context) y rellena los que
+   falten con un pool de 3, render progresivo por ticker. NO bloquea renderHome.
+   NO toca el motor. */
+let PHNEWS_ROWS = {};            // ticker -> { status:'loading'|'ok'|'empty'|'error', ... }
+let PHNEWS_LOADING = false;
+let PHNEWS_AT = 0;
+const PHNEWS_TTL_MS = 15 * 60 * 1000;
+const PHNEWS_MAX_TITULARES = 2;  // vistazo: 2 por ticker (el tab del ticker tiene el resto)
+const PHNEWS_CONCURRENCY = 3;
+
+function phnewsEsc(s){
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+function phnewsFecha(f){
+  try{ const d = new Date(f); if(isNaN(d.getTime())) return String(f);
+    return d.toLocaleDateString('es', {day:'2-digit', month:'short'}); }
+  catch(e){ return String(f); }
+}
+function phnewsRowFrom(ctx){
+  const n = ctx && ctx.noticias;
+  const tit = (n && n.titulares_recientes) || [];
+  const label = (n && n.sentimiento_label) || null;
+  if(!n || !tit.length) return { status:'empty', label };
+  return { status:'ok', label, score:(n.sentimiento_score), total:(n.total_noticias),
+           titulares: tit.slice(0, PHNEWS_MAX_TITULARES) };
+}
+/* Pool de concurrencia mínima (sin dependencias). */
+async function phnewsPool(items, n, worker){
+  const q = items.slice();
+  const runners = Array.from({ length: Math.max(1, Math.min(n, q.length)) }, async () => {
+    while(q.length){ await worker(q.shift()); }
+  });
+  await Promise.all(runners);
+}
+
+function phnewsRender(tickers){
+  const body = $('phnews-body'); if(!body) return;
+  const subEl = $('phnews-sub');
+  if(!tickers || !tickers.length){
+    if(subEl) subEl.textContent = '';
+    body.innerHTML = '<div class="phnews-empty">Sin posiciones en el portafolio.</div>';
+    return;
+  }
+  if(subEl) subEl.textContent = tickers.length + (tickers.length === 1 ? ' posición' : ' posiciones');
+  body.innerHTML = tickers.map(t => {
+    const r = PHNEWS_ROWS[t] || { status:'loading' };
+    const safe = String(t).replace(/[^A-Z0-9.\-]/gi, '');
+    const badge = r.label ? '<span class="phnews-sent" style="color:' + sentColor(r.label) + '">' + phnewsEsc(r.label) + '</span>' : '';
+    let inner;
+    if(r.status === 'loading') inner = '<div class="phnews-mini">cargando&hellip;</div>';
+    else if(r.status === 'error') inner = '<div class="phnews-mini">no se pudo cargar</div>';
+    else if(r.status === 'empty') inner = '<div class="phnews-mini">sin noticias recientes</div>';
+    else inner = (r.titulares || []).map(n =>
+      '<div class="phnews-item"><span class="phnews-dot" style="background:' + sentColor(n.sentimiento_label || '') + '"></span>'
+      + '<div class="phnews-txt"><div class="phnews-tit">' + phnewsEsc(n.titulo || '') + '</div>'
+      + '<div class="phnews-src">' + phnewsEsc(n.fuente || '') + (n.fecha ? ' · ' + phnewsEsc(phnewsFecha(n.fecha)) : '') + '</div></div></div>'
+    ).join('');
+    return '<div class="phnews-group">'
+      + '<button class="phnews-tk" onclick="pick(\'' + safe + '\');if(typeof switchTab===\'function\')switchTab(\'anticker\')">'
+      +   phnewsEsc(t) + badge + '<span class="phnews-arrow">→</span>'
+      + '</button>'
+      + inner
+      + '</div>';
+  }).join('');
+}
+
+async function phnewsLoad(){
+  const card = $('phnews-card'); if(!card) return;
+  card.style.display = '';
+  const tickers = [...new Set((typeof TICKERS !== 'undefined' && TICKERS ? TICKERS : []).filter(Boolean))];
+  if(!tickers.length){ phnewsRender([]); return; }
+
+  const fresh = PHNEWS_AT && (Date.now() - PHNEWS_AT) < PHNEWS_TTL_MS && tickers.every(t => PHNEWS_ROWS[t] && PHNEWS_ROWS[t].status !== 'loading' && PHNEWS_ROWS[t].status !== 'error');
+  if(fresh){ phnewsRender(tickers); return; }
+  if(PHNEWS_LOADING) return;
+  PHNEWS_LOADING = true;
+
+  // Cache-first: lo ya cacheado se resuelve sin red; el resto queda 'loading'.
+  tickers.forEach(t => {
+    const c = (typeof CONTEXT_CACHE !== 'undefined') ? CONTEXT_CACHE[t] : null;
+    if(c) PHNEWS_ROWS[t] = phnewsRowFrom(c);
+    else if(!PHNEWS_ROWS[t] || PHNEWS_ROWS[t].status === 'error') PHNEWS_ROWS[t] = { status:'loading' };
+  });
+  phnewsRender(tickers);
+
+  // Misses → pool de 3, render progresivo a medida que resuelve cada uno.
+  const misses = tickers.filter(t => !(typeof CONTEXT_CACHE !== 'undefined' && CONTEXT_CACHE[t]));
+  await phnewsPool(misses, PHNEWS_CONCURRENCY, async (t) => {
+    try{
+      const c = await fetchContext(t);
+      PHNEWS_ROWS[t] = c ? phnewsRowFrom(c) : { status:'error' };
+    }catch(e){ PHNEWS_ROWS[t] = { status:'error' }; }
+    phnewsRender(tickers);
+  });
+
+  PHNEWS_AT = Date.now();
+  PHNEWS_LOADING = false;
+  phnewsRender(tickers);
 }
 
 /* ═══ S2 · Eficiencia del modelo (señal + forecast) ═══════════════════════════
