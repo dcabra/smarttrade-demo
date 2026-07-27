@@ -1039,6 +1039,32 @@ body.home-mode #cp-home{display:flex}
 .phe-empty-note{font-size:10px;color:var(--text3);max-width:270px;line-height:1.5}
 .phe-skel{padding:20px 16px;font-size:11px;color:var(--text3)}
 
+/* S3 · pulso del modelo hoy + drift */
+.phd-body{display:flex;flex-direction:column}
+.phd-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+@media (max-width:640px){.phd-grid{grid-template-columns:1fr}}
+.phd-half{padding:14px 16px;min-width:0}
+.phd-half + .phd-half{border-left:1px solid var(--border)}
+@media (max-width:640px){.phd-half + .phd-half{border-left:none;border-top:1px solid var(--border)}}
+.phd-lbl{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.phd-hero{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.phd-num{font-size:28px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;line-height:1}
+.phd-unit{font-size:11px;color:var(--text3)}
+.phd-sig{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;font-variant-numeric:tabular-nums}
+.phd-sig-dir{font-weight:800;width:12px;text-align:center}
+.phd-sig-tk{font-weight:700;color:var(--text);min-width:54px}
+.phd-sig-meta{color:var(--text3);font-size:11px}
+.phd-foot{margin-top:7px;font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums}
+.phd-drift{border-top:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.phd-drift-badge{font-size:11px;font-weight:800;border-radius:5px;padding:4px 10px;white-space:nowrap;text-transform:uppercase;letter-spacing:.05em}
+.phd-drift-nums{font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}
+.phd-drift-detail{font-size:10px;color:var(--text3);flex-basis:100%;font-variant-numeric:tabular-nums;line-height:1.5}
+.phd-warn{color:var(--orange)}
+.phd-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:110px;gap:6px}
+.phd-empty-msg{font-size:12px;color:var(--text2);font-weight:600;max-width:280px;line-height:1.4}
+.phd-empty-note{font-size:10px;color:var(--text3);max-width:300px;line-height:1.5}
+.phd-skel{padding:20px 16px;font-size:11px;color:var(--text3)}
+
 /* asignación (donut SVG) */
 .ph-alloc{display:flex;flex-direction:column;gap:12px;padding:14px;align-items:center}
 .ph-donut-wrap{position:relative;width:152px;height:152px;flex-shrink:0}
@@ -1618,6 +1644,22 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
           </div>
         </div>
         <div class="phe-body" id="phe-body"></div>
+      </div>
+
+      <!-- S3 · Pulso del modelo hoy + drift. Bloque autocontenido (CSS phd-* ·
+           card HTML · funciones phd* · 1 línea en renderHome). Frontend puro sobre
+           endpoints de LECTURA; el drift empareja el scorer del recompute al motor
+           que declara la muestra viva (v2↔v2 hoy, v3↔v3 tras el flip). NO toca
+           MOTOR_V3/motor_flags/usa_v3/data_fetcher. -->
+      <div class="ph-card" id="phd-card" style="display:none">
+        <div class="ph-card-hdr">
+          <div class="ph-card-hdr-left">
+            <span class="ph-card-title">Pulso del modelo hoy</span>
+            <span class="phe-motor" id="phd-motor" style="display:none">motor v3</span>
+            <span class="ph-card-sub" id="phd-sub"></span>
+          </div>
+        </div>
+        <div class="phd-body" id="phd-body"></div>
       </div>
     </div>
 
@@ -9121,6 +9163,7 @@ function renderHome(){
   renderPortfolioValueChart(PH_RANGE);
   ensureSpyBenchmark();   // el OHLCV de SPY no se cachea solo en Home-first boot
   pheLoad();              // S2 · eficiencia del modelo · one-shot con TTL, fire-and-forget
+  phdLoad();              // S3 · pulso del modelo hoy + drift · one-shot con TTL, fire-and-forget
 }
 
 /* ═══ S2 · Eficiencia del modelo (señal + forecast) ═══════════════════════════
@@ -9349,6 +9392,233 @@ async function pheLoad(){
   PHE_STATE = next;
   PHE_LOADING = false;
   pheRender();
+}
+
+/* ═══ S3 · Pulso del modelo hoy + drift ═══════════════════════════════════════
+   Tres lecturas accionables en el home Portafolio, todas sobre endpoints de
+   LECTURA (cero escrituras; no toca el motor ni el flip):
+     (a) señales del ÚLTIMO job (job_date rotulado — el job corre 23:00 UTC, así
+         que un "hoy" literal quedaría vacío casi todo el día en horario local),
+     (b) P&L de la estrategia activa en el período (retorno_pct de /v1/strategies),
+     (c) DRIFT = win-rate vivo (efectividad paper-forward) − win-rate del backtest
+         (recompute), EMPAREJANDO el scorer al motor que declara la muestra viva:
+         v2↔v2 hoy, v3↔v3 tras el flip, muestra mixta (v2+v3) ⇒ "no comparable".
+   El drift auto-emparejado es a prueba del flip del lunes con CERO cambios de
+   código y nunca compara motores distintos en silencio. Reusa el patrón de la S2
+   (pheFetch / one-shot / TTL fuera del hot-path), NO el PHE_STATE.rc cacheado (v3). */
+
+let PHD_STATE = null;
+let PHD_LOADING = false;
+const PHD_TTL_MS = 5 * 60 * 1000;
+const PHD_DRIFT_UMBRAL_PTS = 10;   // |Δ win-rate| ≤ 10 pts ⇒ alineado; > 10 ⇒ deriva. Umbral visible y editable.
+const PHD_N_MIN = 30;              // por debajo de este n el drift es "indicativo" (muestra chica), sin veredicto verde/ámbar.
+const PHD_SIG_MAX = 10;            // filas de señales a listar antes de "+N más".
+
+/* Confianza sin motor_version (el endpoint /señales no lo expone): heurística de
+   escala — [0,1] ⇒ probabilidad v3 (→ %); [30,95] ⇒ puntos v2. */
+function phdConf(v){
+  if(v === null || v === undefined || v === '' || isNaN(v)) return '—';
+  const n = Number(v);
+  return n <= 1 ? Math.round(n * 100) : Math.round(n);
+}
+
+/* Mapea horizonte_ref "3D" → clave "3" del por_horizonte del recompute. */
+function phdHzKey(hRef){
+  const m = String(hRef || '3D').match(/\d+/);
+  return m ? m[0] : '3';
+}
+
+/* Veredicto del drift desde PHD_STATE. NO hace fetch. Todos los caminos de "no
+   comparable" son honestos y explícitos (nunca un número que finge coherencia). */
+function phdDriftEval(st){
+  const ef = st.ef;
+  if(!st.strat)  return { estado:'na', motivo:'Sin estrategia activa.' };
+  if(!ef)        return { estado:'na', motivo:'Efectividad no disponible (error de lectura).' };
+  if(!ef.disponible) return { estado:'na', motivo: ef.mensaje || 'Efectividad viva no disponible.' };
+  const motor = ef.motor_version || 'v2';
+  if(motor !== 'v2' && motor !== 'v3')
+    return { estado:'na', motivo:'Muestra de motor mixto (' + motor + '): drift no comparable todavía.' };
+  if(st.rcError) return { estado:'na', motivo:'Backtest no disponible: ' + st.rcError };
+  if(!st.rc || !st.rc.por_horizonte) return { estado:'na', motivo:'Backtest sin datos en el tramo.' };
+  const hz = phdHzKey(st.strat.params && st.strat.params.entrada && st.strat.params.entrada.horizonte_ref);
+  const bt = st.rc.por_horizonte[hz] && st.rc.por_horizonte[hz].buy;
+  if(!bt || bt.n === 0 || bt.win_rate === null || bt.win_rate === undefined)
+    return { estado:'na', motivo:'Sin señales BUY en el backtest del tramo (' + hz + 'D).' };
+
+  const vivoWR = ef.win_rate, vivoN = ef.muestra || 0;
+  const btWR = bt.win_rate,   btN = bt.n || 0;
+  const delta = Math.round((vivoWR - btWR) * 10) / 10;
+  const dExp = (ef.retorno_medio_pct != null && bt.retorno_promedio != null)
+    ? Math.round((ef.retorno_medio_pct - bt.retorno_promedio) * 100) / 100 : null;
+  const minN = Math.min(vivoN, btN);
+  const base = { motor, hz, vivoWR, btWR, vivoN, btN, delta, dExp, minN, rango: ef.rango_fechas || null };
+
+  if(minN < PHD_N_MIN) return Object.assign(base, { estado:'gris' });
+  if(Math.abs(delta) <= PHD_DRIFT_UMBRAL_PTS) return Object.assign(base, { estado:'verde' });
+  return Object.assign(base, { estado:'ambar' });
+}
+
+/* Pinta la card desde PHD_STATE. Idempotente · CERO fetch. */
+function phdRender(){
+  const body = $('phd-body'); if(!body) return;
+  const st = PHD_STATE;
+  const motorEl = $('phd-motor'), subEl = $('phd-sub');
+
+  if(!st){
+    body.innerHTML = '<div class="phd-skel">Cargando pulso del modelo…</div>';
+    if(motorEl) motorEl.style.display = 'none'; if(subEl) subEl.textContent = '';
+    return;
+  }
+  if(st.error){
+    if(motorEl) motorEl.style.display = 'none'; if(subEl) subEl.textContent = '';
+    body.innerHTML = '<div class="phd-empty"><div class="phd-empty-msg">No se pudo leer el pulso del modelo.</div>'
+      + '<div class="phd-empty-note">' + pheEsc(st.error) + '</div></div>';
+    return;
+  }
+
+  const drift = phdDriftEval(st);
+  if(motorEl){
+    const v3 = (drift.motor === 'v3');
+    motorEl.style.display = v3 ? '' : 'none';
+    if(v3) motorEl.textContent = 'motor v3';
+  }
+  if(subEl) subEl.textContent = st.sigJobDate ? ('último cierre · ' + st.sigJobDate) : '';
+
+  // ── (a) señales del último job ──────────────────────────────────────────
+  let sigHtml;
+  if(st.sig === null){
+    sigHtml = '<div class="phd-foot">No se pudieron leer las señales del libro.</div>';
+  } else if(st.sig.length === 0){
+    sigHtml = '<div class="phd-foot">' + (st.sigJobDate
+        ? 'Sin señales accionables en el cierre del ' + pheEsc(st.sigJobDate) + ' (todo HOLD).'
+        : 'El job de cierre aún no corrió hoy (corre 23:00 UTC).') + '</div>';
+  } else {
+    const nBuy = st.sig.filter(s => s['señal'] === 'BUY').length;
+    const nSell = st.sig.length - nBuy;
+    const rows = st.sig.slice(0, PHD_SIG_MAX).map(s => {
+      const buy = s['señal'] === 'BUY';
+      const col = buy ? 'var(--green)' : 'var(--red)';
+      const arr = buy ? '▲' : '▼';
+      const c = phdConf(s.confianza);
+      const px = (s.precio_entrada != null && !isNaN(s.precio_entrada)) ? ('$' + Number(s.precio_entrada).toFixed(2)) : '—';
+      return '<div class="phd-sig"><span class="phd-sig-dir" style="color:' + col + '">' + arr + '</span>'
+        + '<span class="phd-sig-tk">' + pheEsc(s.ticker) + '</span>'
+        + '<span class="phd-sig-meta">conf ' + c + ' · ' + px + '</span></div>';
+    }).join('');
+    const mas = st.sig.length > PHD_SIG_MAX ? '<div class="phd-foot">+' + (st.sig.length - PHD_SIG_MAX) + ' más</div>' : '';
+    sigHtml = '<div class="phd-hero"><span class="phd-num">' + st.sig.length + '</span>'
+      + '<span class="phd-unit">señales · ' + nBuy + ' BUY / ' + nSell + ' SELL</span></div>'
+      + '<div style="margin-top:8px">' + rows + '</div>' + mas;
+  }
+
+  // ── (b) P&L de la estrategia ────────────────────────────────────────────
+  let pnlHtml;
+  if(!st.strat){
+    pnlHtml = '<div class="phd-foot">Sin estrategia activa (paper/live). El P&amp;L aparece al activar una.</div>';
+  } else {
+    const s = st.strat;
+    const rp = s.retorno_pct;
+    const has = (rp != null && !isNaN(rp));
+    const col = !has ? 'var(--text)' : (rp > 0 ? 'var(--green)' : (rp < 0 ? 'var(--red)' : 'var(--text)'));
+    const sign = has && rp > 0 ? '+' : '';
+    const eq = (s.equity_actual != null && !isNaN(s.equity_actual)) ? Number(s.equity_actual) : null;
+    const cap = (s.capital_inicial_paper != null && !isNaN(s.capital_inicial_paper)) ? Number(s.capital_inicial_paper) : null;
+    pnlHtml = '<div class="phd-hero"><span class="phd-num" style="color:' + col + '">'
+      + (has ? (sign + rp.toFixed(2) + '%') : '—') + '</span></div>'
+      + '<div class="phd-foot">' + pheEsc(s.nombre || ('#' + s.id)) + ' · ' + pheEsc(s.estado || '—') + '</div>'
+      + (eq != null && cap != null
+          ? '<div class="phd-foot">equity ' + eq.toLocaleString('en-US', {maximumFractionDigits:0})
+            + ' · capital ' + cap.toLocaleString('en-US', {maximumFractionDigits:0}) + '</div>'
+          : '');
+  }
+
+  // ── (c) drift ───────────────────────────────────────────────────────────
+  let driftHtml;
+  if(drift.estado === 'na'){
+    driftHtml = '<div class="phd-drift"><span class="phd-drift-badge" style="background:rgba(122,144,176,.14);color:var(--text2)">DRIFT N/A</span>'
+      + '<span class="phd-drift-nums">' + pheEsc(drift.motivo) + '</span></div>';
+  } else {
+    const map = { verde:['ALINEADO','var(--green)'], ambar:['DERIVA','var(--orange)'], gris:['INDICATIVO','var(--text2)'] };
+    const par = map[drift.estado], lbl = par[0], col = par[1];
+    const sign = drift.delta > 0 ? '+' : '';
+    const dExpTxt = drift.dExp != null ? (' · Δexpectancy ' + (drift.dExp > 0 ? '+' : '') + drift.dExp.toFixed(2) + '%') : '';
+    const rangoTxt = drift.rango ? (' · muestra viva ' + pheEsc(drift.rango.desde) + '→' + pheEsc(drift.rango.hasta)) : '';
+    const chico = drift.estado === 'gris'
+      ? ' <span class="phd-warn">⚠ muestra chica (n=' + drift.minN + ' &lt; ' + PHD_N_MIN + ') — sin veredicto</span>' : '';
+    driftHtml = '<div class="phd-drift" style="border-left:3px solid ' + col + '">'
+      + '<span class="phd-drift-badge" style="background:' + col + '22;color:' + col + '">' + lbl + '</span>'
+      + '<span class="phd-drift-nums"><span>Δ win-rate <b style="color:' + col + '">' + sign + drift.delta + ' pts</b></span>'
+      + '<span>vivo ' + drift.vivoWR + '% (n=' + drift.vivoN + ')</span>'
+      + '<span>backtest ' + drift.btWR + '% (n=' + drift.btN + ')</span></span>'
+      + '<span class="phd-drift-detail">motor ' + drift.motor + '↔' + drift.motor + ' · ' + drift.hz + 'D · umbral ±' + PHD_DRIFT_UMBRAL_PTS + ' pts'
+      + dExpTxt + rangoTxt + chico + '</span></div>';
+  }
+
+  body.innerHTML = '<div class="phd-grid">'
+    + '<div class="phd-half"><div class="phd-lbl">Señales del último cierre</div>' + sigHtml + '</div>'
+    + '<div class="phd-half"><div class="phd-lbl">P&amp;L de la estrategia</div>' + pnlHtml + '</div>'
+    + '</div>' + driftHtml;
+}
+
+/* Carga one-shot con TTL, fuera del hot-path (renderHome la dispara fire-and-forget).
+   4 lecturas: GET /papertrading/señales · GET /strategies · GET /{sid}/efectividad ·
+   POST /backtest/recompute (scorer emparejado, lado buy). Cada sección degrada
+   honesto por su cuenta sin tumbar el resto. */
+async function phdLoad(){
+  const card = $('phd-card'); if(!card) return;
+  card.style.display = '';
+  if(typeof getBrokerToken === 'function' && !getBrokerToken()){ card.style.display = 'none'; return; }
+
+  const fresh = PHD_STATE && !PHD_STATE.error && (Date.now() - PHD_STATE.at) < PHD_TTL_MS;
+  if(fresh){ phdRender(); return; }
+  if(PHD_LOADING) return;
+  PHD_LOADING = true;
+  if(!PHD_STATE) phdRender();   // skeleton
+
+  const next = { at: Date.now(), sig: null, sigJobDate: null, strat: null, ef: null, rc: null, rcError: null, error: null };
+
+  // (a) señales del último job — mismo endpoint/patrón que SIGMARKS
+  try{
+    const d = await get('/v1/papertrading/señales?limit=200&excluir_dev=true');
+    if(d){
+      const rows = d['señales'] || [];
+      let maxJd = null;
+      for(const r of rows){ if(r.job_date && (maxJd === null || r.job_date > maxJd)) maxJd = r.job_date; }
+      next.sigJobDate = maxJd;
+      next.sig = rows.filter(r => r.job_date === maxJd && r['señal'] !== 'HOLD');
+    }
+  }catch(e){ /* señales opcionales: quedan en null → la sección degrada sola */ }
+
+  // (b) estrategia activa: live primero; si no, la paper más nueva (listar ordena id desc)
+  try{
+    const ls = await brokerGet('/v1/strategies');
+    const ests = (ls && ls.estrategias) || [];
+    next.strat = ests.find(s => s.estado === 'live') || ests.find(s => s.estado === 'paper') || null;
+  }catch(e){}
+
+  // (c) efectividad viva de esa estrategia (trae motor_version derivado de la muestra)
+  if(next.strat){
+    try{ next.ef = await brokerGet('/v1/strategies/' + next.strat.id + '/efectividad'); }catch(e){}
+  }
+
+  // (d) recompute EMPAREJADO — sólo si la muestra viva es de un motor limpio (v2 o v3)
+  const efMotor = next.ef && next.ef.motor_version;
+  const motorLimpio = (efMotor === 'v2' || efMotor === 'v3');
+  if(next.ef && next.ef.disponible && motorLimpio){
+    const body = { horizontes: [1, 3, 7], solo_tramo_limpio: true, scorer: efMotor, lado: 'buy' };
+    const uni = next.strat.params && next.strat.params.universo;
+    if(uni && uni.modo === 'explicito' && Array.isArray(uni.tickers) && uni.tickers.length) body.tickers = uni.tickers;
+    try{
+      next.rc = await pheFetch('/v1/backtest/recompute', body);
+    }catch(e){
+      if(e.code === 'NO_TOKEN' || e.code === 'UNAUTHORIZED'){ card.style.display = 'none'; PHD_LOADING = false; return; }
+      next.rcError = e.message || 'No se pudo recomputar el backtest.';
+    }
+  }
+
+  PHD_STATE = next;
+  PHD_LOADING = false;
+  phdRender();
 }
 
 /* El benchmark SPY usa el OHLCV de SPY. En arranque directo al Home ese cache
