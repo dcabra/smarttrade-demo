@@ -1113,7 +1113,7 @@ body.home-mode #cp-home{display:flex}
 .phz-cc-pane{display:flex;flex-direction:column;min-width:0}
 .phz-cc-chart{border-right:1px solid var(--border)}
 @media(max-width:980px){.phz-cc-chart{border-right:none;border-bottom:1px solid var(--border)}}
-.phz-cc-chart .ph-valuechart-wrap{flex:1;min-height:200px}
+.phz-cc-chart .ph-valuechart-wrap{height:250px}
 .phz-table-scroll{flex:1;overflow-y:auto;border-top:1px solid var(--border)}
 .phz-tall .ph-card{min-height:320px}
 .phz-tall .phnews-body{max-height:400px;overflow-y:auto}
@@ -9261,6 +9261,9 @@ function renderHome(){
   phdLoad();              // S3 · pulso del modelo hoy + drift · one-shot con TTL, fire-and-forget
   phcalLoad();            // S4 · próximos eventos (calendario) · one-shot con TTL, fire-and-forget
   phnewsLoad();           // S5 · noticias de mis posiciones · fan-out cache-first, progresivo
+  // Re-pinta el chart una vez que el layout de la grilla ya aplicó (evita que el
+  // canvas mida un contenedor colapsado en el primer render → tarjeta aplastada).
+  requestAnimationFrame(() => { try { phPaintValueChart(); } catch (e) {} });
 }
 
 /* ═══ S4 · Próximos eventos (calendario macro/earnings del portafolio) ═════════
