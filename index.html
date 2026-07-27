@@ -1093,6 +1093,23 @@ body.home-mode #cp-home{display:flex}
 .phnews-src{font-size:9px;color:var(--text3);margin-top:1px}
 .phnews-mini{font-size:10px;color:var(--text3);padding:2px 4px 4px 6px}
 .phnews-empty{padding:16px 8px;text-align:center;font-size:11px;color:var(--text3)}
+/* ── Rediseño home v33: grilla temática de 2 columnas + header compacto ── */
+.phz-header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:2px}
+.ph-kpis{grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:6px 16px;flex:1 1 340px}
+.ph-kpi{background:transparent;border:none;padding:4px 0}
+.ph-kpi-lbl{font-size:9px}
+.ph-kpi-val{font-size:16px}
+.ph-kpi-val.big{font-size:19px}
+.ph-kpi-sub{font-size:9px}
+.phz-sec-lbl{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px}
+.phz-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
+.phz-grid.phz-wide{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
+@media (max-width:980px){.phz-grid,.phz-grid.phz-wide{grid-template-columns:1fr}}
+.phz-cartera .ph-alloc{flex-direction:row;align-items:center;justify-content:flex-start;gap:16px;padding:12px 14px 8px}
+.phz-cartera .ph-legend{display:none}
+.phz-cartera .ph-table th:nth-child(2),.phz-cartera .ph-table td:nth-child(2),.phz-cartera .ph-table th:nth-child(3),.phz-cartera .ph-table td:nth-child(3),.phz-cartera .ph-table th:nth-child(4),.phz-cartera .ph-table td:nth-child(4),.phz-cartera .ph-table th:nth-child(6),.phz-cartera .ph-table td:nth-child(6){display:none}
+.phz-table-scroll{max-height:240px;overflow-y:auto;border-top:1px solid var(--border)}
+.phz-tall .ph-card{min-height:320px}
 .phd-warn{color:var(--orange)}
 .phd-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:110px;gap:6px}
 .phd-empty-msg{font-size:12px;color:var(--text2);font-weight:600;max-width:280px;line-height:1.4}
@@ -1601,16 +1618,18 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
     <!-- ════ HOME · Portafolio (v32) ════ -->
     <div id="cp-home">
-      <div class="ph-head">
-        <div class="ph-title-row">
-          <span class="ph-title">Portafolio</span>
+      <div class="phz-header">
+        <div class="ph-head">
+          <div class="ph-title-row">
+            <span class="ph-title">Portafolio</span>
+          </div>
         </div>
+        <div class="ph-kpis" id="ph-kpis"></div>
       </div>
-
-      <div class="ph-kpis" id="ph-kpis"></div>
       <div class="ph-bp-note" id="ph-bp-note"></div>
 
-      <div class="ph-grid">
+      <div class="phz-sec-lbl">Mi cartera</div>
+      <div class="phz-grid phz-wide">
         <div class="ph-card">
           <div class="ph-card-hdr">
             <div class="ph-card-hdr-left">
@@ -1637,25 +1656,24 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
           <div class="ph-chart-legend" id="ph-chart-legend"></div>
         </div>
 
-        <div class="ph-card">
+        <div class="ph-card phz-cartera">
           <div class="ph-card-hdr">
-            <span class="ph-card-title">Asignación</span>
+            <div class="ph-card-hdr-left">
+              <span class="ph-card-title">Cartera</span>
+              <span class="ph-card-sub" id="ph-pos-count"></span>
+            </div>
             <div class="ph-alloc-toggle" id="ph-alloc-toggle">
               <button class="ph-tbtn on" data-m="pos" onclick="phSetAllocMode(this)">Por posición</button>
               <button class="ph-tbtn" data-m="class" onclick="phSetAllocMode(this)">Por clase</button>
             </div>
           </div>
           <div class="ph-alloc" id="ph-alloc"></div>
+          <div class="ph-table-wrap phz-table-scroll" id="ph-table"></div>
         </div>
       </div>
 
-      <div class="ph-card">
-        <div class="ph-card-hdr">
-          <span class="ph-card-title">Posiciones</span>
-          <span class="ph-card-sub" id="ph-pos-count"></span>
-        </div>
-        <div class="ph-table-wrap" id="ph-table"></div>
-      </div>
+      <div class="phz-sec-lbl">El modelo</div>
+      <div class="phz-grid">
 
       <!-- ═══ Eficiencia del modelo (S2 · roadmap home) ══════════════════════
            Frontend puro. Motor VIVO leído por-respuesta (pheMotorVivo → confMotor
@@ -1695,6 +1713,10 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
         </div>
         <div class="phd-body" id="phd-body"></div>
       </div>
+      </div>
+
+      <div class="phz-sec-lbl">Eventos y noticias</div>
+      <div class="phz-grid phz-tall">
 
       <!-- S4 · Próximos eventos (calendario macro/earnings del portafolio).
            Bloque autocontenido (CSS phcal-* · card HTML · funciones phcal* · 1
@@ -1724,6 +1746,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
           </div>
         </div>
         <div class="phnews-body" id="phnews-body"></div>
+      </div>
       </div>
     </div>
 
