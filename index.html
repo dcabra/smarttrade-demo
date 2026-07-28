@@ -1129,9 +1129,7 @@ body.home-mode #cp-home{display:flex}
 .phz-mini-sep{color:var(--text3);font-size:12px}
 .phz-mini-chip{font-size:9px;font-weight:700;border-radius:4px;padding:1px 6px;background:rgba(122,144,176,.14);letter-spacing:.03em}
 .phz-info{font-size:11px;color:var(--text3);cursor:help}
-.phz-pop{display:none}
-.phz-mini:hover{z-index:61}
-.phz-mini:hover .phz-pop{display:block;position:absolute;top:calc(100% + 4px);left:0;width:min(460px,150%);z-index:60;background:var(--bg4,#131f38);border:1px solid var(--border2);border-radius:10px;box-shadow:0 12px 34px rgba(0,0,0,.6);overflow:hidden}
+.phz-pop{display:none;position:fixed;z-index:9999;width:340px;max-width:92vw;max-height:72vh;overflow:auto;background:var(--bg4,#131f38);border:1px solid var(--border2);border-radius:10px;box-shadow:0 14px 38px rgba(0,0,0,.6);pointer-events:none}
 .phd-warn{color:var(--orange)}
 .phd-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:110px;gap:6px}
 .phd-empty-msg{font-size:12px;color:var(--text2);font-weight:600;max-width:280px;line-height:1.4}
@@ -9208,6 +9206,7 @@ let PH_DAYPL_SEQ = 0;     // guard del fetch de P&L del día
 let PH_PTS = [];          // puntos pixelados de la curva (para el tooltip)
 let PH_SPY_PTS = [];      // puntos pixelados del benchmark SPY (para el tooltip)
 let PH_ACTIVE_TICKER = null; // ticker con la línea "encendida" por hover del donut ('SPY' = benchmark)
+let PH_CHART_GEO = null;      // geometría del chart de valor (para el hover chart↔dona)
 let PH_LOCKED = null;        // índice de rebanada FIJADA por click (persiste al salir el mouse); null = sin fijar
 let PH_OVERLAY_STATUS = {};  // sym -> 'ok' | 'fail' | 'loading' : diagnóstico de carga OHLCV del overlay
 let PH_DRAW = null;       // estado de dibujo de la curva (repintado en hover SIN red)
@@ -9277,6 +9276,7 @@ function renderHome(){
     } catch (e) {}
   }
   requestAnimationFrame(() => { try { phPaintValueChart(); } catch (e) {} });
+  phBindChartLineHover();   // hover sobre curva de un ticker → resalta + activa slice de la dona
 }
 
 /* ═══ S4 · Próximos eventos (calendario macro/earnings del portafolio) ═════════
@@ -10292,6 +10292,68 @@ function phBindOutsideUnlock(){
 }
 phBindOutsideUnlock();
 
+/* ── Tooltip flotante de las mini-cards (Eficiencia/Pulso): muestra SOLO el
+   detalle (.phz-pop) y lo posiciona junto al cursor, siguiendo el mouse. ── */
+function phBindMiniTips(){
+  if(phBindMiniTips._done) return; phBindMiniTips._done = true;
+  document.addEventListener('mousemove', (e)=>{
+    const card = e.target && e.target.closest ? e.target.closest('.phz-mini') : null;
+    const pop = card ? card.querySelector('.phz-pop') : null;
+    document.querySelectorAll('.phz-mini .phz-pop').forEach(p=>{ if(p!==pop) p.style.display='none'; });
+    if(!pop) return;
+    pop.style.display='block';
+    const pad=14, w=pop.offsetWidth||340, h=pop.offsetHeight||220;
+    let left=e.clientX+pad, top=e.clientY+pad;
+    if(left+w > window.innerWidth-8) left=e.clientX-w-pad;
+    if(left<8) left=8;
+    if(top+h > window.innerHeight-8) top=window.innerHeight-h-8;
+    if(top<8) top=8;
+    pop.style.left=left+'px'; pop.style.top=top+'px';
+  }, true);
+}
+phBindMiniTips();
+
+/* ── Sincronía chart ↔ dona: al pasar el mouse sobre la curva de un ticker en el
+   chart de valor, se resalta esa curva y se activa su rebanada en la dona (misma
+   ruta que el hover del donut, vía phHiliteSym). Usa la geometría guardada por
+   phPaintValueChart (PH_CHART_GEO) para hallar la línea más cercana al cursor. ── */
+let PH_CHART_HOVER = null;
+function phChartLineHover(e){
+  if(typeof CP_VIEW!=='undefined' && CP_VIEW!=='home') return;
+  const canvas=$('ph-value-canvas'), geo=PH_CHART_GEO;
+  if(!canvas || !geo || !PH_DRAW || !PH_DRAW.tickerLines || !PH_DRAW.tickerLines.length) return;
+  const rect=canvas.getBoundingClientRect(); if(!rect.width || !rect.height) return;
+  const cx=(e.clientX-rect.left)/rect.width*geo.W;
+  const cy=(e.clientY-rect.top)/rect.height*geo.H;
+  let best=null, bestD=16;   // umbral en px
+  if(cx>=geo.PL && cx<=geo.PL+geo.cW){
+    const frac=(cx-geo.PL)/geo.cW;
+    PH_DRAW.tickerLines.forEach(L=>{
+      const n=L.vals.length; if(n<2) return;
+      const fi=frac*(n-1), i0=Math.max(0,Math.floor(fi)), i1=Math.min(n-1,i0+1), t=fi-i0;
+      const v=L.vals[i0]*(1-t)+L.vals[i1]*t;
+      const ly=geo.PT+geo.cH-((v-geo.lo)/geo.span)*geo.cH;
+      const d=Math.abs(cy-ly);
+      if(d<bestD){ bestD=d; best=L.label; }
+    });
+  }
+  if(best!==PH_CHART_HOVER){
+    PH_CHART_HOVER=best;
+    if(best) phHiliteSym(best);      // resalta curva + activa slice de la dona
+    else phSliceLeave();             // ninguna curva cerca → vuelve a lo fijado/base
+  }
+}
+function phChartLineLeave(){
+  if(PH_CHART_HOVER!=null){ PH_CHART_HOVER=null; phSliceLeave(); }
+}
+function phBindChartLineHover(){
+  const cv=$('ph-value-canvas');
+  if(cv && !cv._phLineHover){ cv._phLineHover=true;
+    cv.addEventListener('mousemove', phChartLineHover);
+    cv.addEventListener('mouseleave', phChartLineLeave);
+  }
+}
+
 /* Resalta por símbolo (desde la tabla de posiciones) reutilizando la misma ruta
    que el hover del donut: encuentra la rebanada y delega en phSlice. */
 function phHiliteSym(sym){
@@ -10519,6 +10581,7 @@ function phPaintValueChart(){
   const xN=(i,n)=> PL + (n<=1 ? cW/2 : i/(n-1)*cW);
   const x=i=> xN(i, vals.length);
   const y=v=> PT + cH - ((v-lo)/span)*cH;
+  PH_CHART_GEO = { W, H, PL, PT, cW, cH, lo, span };   // para el hover chart↔dona
 
   // ── Ejes: cuadrícula tenue + etiquetas de valor (Y, dólares de la cuenta) ──
   ctx.font='10px -apple-system, system-ui, "Segoe UI", sans-serif';
