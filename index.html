@@ -10334,7 +10334,7 @@ function phChartLineHover(e){
       const v=L.vals[i0]*(1-t)+L.vals[i1]*t;
       const ly=geo.PT+geo.cH-((v-geo.lo)/geo.span)*geo.cH;
       const d=Math.abs(cy-ly);
-      if(d<bestD){ bestD=d; best=L.label; }
+      if(d<bestD){ bestD=d; best=L.symbol; }
     });
   }
   if(best!==PH_CHART_HOVER){
