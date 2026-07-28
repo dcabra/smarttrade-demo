@@ -1108,8 +1108,9 @@ body.home-mode #cp-home{display:flex}
 .phz-cartera .ph-alloc{flex-direction:row;align-items:center;justify-content:flex-start;gap:16px;padding:12px 14px 8px}
 .phz-cartera .ph-legend{display:none}
 .phz-cartera .ph-table th:nth-child(2),.phz-cartera .ph-table td:nth-child(2),.phz-cartera .ph-table th:nth-child(3),.phz-cartera .ph-table td:nth-child(3),.phz-cartera .ph-table th:nth-child(4),.phz-cartera .ph-table td:nth-child(4),.phz-cartera .ph-table th:nth-child(6),.phz-cartera .ph-table td:nth-child(6){display:none}
-.phz-cc-cols{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);grid-auto-rows:320px}
-@media(max-width:980px){.phz-cc-cols{grid-template-columns:1fr}}
+.phz-cc-card{height:320px}
+.phz-cc-cols{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
+@media(max-width:980px){.phz-cc-card{height:auto}.phz-cc-cols{grid-template-columns:1fr}.phz-cc-pane{min-height:300px}}
 .phz-cc-pane{display:flex;flex-direction:column;min-width:0}
 .phz-cc-chart{border-right:1px solid var(--border)}
 @media(max-width:980px){.phz-cc-chart{border-right:none;border-bottom:1px solid var(--border)}}
@@ -9261,8 +9262,18 @@ function renderHome(){
   phdLoad();              // S3 · pulso del modelo hoy + drift · one-shot con TTL, fire-and-forget
   phcalLoad();            // S4 · próximos eventos (calendario) · one-shot con TTL, fire-and-forget
   phnewsLoad();           // S5 · noticias de mis posiciones · fan-out cache-first, progresivo
-  // Re-pinta el chart una vez que el layout de la grilla ya aplicó (evita que el
-  // canvas mida un contenedor colapsado en el primer render → tarjeta aplastada).
+  // Repinta el chart cuando su contenedor cambia de tamaño (layout, zoom, resize).
+  // Un rAF único era demasiado temprano; el observer dispara cuando el panel obtiene
+  // sus dimensiones reales, sin importar el timing ni el nivel de zoom.
+  if (!window.__phChartRO) {
+    try {
+      const _w = $('ph-valuechart-wrap');
+      if (_w && typeof ResizeObserver !== 'undefined') {
+        window.__phChartRO = new ResizeObserver(() => { try { phPaintValueChart(); } catch (e) {} });
+        window.__phChartRO.observe(_w);
+      }
+    } catch (e) {}
+  }
   requestAnimationFrame(() => { try { phPaintValueChart(); } catch (e) {} });
 }
 
