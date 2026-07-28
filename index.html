@@ -1101,23 +1101,22 @@ body.home-mode #cp-home{display:flex}
 .ph-kpi-val{font-size:16px}
 .ph-kpi-val.big{font-size:19px}
 .ph-kpi-sub{font-size:9px}
-.phz-sec-lbl{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 8px}
-.phz-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}
-.phz-grid.phz-wide{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
-@media (max-width:980px){.phz-grid,.phz-grid.phz-wide{grid-template-columns:1fr}}
 .phz-cartera .ph-alloc{flex-direction:row;align-items:center;justify-content:flex-start;gap:16px;padding:12px 14px 8px}
 .phz-cartera .ph-legend{display:none}
 .phz-cartera .ph-table th:nth-child(2),.phz-cartera .ph-table td:nth-child(2),.phz-cartera .ph-table th:nth-child(3),.phz-cartera .ph-table td:nth-child(3),.phz-cartera .ph-table th:nth-child(4),.phz-cartera .ph-table td:nth-child(4),.phz-cartera .ph-table th:nth-child(6),.phz-cartera .ph-table td:nth-child(6){display:none}
-.phz-cc-card{height:320px;flex-shrink:0}
-.phz-cc-cols{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
-@media(max-width:980px){.phz-cc-card{height:auto}.phz-cc-cols{grid-template-columns:1fr}.phz-cc-pane{min-height:300px}}
-.phz-cc-pane{display:flex;flex-direction:column;min-width:0}
-.phz-cc-chart{border-right:1px solid var(--border)}
-@media(max-width:980px){.phz-cc-chart{border-right:none;border-bottom:1px solid var(--border)}}
-.phz-cc-chart .ph-valuechart-wrap{height:250px}
-.phz-table-scroll{flex:1;overflow-y:auto;border-top:1px solid var(--border)}
-.phz-tall .ph-card{min-height:320px}
-.phz-tall .phnews-body{max-height:400px;overflow-y:auto}
+.phz-table-scroll{flex:1;min-height:0;overflow-y:auto;border-top:1px solid var(--border)}
+/* ── Layout terminal: grilla de 3 columnas que llena el alto del home ──
+   Chart arriba (cruza izq+centro) · izquierda: Eficiencia/Pulso/Eventos ·
+   centro: Noticias (scroll) · derecha: Cartera (alto completo, scroll). */
+.phz-term{flex:1;min-height:560px;display:grid;grid-template-columns:minmax(0,0.85fr) minmax(0,1fr) minmax(0,1.1fr);grid-template-rows:auto minmax(0,1fr);gap:12px}
+.phz-term-chart{grid-column:1/3;grid-row:1}
+.phz-term-chart .ph-valuechart-wrap{height:200px}
+.phz-term-left{grid-column:1;grid-row:2;display:flex;flex-direction:column;gap:12px;min-height:0;overflow-y:auto}
+.phz-term-left .ph-card{flex-shrink:0}
+.phz-term-news{grid-column:2;grid-row:2;min-height:0;overflow:hidden}
+.phz-term-news .phnews-body{flex:1;min-height:0;max-height:none;overflow-y:auto}
+.phz-term-cartera{grid-column:3;grid-row:1/3;min-height:0;overflow:hidden}
+@media(max-width:1100px){.phz-term{grid-template-columns:1fr;grid-template-rows:none;min-height:0}.phz-term-chart,.phz-term-left,.phz-term-news,.phz-term-cartera{grid-column:auto;grid-row:auto;overflow:visible}.phz-term-cartera,.phz-term-news{height:520px;overflow:hidden}}
 .phd-warn{color:var(--orange)}
 .phd-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:110px;gap:6px}
 .phd-empty-msg{font-size:12px;color:var(--text2);font-weight:600;max-width:280px;line-height:1.4}
@@ -1636,126 +1635,110 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       </div>
       <div class="ph-bp-note" id="ph-bp-note"></div>
 
-      <div class="phz-sec-lbl">Mi cartera</div>
-      <div class="ph-card phz-cartera phz-cc-card">
-        <div class="phz-cc-cols">
-          <div class="phz-cc-pane phz-cc-chart">
+      <div class="phz-term">
+
+        <!-- Chart de valor · arriba, cruza izquierda + centro -->
+        <div class="ph-card phz-term-chart">
+          <div class="ph-card-hdr">
+            <div class="ph-card-hdr-left">
+              <span class="ph-card-title">Valor de la cuenta</span>
+              <span class="ph-delta" id="ph-delta"></span>
+            </div>
+            <div class="ph-range" id="ph-range">
+              <button class="ph-rbtn" data-r="1S" onclick="phSetRange(this)">1S</button>
+              <button class="ph-rbtn" data-r="1M" onclick="phSetRange(this)">1M</button>
+              <button class="ph-rbtn on" data-r="3M" onclick="phSetRange(this)">3M</button>
+              <button class="ph-rbtn" data-r="1A" onclick="phSetRange(this)">1A</button>
+            </div>
+          </div>
+          <div class="ph-valuechart-wrap" id="ph-valuechart-wrap">
+            <canvas id="ph-value-canvas"></canvas>
+            <div class="ph-chart-dot" id="ph-chart-dot"></div>
+            <div class="ph-chart-tt" id="ph-chart-tt"></div>
+            <div class="ph-empty" id="ph-value-empty">
+              <span class="ph-empty-icon">📈</span>
+              <span class="ph-empty-msg">Histórico de valor no disponible aún.</span>
+              <span class="ph-empty-note">Aparecerá en cuanto tu cuenta tenga movimientos.</span>
+            </div>
+          </div>
+          <div class="ph-chart-legend" id="ph-chart-legend"></div>
+        </div>
+
+        <!-- Columna izquierda · Eficiencia · Pulso · Eventos -->
+        <div class="phz-term-left">
+
+          <!-- ═══ Eficiencia del modelo (S2 · roadmap home) ══════════════════════
+               Frontend puro. Motor VIVO leído por-respuesta (pheMotorVivo → confMotor
+               sobre CACHE, default v2 · espejo de motorBadge). NO toca MOTOR_V3 /
+               motor_flags / usa_v3() / data_fetcher. -->
+          <div class="ph-card" id="phe-card" style="display:none">
             <div class="ph-card-hdr">
               <div class="ph-card-hdr-left">
-                <span class="ph-card-title">Valor de la cuenta</span>
-                <span class="ph-delta" id="ph-delta"></span>
+                <span class="ph-card-title">Eficiencia del modelo</span>
+                <span class="phe-motor" id="phe-motor" style="display:none">motor v3</span>
+                <span class="ph-card-sub" id="phe-sub"></span>
               </div>
-              <div class="ph-range" id="ph-range">
-                <button class="ph-rbtn" data-r="1S" onclick="phSetRange(this)">1S</button>
-                <button class="ph-rbtn" data-r="1M" onclick="phSetRange(this)">1M</button>
-                <button class="ph-rbtn on" data-r="3M" onclick="phSetRange(this)">3M</button>
-                <button class="ph-rbtn" data-r="1A" onclick="phSetRange(this)">1A</button>
-              </div>
-            </div>
-            <div class="ph-valuechart-wrap" id="ph-valuechart-wrap">
-              <canvas id="ph-value-canvas"></canvas>
-              <div class="ph-chart-dot" id="ph-chart-dot"></div>
-              <div class="ph-chart-tt" id="ph-chart-tt"></div>
-              <div class="ph-empty" id="ph-value-empty">
-                <span class="ph-empty-icon">📈</span>
-                <span class="ph-empty-msg">Histórico de valor no disponible aún.</span>
-                <span class="ph-empty-note">Aparecerá en cuanto tu cuenta tenga movimientos.</span>
+              <div class="ph-range" id="phe-hz">
+                <button class="ph-rbtn" data-h="1" onclick="pheSetHz(this)">1D</button>
+                <button class="ph-rbtn on" data-h="3" onclick="pheSetHz(this)">3D</button>
+                <button class="ph-rbtn" data-h="7" onclick="pheSetHz(this)">7D</button>
               </div>
             </div>
-            <div class="ph-chart-legend" id="ph-chart-legend"></div>
+            <div class="phe-body" id="phe-body"></div>
           </div>
-          <div class="phz-cc-pane phz-cc-holdings">
+
+          <!-- S3 · Pulso del modelo hoy + drift. NO toca MOTOR_V3/motor_flags/usa_v3/data_fetcher. -->
+          <div class="ph-card" id="phd-card" style="display:none">
             <div class="ph-card-hdr">
               <div class="ph-card-hdr-left">
-                <span class="ph-card-title">Cartera</span>
-                <span class="ph-card-sub" id="ph-pos-count"></span>
-              </div>
-              <div class="ph-alloc-toggle" id="ph-alloc-toggle">
-                <button class="ph-tbtn on" data-m="pos" onclick="phSetAllocMode(this)">Por posición</button>
-                <button class="ph-tbtn" data-m="class" onclick="phSetAllocMode(this)">Por clase</button>
+                <span class="ph-card-title">Pulso del modelo hoy</span>
+                <span class="phe-motor" id="phd-motor" style="display:none">motor v3</span>
+                <span class="ph-card-sub" id="phd-sub"></span>
               </div>
             </div>
-            <div class="ph-alloc" id="ph-alloc"></div>
-            <div class="ph-table-wrap phz-table-scroll" id="ph-table"></div>
+            <div class="phd-body" id="phd-body"></div>
+          </div>
+
+          <!-- S4 · Próximos eventos (calendario macro/earnings). GET /v1/strategies/calendar/events (LECTURA). -->
+          <div class="ph-card" id="phcal-card" style="display:none">
+            <div class="ph-card-hdr">
+              <div class="ph-card-hdr-left">
+                <span class="ph-card-title">Próximos eventos</span>
+                <span class="ph-card-sub" id="phcal-sub"></span>
+              </div>
+            </div>
+            <div class="phcal-body" id="phcal-body"></div>
           </div>
         </div>
-      </div>
 
-      <div class="phz-sec-lbl">El modelo</div>
-      <div class="phz-grid">
-
-      <!-- ═══ Eficiencia del modelo (S2 · roadmap home) ══════════════════════
-           Frontend puro. Motor VIVO leído por-respuesta (pheMotorVivo → confMotor
-           sobre CACHE, default v2 · espejo de motorBadge). NO toca MOTOR_V3 /
-           motor_flags / usa_v3() / data_fetcher. Fetch one-shot con TTL fuera del
-           hot-path de renderHome. Forecast v3 → 422 → degrada solo su mitad con el
-           detail real. Revert trivial: bloque autocontenido (esta card + CSS phe-*
-           + funciones phe* + 1 línea en renderHome). -->
-      <div class="ph-card" id="phe-card" style="display:none">
-        <div class="ph-card-hdr">
-          <div class="ph-card-hdr-left">
-            <span class="ph-card-title">Eficiencia del modelo</span>
-            <span class="phe-motor" id="phe-motor" style="display:none">motor v3</span>
-            <span class="ph-card-sub" id="phe-sub"></span>
+        <!-- Centro · Noticias (alto, scroll interno) -->
+        <!-- S5 · Noticias de mis posiciones. Fan-out GET /v1/context/{ticker} (LECTURA). -->
+        <div class="ph-card phz-term-news" id="phnews-card" style="display:none">
+          <div class="ph-card-hdr">
+            <div class="ph-card-hdr-left">
+              <span class="ph-card-title">Noticias de mis posiciones</span>
+              <span class="ph-card-sub" id="phnews-sub"></span>
+            </div>
           </div>
-          <div class="ph-range" id="phe-hz">
-            <button class="ph-rbtn" data-h="1" onclick="pheSetHz(this)">1D</button>
-            <button class="ph-rbtn on" data-h="3" onclick="pheSetHz(this)">3D</button>
-            <button class="ph-rbtn" data-h="7" onclick="pheSetHz(this)">7D</button>
-          </div>
+          <div class="phnews-body" id="phnews-body"></div>
         </div>
-        <div class="phe-body" id="phe-body"></div>
-      </div>
 
-      <!-- S3 · Pulso del modelo hoy + drift. Bloque autocontenido (CSS phd-* ·
-           card HTML · funciones phd* · 1 línea en renderHome). Frontend puro sobre
-           endpoints de LECTURA; el drift empareja el scorer del recompute al motor
-           que declara la muestra viva (v2↔v2 hoy, v3↔v3 tras el flip). NO toca
-           MOTOR_V3/motor_flags/usa_v3/data_fetcher. -->
-      <div class="ph-card" id="phd-card" style="display:none">
-        <div class="ph-card-hdr">
-          <div class="ph-card-hdr-left">
-            <span class="ph-card-title">Pulso del modelo hoy</span>
-            <span class="phe-motor" id="phd-motor" style="display:none">motor v3</span>
-            <span class="ph-card-sub" id="phd-sub"></span>
+        <!-- Derecha · Cartera (alto completo, scroll interno) -->
+        <div class="ph-card phz-cartera phz-term-cartera">
+          <div class="ph-card-hdr">
+            <div class="ph-card-hdr-left">
+              <span class="ph-card-title">Cartera</span>
+              <span class="ph-card-sub" id="ph-pos-count"></span>
+            </div>
+            <div class="ph-alloc-toggle" id="ph-alloc-toggle">
+              <button class="ph-tbtn on" data-m="pos" onclick="phSetAllocMode(this)">Por posición</button>
+              <button class="ph-tbtn" data-m="class" onclick="phSetAllocMode(this)">Por clase</button>
+            </div>
           </div>
+          <div class="ph-alloc" id="ph-alloc"></div>
+          <div class="ph-table-wrap phz-table-scroll" id="ph-table"></div>
         </div>
-        <div class="phd-body" id="phd-body"></div>
-      </div>
-      </div>
 
-      <div class="phz-sec-lbl">Eventos y noticias</div>
-      <div class="phz-grid phz-tall">
-
-      <!-- S4 · Próximos eventos (calendario macro/earnings del portafolio).
-           Bloque autocontenido (CSS phcal-* · card HTML · funciones phcal* · 1
-           línea en renderHome). Frontend puro sobre GET /v1/strategies/calendar/
-           events (LECTURA); reusa el patrón de loadCalendar (brokerGet, CAL_ICON/
-           CAL_LABEL). NO toca MOTOR_V3/motor_flags/usa_v3/data_fetcher. -->
-      <div class="ph-card" id="phcal-card" style="display:none">
-        <div class="ph-card-hdr">
-          <div class="ph-card-hdr-left">
-            <span class="ph-card-title">Próximos eventos</span>
-            <span class="ph-card-sub" id="phcal-sub"></span>
-          </div>
-        </div>
-        <div class="phcal-body" id="phcal-body"></div>
-      </div>
-
-      <!-- S5 · Noticias de mis posiciones. Bloque autocontenido (CSS phnews-* ·
-           card HTML · funciones phnews* · 1 línea en renderHome). Frontend puro:
-           fan-out GET /v1/context/{ticker} (LECTURA) reusando fetchContext /
-           CONTEXT_CACHE / sentColor, cache-first + pool de 3, render progresivo.
-           NO toca MOTOR_V3/motor_flags/usa_v3/data_fetcher. -->
-      <div class="ph-card" id="phnews-card" style="display:none">
-        <div class="ph-card-hdr">
-          <div class="ph-card-hdr-left">
-            <span class="ph-card-title">Noticias de mis posiciones</span>
-            <span class="ph-card-sub" id="phnews-sub"></span>
-          </div>
-        </div>
-        <div class="phnews-body" id="phnews-body"></div>
-      </div>
       </div>
     </div>
 
