@@ -1160,6 +1160,7 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .ph-table tbody td:first-child{text-align:left}
 .ph-table tbody tr{cursor:pointer;transition:background .12s}
 .ph-table tbody tr:hover{background:var(--bg4)}
+.ph-table tbody tr.ph-trow-on{background:var(--bg4)}
 .ph-row-sym{font-weight:700;color:var(--text)}
 .ph-row-cls{font-size:9px;font-weight:600;color:var(--text3);background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:1px 5px;margin-left:6px;vertical-align:middle}
 .ph-pos{color:var(--green)}
@@ -10232,7 +10233,24 @@ function phSlice(i){
   // el benchmark; Efectivo / modo 'class' → sin línea que encender.
   PH_ACTIVE_TICKER = (PH_ALLOC_MODE==='pos' && s.label && s.label!=='Efectivo') ? s.label : null;
   if(PH_ACTIVE_TICKER && PH_ACTIVE_TICKER!=='SPY') phLazyTickerHistory(PH_ACTIVE_TICKER);
+  phHiliteRow(s.label, s.color);   // resaltar la fila de Cartera con el color del ticker
   phPaintValueChart();
+}
+
+/* Resalta la fila de la tabla Cartera del ticker (con su color) y apaga las demás.
+   Cierra el triángulo chart ↔ dona ↔ tabla: todas las rutas pasan por phSlice. */
+function phHiliteRow(sym, color){
+  const rows = document.querySelectorAll('#ph-table tbody tr');
+  rows.forEach(tr=>{
+    const on = tr.id === ('ph-trow-' + sym);
+    tr.classList.toggle('ph-trow-on', on);
+    tr.style.boxShadow = (on && color) ? ('inset 3px 0 0 ' + color) : '';
+  });
+}
+function phClearRow(){
+  document.querySelectorAll('#ph-table tbody tr.ph-trow-on').forEach(tr=>{
+    tr.classList.remove('ph-trow-on'); tr.style.boxShadow = '';
+  });
 }
 
 /* Carga bajo demanda de la historia de un ticker al señalarlo, por si aún no
@@ -10262,6 +10280,7 @@ function phSliceReset(){
   if(c) c.innerHTML = `<span class="v">${fP(total)}</span><span class="l">Total</span>`;
   // Apagar cualquier línea encendida → estado por defecto (todas tenues).
   PH_ACTIVE_TICKER = null;
+  phClearRow();
   phPaintValueChart();
 }
 
@@ -10390,7 +10409,7 @@ function renderHomeTable(){
     if(pl!=null && !isNaN(pl)) tPl+=pl;
     const plCls = (pl!=null && pl<0) ? 'ph-neg' : 'ph-pos';
     const wPct = (eq && v!=null) ? (v/eq*100) : null;
-    return `<tr onclick="pick('${p.symbol}')" onmouseover="phHiliteSym('${p.symbol}')" onmouseout="phSliceLeave()" title="Abrir ${p.symbol} en la gráfica">
+    return `<tr id="ph-trow-${p.symbol}" onclick="pick('${p.symbol}')" onmouseover="phHiliteSym('${p.symbol}')" onmouseout="phSliceLeave()" title="Abrir ${p.symbol} en la gráfica">
       <td><span class="ph-row-sym">${p.symbol}</span>${phClassChip(p.asset_class)}</td>
       <td>${p.qty!=null && !isNaN(p.qty) ? (+p.qty).toLocaleString('en-US',{maximumFractionDigits:6}) : '—'}</td>
       <td>${fP(p.avg_entry_price)}</td>
