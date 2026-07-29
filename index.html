@@ -3568,6 +3568,11 @@ function phrAgoTxt(d){ return d<=0 ? 'hoy' : d===1 ? 'ayer' : 'hace '+d+'d'; }
    3) dedupe por ticker: se queda el cierre MÁS RECIENTE; n = nº de cierres
       distintos del ticker en la ventana (el "×N" es solo indicador: NO suma
       cierres de días distintos — para eso está el Journal)
+   3.5) solo los "sueltos": fuera los que ya están en WATCHLIST o siguen como
+      posición abierta (TICKERS). El propósito de la sección es no perder de
+      vista lo que SALIÓ del portafolio; si ya está vigilado, no aporta nada.
+      Filtra ANTES del corte (todos los sueltos en ventana entran, aunque
+      superen un top-N previo) y NUNCA ensancha la ventana para completar N.
    4) orden desc por fecha de cierre   5) corte en RECIENTES_N_MAX             */
 function phrBuild(trips, nowMs){
   const now    = Number.isFinite(nowMs) ? nowMs : Date.now();
@@ -3600,7 +3605,10 @@ function phrBuild(trips, nowMs){
     else { cur.n++; if(c.exitTs > cur.c.exitTs) cur.c = c; }
   });
 
-  return Object.keys(porSym).map(s => {
+  const wl = (typeof WATCHLIST !== 'undefined' && Array.isArray(WATCHLIST)) ? WATCHLIST : [];
+  const tk = (typeof TICKERS   !== 'undefined' && Array.isArray(TICKERS))   ? TICKERS   : [];
+
+  return Object.keys(porSym).filter(s => wl.indexOf(s) < 0 && tk.indexOf(s) < 0).map(s => {
     const c = porSym[s].c;
     return {
       symbol : c.symbol,
@@ -3635,6 +3643,9 @@ function phrRender(r, nowMs){
     // Sin base de coste no se inventa un %: no se pinta el paréntesis (nunca "null%"/"NaN%").
     const pct = Number.isFinite(x.pnlPct) ? ' ('+fPct(x.pnlPct)+')' : '';
     const xN  = x.n > 1 ? '<span class="phr-x" title="'+x.n+' cierres de '+x.symbol+' en la ventana">×'+x.n+'</span>' : '';
+    // DEFENSA (inerte en la práctica): desde el filtro de phrBuild ningún ticker
+    // vigilado llega hasta aquí. Se conservan las dos ramas para que phrRender siga
+    // siendo correcto por sí solo si el filtro cambiara.
     // Una posición reabierta manda sobre el watchlist: se cerró y se volvió a abrir.
     const accion = tk.indexOf(x.symbol) >= 0
       ? '<span class="phr-in" title="Ya tienes una posición abierta en '+x.symbol+'">Posición abierta</span>'
