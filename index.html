@@ -615,6 +615,22 @@ body.tab-max .cp>.osc-panel{display:none !important}
 .lp-add-btn{background:rgba(245,197,24,.12);border:1px solid rgba(245,197,24,.3);color:var(--gold);border-radius:4px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer;transition:background .1s;line-height:1.4}
 .lp-add-btn:hover{background:rgba(245,197,24,.22)}
 
+/* ── Paso 6 · "Operados recientemente" (sección bajo el Watchlist) ──
+   flex:none a propósito: #wl-list lleva flex:1, así esta sección secundaria
+   nunca le roba altura al Watchlist; con más de ~5 filas scrollea dentro. */
+.lp-section-lbl.recientes{color:var(--text2)}
+.phr-list{flex:none;max-height:132px;overflow-y:auto;padding:2px 0}
+.phr-row{display:flex;align-items:center;gap:6px;padding:4px 10px;font-size:10px;border-left:2px solid transparent;overflow:hidden}
+.phr-row:hover{background:rgba(255,255,255,.03);border-left-color:var(--border2)}
+.phr-sym{font-weight:800;color:var(--text);min-width:42px}
+.phr-pnl{font-weight:700;white-space:nowrap}
+.phr-x{color:var(--text3);font-size:9px}
+.phr-meta{color:var(--text3);font-size:9px;margin-left:auto;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.phr-add{background:rgba(245,197,24,.12);border:1px solid rgba(245,197,24,.3);color:var(--gold);border-radius:3px;padding:1px 6px;font-size:9px;font-weight:700;cursor:pointer;line-height:1.4;flex-shrink:0}
+.phr-add:hover{background:rgba(245,197,24,.22)}
+.phr-add.added,.phr-add:disabled{opacity:.5;cursor:default;background:transparent}
+.phr-in{color:var(--text3);font-size:9px;flex-shrink:0;white-space:nowrap}
+
 /* ── Punto 6 · Scrollbars temáticos globales (neutro gris-azulado) ── */
 *{scrollbar-width:thin;scrollbar-color:rgba(120,140,170,.28) transparent}
 ::-webkit-scrollbar{width:9px;height:9px}
@@ -1540,6 +1556,16 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
     <div class="lp-list" id="wl-list" style="flex:1;overflow-y:auto">
       <div class="empty" id="wl-empty">Agrega tickers de interés</div>
     </div>
+
+    <!-- Sección 3: Operados recientemente (Paso 6) — round-trips YA CERRADOS dentro
+         de la ventana (RECIENTES_N_MAX / RECIENTES_DIAS). Los 3 nodos nacen ocultos:
+         sin cierres en ventana la sección no existe visualmente (ni el divisor). -->
+    <div class="lp-divider" id="phr-divider" style="display:none"></div>
+    <div class="lp-section-hdr" id="phr-hdr" style="display:none">
+      <span class="lp-section-lbl recientes" title="Operaciones cerradas hace poco. No entran solas al Watchlist y la lista caduca sola.">↩ Operados recientemente</span>
+      <div class="lp-hdr-right"><span class="lp-section-cnt" id="phr-cnt">0</span></div>
+    </div>
+    <div class="lp-list phr-list" id="phr-list" style="display:none"></div>
 
 
   </div>
@@ -3494,6 +3520,7 @@ async function loadRealizedPnL(){
 }
 
 function renderRealizedPnL(r){
+  try{ phrRender(r); }catch(e){}   // Paso 6 · "Operados recientemente" — aislado; no altera el P&L
   const row=$('pf-realized-row'), el=$('pf-realized');
   if(!row || !el) return;
   if(!r || r.total==null || !r.trips || !r.trips.length){ row.style.display='none'; return; }
@@ -3501,6 +3528,129 @@ function renderRealizedPnL(r){
   el.innerHTML = `<span style="color:${col};font-weight:800">${fPS(r.total)}${r.totalPct!=null?` (${fPct(r.totalPct)})`:''}</span>`;
   row.title = `P&L Realizado · ${r.trips.length} operación(es) cerrada(s)` + (r.today!=null ? ` · Hoy: ${fPS(r.today)}` : '');
   row.style.display='flex';
+}
+
+/* ══════════════════════════════════════════════
+   OPERADOS RECIENTEMENTE · Paso 6 (roadmap del Home)
+   ──────────────────────────────────────────────
+   Sección bajo el Watchlist con los tickers de round-trips YA CERRADOS, para
+   poder seguirlos sin ensuciar el Watchlist curado. NO es automática (nada entra
+   al Watchlist solo) y CADUCA SOLA (ventana combinada N + días).
+
+   Frontend puro: reusa los `trips` que P&L Realizado ya calcula (mismo FIFO,
+   misma caché). Cero endpoints, cero localStorage nuevo, cero temporizadores.
+   Se alimenta del enganche en renderRealizedPnL(), que ya corre en el arranque
+   y en cada refreshBroker().                                                  */
+const RECIENTES_N_MAX = 8;   // máximo de tickers listados
+const RECIENTES_DIAS  = 7;   // ventana de caducidad, en días
+
+/* Antigüedad en días del cierre. Usa SIEMPRE el nowMs que se le pasa (nunca un
+   Date.now() suelto) para que el harness controle el "ahora" de forma
+   determinista. Prefiere el día de calendario (exitDate y el "hoy" derivado de
+   nowMs están ambos en UTC, igual que el submitted_at de Alpaca); si falta la
+   fecha, cae al tiempo transcurrido. */
+function phrAgoDays(exitDate, exitTs, nowMs){
+  const DAY = 86400000;
+  if(exitDate){
+    const hoy = new Date(nowMs).toISOString().slice(0,10);
+    const a = Date.parse(exitDate + 'T00:00:00Z'), b = Date.parse(hoy + 'T00:00:00Z');
+    if(!isNaN(a) && !isNaN(b)) return Math.max(0, Math.round((b - a) / DAY));
+  }
+  return Math.max(0, Math.floor((nowMs - exitTs) / DAY));
+}
+function phrAgoTxt(d){ return d<=0 ? 'hoy' : d===1 ? 'ayer' : 'hace '+d+'d'; }
+
+/* Núcleo PURO (sin DOM): trips crudos → filas listas para pintar.
+   1) ventana de RECIENTES_DIAS por exitTs (ms: el borde queda exacto, sin
+      ambigüedad de zona horaria)
+   2) agrupa por CIERRE REAL: un SELL que casó contra varios lotes FIFO produce
+      varios trips, pero es UN solo cierre → se suman sus lotes
+   3) dedupe por ticker: se queda el cierre MÁS RECIENTE; n = nº de cierres
+      distintos del ticker en la ventana (el "×N" es solo indicador: NO suma
+      cierres de días distintos — para eso está el Journal)
+   4) orden desc por fecha de cierre   5) corte en RECIENTES_N_MAX             */
+function phrBuild(trips, nowMs){
+  const now    = Number.isFinite(nowMs) ? nowMs : Date.now();
+  const cutoff = now - RECIENTES_DIAS * 86400000;
+  const SYM_OK = /^[A-Z0-9.\-]{1,10}$/;   // saneo antes de interpolar en el onclick
+
+  const cierres = {};
+  (Array.isArray(trips) ? trips : []).forEach(t => {
+    if(!t) return;
+    const sym = String(t.symbol || '').toUpperCase();
+    if(!SYM_OK.test(sym)) return;
+    const ts = Number(t.exitTs);
+    if(!Number.isFinite(ts) || ts < cutoff) return;
+
+    const key = sym + '|' + (t.exitIso || ts);
+    let c = cierres[key];
+    if(!c) c = cierres[key] = { symbol:sym, exitTs:ts, exitDate:t.exitDate || t.date || null,
+                                motivo:t.motivo || 'Manual', pnl:0, cost:0 };
+    const pnl = Number(t.pnl);
+    if(Number.isFinite(pnl)) c.pnl += pnl;
+    const entry = Number(t.entry), qty = Number(t.qty);
+    if(Number.isFinite(entry) && Number.isFinite(qty) && entry>0 && qty>0) c.cost += entry * qty;
+    if(ts > c.exitTs) c.exitTs = ts;
+  });
+
+  const porSym = {};
+  Object.keys(cierres).forEach(k => {
+    const c = cierres[k], cur = porSym[c.symbol];
+    if(!cur) porSym[c.symbol] = { c, n:1 };
+    else { cur.n++; if(c.exitTs > cur.c.exitTs) cur.c = c; }
+  });
+
+  return Object.keys(porSym).map(s => {
+    const c = porSym[s].c;
+    return {
+      symbol : c.symbol,
+      pnl    : c.pnl,
+      pnlPct : c.cost > 0 ? (c.pnl / c.cost * 100) : null,   // null si no hay base de coste
+      motivo : c.motivo,
+      exitTs : c.exitTs,
+      exitDate: c.exitDate,
+      agoDays: phrAgoDays(c.exitDate, c.exitTs, now),        // mismo 'now' que la ventana
+      n      : porSym[s].n
+    };
+  }).sort((a,b) => b.exitTs - a.exitTs).slice(0, RECIENTES_N_MAX);
+}
+
+/* Pintado. Ventana vacía → oculta la sección ENTERA (divisor incluido).       */
+function phrRender(r, nowMs){
+  const div=$('phr-divider'), hdr=$('phr-hdr'), list=$('phr-list'), cnt=$('phr-cnt');
+  if(!div || !hdr || !list) return;                       // DOM ausente → no-op silencioso
+
+  const rows = phrBuild(r && r.trips ? r.trips : [], Number.isFinite(nowMs) ? nowMs : Date.now());
+  if(!rows.length){
+    div.style.display='none'; hdr.style.display='none';
+    list.style.display='none'; list.innerHTML='';
+    return;
+  }
+
+  const wl = (typeof WATCHLIST !== 'undefined' && Array.isArray(WATCHLIST)) ? WATCHLIST : [];
+  const tk = (typeof TICKERS   !== 'undefined' && Array.isArray(TICKERS))   ? TICKERS   : [];
+
+  list.innerHTML = rows.map(x => {
+    const col = x.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+    // Sin base de coste no se inventa un %: no se pinta el paréntesis (nunca "null%"/"NaN%").
+    const pct = Number.isFinite(x.pnlPct) ? ' ('+fPct(x.pnlPct)+')' : '';
+    const xN  = x.n > 1 ? '<span class="phr-x" title="'+x.n+' cierres de '+x.symbol+' en la ventana">×'+x.n+'</span>' : '';
+    // Una posición reabierta manda sobre el watchlist: se cerró y se volvió a abrir.
+    const accion = tk.indexOf(x.symbol) >= 0
+      ? '<span class="phr-in" title="Ya tienes una posición abierta en '+x.symbol+'">Posición abierta</span>'
+      : (wl.indexOf(x.symbol) >= 0
+          ? '<span class="phr-in" title="'+x.symbol+' ya está en tu Watchlist">Ya en lista</span>'
+          : '<button class="phr-add" title="Añadir '+x.symbol+' al Watchlist" onclick="wlsAdd(\''+x.symbol+'\', this)">＋</button>');
+    return '<div class="phr-row" title="'+x.symbol+' · cerrado '+(x.exitDate||'—')+' · motivo: '+x.motivo+'">'
+      + '<span class="phr-sym">'+x.symbol+'</span>'
+      + '<span class="phr-pnl" style="color:'+col+'">'+fPS(x.pnl)+pct+'</span>'
+      + xN
+      + '<span class="phr-meta">'+x.motivo+' · '+phrAgoTxt(x.agoDays)+'</span>'
+      + accion + '</div>';
+  }).join('');
+
+  if(cnt) cnt.textContent = rows.length;
+  div.style.display=''; hdr.style.display='flex'; list.style.display='';
 }
 
 /* ══════════════════════════════════════════════
