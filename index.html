@@ -5427,7 +5427,7 @@ function fillRow(t,sig,fc){
   const r=$('r-'+t); if(r) r.classList.remove('skel');
   const pEl=$('p-'+t); if(pEl){pEl.textContent=pillLbl(sen);pEl.className='tkr-pill-xs '+pillCls(sen);}
   const pxEl=$('px-'+t); if(pxEl) pxEl.textContent=fP(px);
-  const cfEl=$('cf-'+t); if(cfEl) cfEl.textContent=conf+'%';
+  const cfEl=$('cf-'+t); if(cfEl) cfEl.textContent=fmtConfPct(conf)+'%';
   const confColor = conf>=85?'var(--green)':conf>=70?'var(--blue)':conf>=55?'var(--orange)':'var(--red)';
   const bEl=$('b-'+t);   if(bEl){ bEl.style.width=conf+'%'; bEl.style.background=confColor; }
   const effNiv = getEffectiveNiv(t);
@@ -5894,7 +5894,7 @@ function renderWatchlist(){
         <span id="sl-${t}" class="tkr-sl-xs">${effNiv2.sl ? 'SL$'+effNiv2.sl.toFixed(1) : ''}</span>
         <span id="tp-${t}" class="tkr-tp-xs">${effNiv2.tp1 ? 'TP$'+effNiv2.tp1.toFixed(1) : ''}</span>
         <span class="tkr-fc-xs" id="fcd-${t}" title="Forecast 3D del modelo">${fcHtml}</span>
-        <span class="tkr-cf-xs" id="cf-${t}">${sig ? conf+'%' : '—'}</span>
+        <span class="tkr-cf-xs" id="cf-${t}">${sig ? fmtConfPct(conf)+'%' : '—'}</span>
         <div class="tkr-conf-bar-wrap"><div id="b-${t}" class="tkr-conf-bar" style="width:${conf}%;background:${confColor}"></div></div>
       </div>
       <span class="tkr-del" onclick="event.stopPropagation();removeWatchlist('${t}')">✕</span>
