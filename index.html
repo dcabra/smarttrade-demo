@@ -9481,7 +9481,8 @@ function renderHome(){
 let PHCAL_STATE = null;            // { at, eventos, error }
 let PHCAL_LOADING = false;
 const PHCAL_TTL_MS = 10 * 60 * 1000;  // el calendario cambia lento
-const PHCAL_DIAS = 7;                  // riesgo de la semana (la pestaña completa cubre 14)
+const PHCAL_DIAS = 14;                 // alineada con la pestaña Calendario: con FOMC cada ~6-7
+                                       // semanas y CPI mensual, 7 días dejaban la tarjeta vacía casi siempre
 const PHCAL_CAP = 6;                   // vistazo compacto
 
 function phcalEsc(s){
@@ -9547,18 +9548,20 @@ async function phcalLoad(){
 
   const next = { at: Date.now(), eventos: null, error: null };
   try{
-    const tickers = [...new Set((typeof TICKERS !== 'undefined' && TICKERS ? TICKERS : []).filter(Boolean))];
-    if(!tickers.length){
-      next.eventos = [];   // sin posiciones → los macro (FOMC/CPI) igual podrían venir, pero sin tickers el endpoint solo trae macro; lo dejamos honesto
-      const qs = '?tickers=&dias=' + PHCAL_DIAS;
-      const data = await brokerGet('/v1/strategies/calendar/events' + qs);
-      next.eventos = (data && data.eventos) || [];
-    }else{
-      const qs = '?tickers=' + encodeURIComponent(tickers.join(',')) + '&dias=' + PHCAL_DIAS;
-      const data = await brokerGet('/v1/strategies/calendar/events' + qs);
-      if(data === null){ next.error = 'nodata'; }   // sin sesión o transitorio (brokerGet ya gestiona el gate); reintenta por TTL
-      else { next.eventos = (data.eventos) || []; }
-    }
+    // Earnings: se filtran por MIS tickers = posiciones abiertas + watchlist (la
+    // misma unión que usa la pestaña Calendario, L7292). Macro (FOMC/CPI): el
+    // backend los devuelve SIEMPRE — van con ticker NULL y su filtro es
+    // "(ticker IS NULL) OR (ticker IN lista)" —, así que no dependen de esta lista
+    // ni de que haya posiciones. Por eso basta UNA rama: con lista vacía siguen
+    // llegando los macro, y "sin sesión" (null) no se confunde con "no hay eventos" ([]).
+    const tickers = [...new Set([
+      ...(typeof TICKERS   !== 'undefined' && TICKERS   ? TICKERS   : []),
+      ...(typeof WATCHLIST !== 'undefined' && WATCHLIST ? WATCHLIST : [])
+    ])].filter(Boolean);
+    const qs = '?tickers=' + encodeURIComponent(tickers.join(',')) + '&dias=' + PHCAL_DIAS;
+    const data = await brokerGet('/v1/strategies/calendar/events' + qs);
+    if(data === null){ next.error = 'nodata'; }   // sin sesión o transitorio; reintenta por TTL
+    else { next.eventos = data.eventos || []; }
   }catch(e){
     next.error = 'error';
   }
