@@ -419,10 +419,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 /* ── Panel inferior (chat + órdenes) ── */
 .bottom-panel{position:fixed;bottom:20px;left:0;right:var(--rp-w);height:var(--bp-h,300px);background:var(--bg-main);border-top:1px solid var(--border);z-index:80;display:flex;flex-direction:column;transform:translateY(100%);transition:transform .25s ease}
 .bottom-panel.open{transform:translateY(0)}
-/* Minimizado: solo la barra de pestañas visible (el panel nunca se cierra) */
+/* Minimizado: la barra de pestañas + la frontera deslizable quedan visibles
+   (el panel nunca se cierra). La frontera permanece activa para poder cambiar
+   la altura del panel arrastrando hacia arriba en cualquier momento. */
 .bottom-panel.minimized{height:auto !important}
-.bottom-panel.minimized .bp-body,
-.bottom-panel.minimized .bp-resize{display:none !important}
+.bottom-panel.minimized .bp-body{display:none !important}
 .bp-chevron{margin-left:auto;padding:7px 12px;color:var(--text3);cursor:pointer;font-size:12px;user-select:none}
 .bp-chevron:hover{color:var(--text)}
 .alert-del-btn{background:none;border:1px solid var(--border);color:var(--text3);border-radius:4px;font-size:11px;line-height:1;padding:3px 6px;cursor:pointer}
@@ -7035,8 +7036,22 @@ const BP_MIN=160, BP_MAX=600;
 // altura de ahí, y .app y .rp calculan su borde inferior con calc(20px + --bp-h).
 // Así nunca se montan, corra o no el JS en el momento exacto.
 function applyAppBottom(){
-  const tabsH=document.querySelector('.bp-tabs')?.offsetHeight || 36;
-  const h = bpMin ? tabsH : bpH;
+  let h;
+  if(bpMin){
+    // Minimizado: reservar exactamente lo que ocupa el panel = barra de
+    // pestañas + la frontera deslizable (que ahora permanece visible). Medimos
+    // el alto real del panel para que .app y .rp nunca se monten con él.
+    const bp=$('bottom-panel');
+    if(bp && bp.offsetHeight){
+      h = bp.offsetHeight;
+    }else{
+      const tabsH=document.querySelector('.bp-tabs')?.offsetHeight || 36;
+      const rzH  =document.querySelector('#bp-resize')?.offsetHeight || 8;
+      h = tabsH + rzH;
+    }
+  }else{
+    h = bpH;
+  }
   document.documentElement.style.setProperty('--bp-h', h+'px');
 }
 function toggleBPMin(){
@@ -7610,17 +7625,34 @@ function renderAnTkFund(ticker, ctx){
   </div>`;
 }
 
-// Resize drag
+// Resize drag — la frontera deslizable está SIEMPRE activa. Si el panel está
+// minimizado, arrastrar hacia arriba lo expande y lo dimensiona en un solo gesto
+// (un clic sin arrastre no hace nada, para no abrirlo por accidente).
 (function(){
   let dragging=false, startY=0, startH=0;
   const bp=$('bp-resize');
   if(!bp) return;
-  bp.addEventListener('mousedown',e=>{dragging=true;startY=e.clientY;startH=bpH;e.preventDefault();});
+  bp.addEventListener('mousedown',e=>{
+    dragging=true;
+    startY=e.clientY;
+    // Base de la altura: si venimos de minimizado, arrancamos desde el mínimo
+    // expandido; si ya estaba expandido, desde su altura actual.
+    startH = bpMin ? BP_MIN : bpH;
+    e.preventDefault();
+  });
   document.addEventListener('mousemove',e=>{
     if(!dragging) return;
-    const delta=startY-e.clientY;
+    const delta=startY-e.clientY;   // positivo = arrastrando hacia arriba
+    if(bpMin){
+      // Umbral pequeño: solo expandir cuando el usuario realmente arrastra
+      // hacia arriba, no ante micro-movimientos o un clic simple.
+      if(delta<=4) return;
+      bpMin=false;
+      $('bottom-panel').classList.remove('minimized');
+      const ch=$('bp-chevron'); if(ch) ch.textContent='▾';
+    }
     bpH=Math.min(BP_MAX,Math.max(BP_MIN,startH+delta));
-    if(!bpMin) applyAppBottom();
+    applyAppBottom();
   });
   document.addEventListener('mouseup',()=>{
     if(dragging){ try{ localStorage.setItem('st_bph', String(bpH)); }catch(e){} }
