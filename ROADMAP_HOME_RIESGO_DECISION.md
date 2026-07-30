@@ -16,9 +16,11 @@
 
 ## Prioridad sugerida
 
-**R1 (Top movers) → R2 (Riesgo) → R3 (Señal por posición) → R4 (Cash).**
+**R1 (Top movers) → R2 (Riesgo) → R3 (Señal por posición) → R4 (Cash) → R5 (Síntesis).**
 R1 es el más barato y cierra un loop obvio (el P&L del día sin culpable); R2 es el hueco de más
-valor (riesgo); R3 y R4 son refinamientos. El orden es sugerencia, no atadura.
+valor (riesgo); R3 y R4 son refinamientos; **R5 va última a propósito** — sintetiza lo que R1–R4 y
+las tarjetas ya exponen, así que gana valor cuando el resto ya está. El orden es sugerencia, no
+atadura.
 
 ---
 
@@ -119,6 +121,59 @@ neutral, o un pequeño medidor. Sin sobre-diseñar: es un empujón cognitivo, no
 
 **Criterio de éxito.** El efectivo se lee como proporción del equity con una etiqueta que invite a
 decidir; no inventa recomendaciones (Claude/el home no es asesor financiero — describe, no aconseja).
+
+---
+
+## R5 — Síntesis del portafolio (frase por reglas, no "opinión IA")
+
+**El hueco.** El home tiene 6–7 tarjetas; el trader tiene que **integrar mentalmente** cartera +
+modelo + noticias + eventos para saber "qué historia cuentan juntas". Falta el **resumen ejecutivo
+del cockpit**: una línea que haga esa integración.
+
+**Qué.** Una **tira horizontal siempre visible** (al final del home, o bajo el header) con **una
+frase** que sintetiza lo que muestran las tarjetas. Ejemplo con datos reales:
+> *"Concentración alta (top-3 58%), sesgo tecnología. Modelo: forecast bien calibrado (92%),
+> señal sin edge (59%, muestra chica). Esta semana: FOMC en 2 días (alto impacto)."*
+
+**⚠️ Distinción crítica — síntesis, NO opinión.** La tentación es dejar que un LLM **interprete y
+juzgue** ("desbalanceado", "noticias malas de la FED"). Eso es peligroso por tres razones:
+1. **Se lee como consejo.** "Desbalanceado / malas" empuja a una decisión; el home **describe, no
+   aconseja** (no es asesor financiero). Una frase que suena a veredicto cruza esa línea.
+2. **Alucina.** Un LLM en prosa libre inventa matices que los números no dicen ("malas de la FED"
+   cuando el evento es solo "FOMC en 2 días", sin signo). Y la síntesis es lo único que el usuario
+   lee como "la conclusión": si miente, **contamina la confianza de todo el panel**.
+3. **Rompe el tono honesto de la app** ("DRIFT N/A", "en desarrollo", "muestra chica"). Una frase
+   que afirma con seguridad contradice ese estándar.
+
+**Variante A — por REGLAS (recomendada para el MVP).** La frase se **arma por plantilla** desde
+umbrales sobre los datos que las tarjetas **ya calcularon** — NO la escribe un LLM. Cada fragmento
+sale de una regla sobre un dato real: concentración >55% → "alta"; win-rate <60% + n chico → "sin
+edge, muestra chica"; evento de impacto alto a <3 días → se menciona; sesgo sectorial desde
+`asset_class`/composición. **Determinista, auditable, sin costo, sin latencia, sin alucinación.**
+Si un fragmento no aplica, no aparece. Es **frontend puro** sobre datos ya presentes (concentración,
+win-rate, cobertura, `sentimiento_score` agregado, eventos) — cero backend, cero LLM.
+
+**Variante B — LLM anclado (evolución opcional).** Si la frase por reglas se siente robótica, se
+puede pedir a un LLM que la **redacte** (más natural) — pero anclado fuerte: se le pasan **solo los
+números ya calculados**, se le **prohíbe agregar datos** y **recomendar**, y se muestra un
+disclaimer ("resumen automático · no es consejo"). Usa el carril `/consulta IA` que la app ya tiene.
+Más caro (una llamada), más lento, y hay que vigilar que no se desmadre. **No para el MVP** — 90%
+del valor con 10% del riesgo está en la Variante A.
+
+**Datos.** Todo ya en las tarjetas: concentración/sesgo (Cartera), win-rate/cobertura (Eficiencia),
+conflictos/drift (Pulso), eventos (Próximos eventos), sentimiento agregado (Noticias). R5 **lee lo
+que R1–R4 y las tarjetas existentes ya computaron** — conviene hacerla **última**, cuando las demás
+ya expongan sus números.
+
+**Criterio de éxito.** La tira muestra una frase construida por reglas desde datos reales; cada
+fragmento es trazable a un umbral sobre un número visible en otra tarjeta; ningún fragmento juzga
+("bueno/malo") ni recomienda; se degrada omitiendo fragmentos sin dato (nunca inventa).
+
+**Rollback.** `git revert <hash>` — bloque autocontenido.
+
+**Encuadre (importante).** Se llama **"Síntesis del portafolio"**, no "Opinión IA". *Síntesis*
+invita a resumir; *opinión* invita a aconsejar — y ahí es donde se mete en problemas. El home no da
+recomendaciones de inversión; resume estado.
 
 ---
 
