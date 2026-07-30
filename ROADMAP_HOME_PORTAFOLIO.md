@@ -1,24 +1,20 @@
 # ROADMAP · Mejoras del Home "Portafolio" (SmartTrade)
 
 **Repo objetivo:** `smarttrade-demo` · archivo único `index.html` (vista Portafolio).
-**HEAD frontend (act. 29-jul-2026):** `f5719bb` (`main` == `origin/main`, desplegado 29-jul). Cadena del home:
+**HEAD frontend (act. 30-jul-2026):** `74e265a` (`main` == `origin/main`, desplegado 30-jul). Cadena del home:
 `493aafe` (S3 Pulso + drift) → `03debdc` (S3.5 señales conflict-first) →
-`9b06cc4` (fix: panel inferior, frontera deslizable — arreglo sin registrar en su
+`9b06cc4` (fix: panel inferior, frontera deslizable — arreglo del 30-jul sin registrar en su
 momento) → `578520f` (Paso 6 · Operados recientemente) → `54d6b58` (fix decimales de confianza)
-→ `74e265a` (Paso 6: excluye tickers ya vigilados) → `d6dc484` (docs: cierre del Paso 6) →
-`f5719bb` (Paso 4: earnings de watchlist + ventana 14d).
+→ `74e265a` (Paso 6: excluye tickers ya vigilados).
 
-**Estado (act. 29-jul-2026):** Pasos 1 · 2 · 3 · 3.5 ✅ desplegados en GitHub Pages.
-**Paso 6 ✅ COMPLETADO** (3 commits: `578520f` + `54d6b58` + `74e265a`; **DESPLEGADO en GitHub
-Pages, verificado en producción**). **Paso 4 ✅ COMPLETADO** (tarjeta desplegada desde el 25-jul
-en `37deb6c`; rematado el 29-jul con `f5719bb`). **Solo el Paso 5 queda EN PAUSA** por decisión
-de founder. Se retoma en su sesión.
+**Estado (act. 30-jul-2026):** Pasos 1 · 2 · 3 · 3.5 ✅ desplegados en GitHub Pages.
+**Paso 6 ✅ COMPLETADO** (3 commits: `578520f` + `54d6b58` + `74e265a`; **DESPLEGADO 30-jul en
+GitHub Pages, verificado en producción**). **Pasos 4 y 5 EN PAUSA** por decisión de founder. Se
+retoman en su sesión.
 
 **Cadena completa del home:** `a545628` (S2 tarjeta) → `ef4a492` (S2 ventana 120d) →
-`3e58e50` (S2 pin v3 + `pheFetch`) → `37deb6c` (**S4 tarjeta Próximos eventos**) →
-`5c66aa3` (S5 Noticias) → `493aafe` (S3 Pulso + drift) → `03debdc`
-(S3.5 señales conflict-first) → `9b06cc4` (fix frontera) → `578520f` (Paso 6) →
-`54d6b58` → `74e265a` → `f5719bb` (Paso 4 rematado).
+`3e58e50` (S2 pin v3 + `pheFetch`) → `493aafe` (S3 Pulso + drift) → `03debdc`
+(S3.5 señales conflict-first) → `9b06cc4` (fix frontera) → `578520f` (Paso 6).
 **Regla del roadmap:** un objetivo por chat · un commit aislado por paso · nada toca
 el motor de decisión (`MOTOR_V3`, `motor_flags`, predicado `usa_v3()`,
 `data_fetcher.py`). Todos los pasos son **frontend puro** sobre endpoints de
@@ -138,68 +134,18 @@ Cada paso trae criterio de éxito verificable y rollback trivial (`git revert`).
 
 ---
 
-## Paso 4 — Mini calendario macro (CPI/FOMC/earnings)  ✅ COMPLETADO, DESPLEGADO Y VERIFICADO EN VIVO (29-jul)
+## Paso 4 — Mini calendario macro (CPI/FOMC/earnings)  ⏸️ EN PAUSA (27-jul)
 
-- **⚠️ Historia real (este roadmap decía "⏸️ EN PAUSA" y era FALSO):** la tarjeta
-  **"Próximos eventos"** (`#phcal-card`, `phcalLoad`/`phcalRender`) se implementó y **desplegó el
-  25-jul en `37deb6c`** — nunca estuvo pendiente. Lo que quedaba eran dos defectos que la dejaban
-  muda, corregidos el **29-jul en `f5719bb`**. Moraleja: verificar el código antes de creerle al
-  estado escrito en el roadmap.
-- **Qué:** próximos eventos con impacto en el riesgo del día, en el Home.
-- **Endpoint (existe y está cableado):**
-  `GET /v1/strategies/calendar/events?tickers=<...>&dias=14` →
-  `{total, dias, eventos:[{tipo,ticker,fecha,dias_restantes,impacto,descripcion}]}`.
-  `tipo` ∈ `fomc` | `cpi` | `earnings`; los macro llegan con **`ticker: null`**.
-- **⚠️ REGLA REAL — corrige la spec vieja ("filtrados a los tickers del portafolio"), que ERA el bug:**
-  - **Macro (FOMC/CPI): SIEMPRE visible.** No tiene ticker y **no depende del portafolio**. El
-    backend ya lo garantiza — `m7_strategy/calendar_filter.py:343`:
-    `(CalendarEvent.ticker.is_(None)) | (CalendarEvent.ticker.in_(lista))`.
-  - **Earnings: filtrados por portafolio Y watchlist** (`[...TICKERS, ...WATCHLIST]`), la misma
-    unión que usa la pestaña Calendario (`loadCalendar`, L7292).
-  - **NO volver a filtrar el macro por ticker.** Con 0 posiciones dejaría la tarjeta vacía
-    siempre, que es exactamente el síntoma que se investigó.
-- **✅ Hecho (29-jul · `f5719bb`, solo `index.html`, +16/−13):**
-  - `phcalLoad`: de `TICKERS` a `[...TICKERS, ...WATCHLIST]` → los earnings de watchlist ya
-    aparecen en el Home (antes solo los de posiciones abiertas).
-  - `PHCAL_DIAS` **7 → 14**, alineada con la pestaña. Con FOMC cada ~6-7 semanas y CPI mensual,
-    7 días dejaba la tarjeta vacía casi siempre.
-  - Colapsado el `if(!tickers.length)/else` a **una sola rama**: menos código, y `null` (sin
-    sesión) deja de confundirse con `[]` (sin eventos).
-  - **Verificación:** `node --check` verde en los 4 bloques + **harness 23/23** en 5 estados
-    (unión de tickers, macro con lista vacía, `null`→error, `[]`→vacío, ventana de 14 de punta a
-    punta). `phcalRender`, `PHCAL_CAP`, `PHCAL_TTL_MS`, la pestaña Calendario y el backend
-    **intactos**.
-- **✅ VERIFICADO EN PRODUCCIÓN (29-jul, tras el push de `f5719bb`):** la tarjeta muestra
-  **3 eventos**, subtítulo *"próximos 14 días · 3"*:
-  - **AMZN** (earnings, mañana) y **AMD** (earnings, en 6d) — **ambos del WATCHLIST, no de
-    posiciones abiertas**. Prueba directa del fix (a): antes no aparecían.
-  - **CPI** (macro, en 14d) — quedaba fuera de la ventana vieja de 7 días. Prueba directa del
-    fix (b).
-  - Ya **no** dice *"Sin eventos"*. Los dos fixes confirmados con datos reales, no solo con harness.
-- **🔎 Hallazgo 1 — hay DOS fuentes macro independientes (explica el síntoma original):** la barra
-  superior mostraba *"MACRO · Reunión FOMC"* mientras la tarjeta decía *"sin eventos"*. No era que
-  la tarjeta ignorase un dato ya presente: son **dos módulos distintos**, cada uno con su propia
-  lista FOMC 2026 **hardcodeada**.
-  - `m7_strategy/calendar_filter` → `/v1/strategies/calendar/events` → **tarjeta + pestaña
-    Calendario**. Texto: *"Reunión FOMC — decisión de tasas de interés"*. Corte:
-    `fecha_evento >= ahora`, **con hora**.
-  - `m2_context/sources/macro_calendar` → `/v1/context/{ticker}` → **barra superior**
-    (`CONTEXT_CACHE[t].macro.eventos_proximos_7d`). Texto: *"Reunión FOMC — posible cambio en
-    tasas de interés"*. Corte por **día**, sin hora.
-  - El 29-jul el FOMC era a las **19:00 UTC**: a las 23:11 ya había pasado para m7 (queda fuera
-    del `>= ahora`) pero para m2 seguía "siendo hoy" (la barra lo mostraba). **Relojes distintos,
-    no un bug de la tarjeta.**
-  - **Deuda técnica registrada, NO arreglada aquí:** dos listas de fechas duplicadas que hay que
-    mantener a mano cada año, y dos textos distintos para el mismo evento. Si divergen, el Home se
-    contradice a sí mismo. Arreglarlo es backend (otro carril).
-- **💸 Hallazgo 2 — nota de coste (a vigilar, NO arreglado):** mandar el watchlist completo aumenta
-  los tickers que el backend pasa por `refresh_earnings` → Alpha Vantage. Hay un cap de **1 llamada
-  por ticker cada 6 h** (`_LAST_EARNINGS_CHECK`, en memoria) y la pestaña Calendario ya mandaba
-  esta misma unión, así que no es un patrón nuevo — pero la tarjeta se refresca cada **10 min**
-  (su TTL) contra el tab, que solo consulta al abrirlo. Si el watchlist crece mucho, el sitio a
-  mirar es ese TTL de 6 h en el backend, no el front.
-- **Rollback:** `git revert f5719bb` (la tarjeta NO desaparece: vuelve al comportamiento de
-  `37deb6c`, con ventana de 7 días y earnings solo de posiciones).
+- **Qué:** próximos eventos de la semana filtrados a los tickers del portafolio,
+  por su impacto en el riesgo del día.
+- **Endpoint (ya existe y ya está cableado en el front):**
+  `GET /v1/strategies/calendar/events?tickers=<mis tickers>&dias=7` →
+  `{eventos:[{tipo,ticker,fecha,dias_restantes,impacto,descripcion}]}`.
+- **Clasificación:** frontend puro. Es el paso más barato; puede adelantarse.
+- **Criterio de éxito:** lista compacta ordenada por fecha, con badge de impacto
+  y días restantes; tickers tomados del portafolio actual.
+- **Rollback:** `git revert <hash>`.
+- **Estado:** dejado en pausa por pivote al roadmap Motor V3. Retomar en su sesión.
 
 ---
 
@@ -245,7 +191,7 @@ Cada paso trae criterio de éxito verificable y rollback trivial (`git revert`).
 - **Evidencia:** en `scratchpad` — `resultado_harness.txt`, `correcciones_harness.txt`,
   `verificacion_noregresion.txt`, `harness_p6.js`, `verifica_noregresion.js`.
 - **Rollback:** `git revert 578520f`.
-- **⚠️ Cambios posteriores (29-jul, misma sesión):**
+- **⚠️ Cambios posteriores (30-jul, misma sesión):**
   - **`54d6b58` — fix decimales de confianza.** La confianza salía como `43.419999999999995%`
     (float crudo de `confPct` v3) en watchlist (`renderWatchlist` L5897) y portafolio (`fillRow`
     L5430). Se pasa por `fmtConfPct` (Math.round), que ya existía y ya se usaba en el panel
@@ -258,7 +204,7 @@ Cada paso trae criterio de éxito verificable y rollback trivial (`git revert`).
     reescrito para verificar EXCLUSIÓN: **59/59** (antes 51, +8 aserciones — endurecido). +12/−1.
     **Nota:** esto hace la spec original ("botón oculto si ya está en watchlist") obsoleta — ahora
     el ticker ni siquiera aparece.
-- **✅ CERRADO:** (1) **desplegado y verificado en vivo 29-jul** (badge 2, el filtro actúa, la
+- **✅ CERRADO:** (1) **desplegado y verificado en vivo 30-jul** (badge 2, el filtro actúa, la
   confianza sale `43%`) — push de los 3 commits a `origin/main` + GitHub Pages; (2) **prueba de
   humo en navegador real HECHA** — el harness (59/59) cubría la lógica; en producción se confirmó
   el render: la sección aparece con su P&L, el filtro de vigilados excluye de verdad, y la
@@ -277,10 +223,8 @@ Cada paso trae criterio de éxito verificable y rollback trivial (`git revert`).
    puro, cero backend. Ojo: `74e265a` cambia el **comportamiento visible** respecto de la spec
    original — un ticker ya vigilado (Watchlist o posición abierta) **ya no aparece** en la lista,
    en vez de aparecer con la marca "Ya en lista" / "Posición abierta".
-6. **Paso 4** ✅ — Mini calendario macro. La tarjeta ya estaba desplegada desde el 25-jul
-   (`37deb6c`); el 29-jul se remató con `f5719bb` (earnings de watchlist + ventana 14d + una
-   sola rama de carga). Macro siempre visible, earnings por portafolio **y** watchlist.
-7. **Paso 5** ⏸️ — valor medio, algo más de plomería (fan-out). **Único pendiente del roadmap.**
+6. **Paso 4** ⏸️ — barato; slot flexible (endpoint ya cableado). **Siguiente candidato.**
+7. **Paso 5** ⏸️ — valor medio, algo más de plomería (fan-out).
 
 ## Guardrail permanente (flip de MOTOR_V3)
 
