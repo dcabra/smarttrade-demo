@@ -1123,9 +1123,9 @@ body.home-mode #cp-home{display:flex}
    el bloque de riesgo ocupa la derecha, que antes era aire muerto. */
 .phz-cartera .ph-alloc{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:8px;padding:12px 0 0 14px}
 .phz-cartera .ph-legend{display:none}
-.phr-row{display:flex;align-items:flex-start;gap:14px;padding:0 14px 8px 0;flex-shrink:0}
-.phr-row .ph-alloc{flex:0 0 auto}
-.phr{flex:1 1 0;min-width:0;padding-top:12px;display:flex;flex-direction:column;gap:7px}
+.phrisk-row{display:flex;align-items:flex-start;gap:14px;padding:0 14px 8px 0;flex-shrink:0}
+.phrisk-row .ph-alloc{flex:0 0 auto}
+.phrisk{flex:1 1 0;min-width:0;padding-top:12px;display:flex;flex-direction:column;gap:7px}
 /* Concentración: compacta al bajar debajo de la dona (sin borde ni padding
    superior) para que la zona crezca lo mínimo y la tabla ceda poco alto. */
 .phz-cartera .ph-conc{border-top:none;padding-top:0;text-align:left;font-size:10px;width:152px}
@@ -1142,18 +1142,18 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .ph-cover-c{color:var(--orange)}
 .ph-cover-k{color:var(--green)}
 .ph-cover-s{color:var(--text3)}
-.phr-hdr{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
-.phr-cash{font-size:23px;font-weight:700;color:var(--text);line-height:1;font-variant-numeric:tabular-nums}
-.phr-cash-sub{font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums}
-.phr-inv{font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums}
-.phr-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:rgba(122,144,176,.14)}
-.phr-bar-cash{background:var(--text3)}
-.phr-bar-inv{background:var(--blue)}
-.phr-line{display:flex;align-items:baseline;gap:6px;font-size:10.5px;color:var(--text3);font-variant-numeric:tabular-nums}
-.phr-line .k{color:var(--text3)}
-.phr-line .v{color:var(--text2);font-weight:600}
-.phr-dd{font-weight:700}
-.phr-empty{font-size:10.5px;color:var(--text3)}
+.phrisk-hdr{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
+.phrisk-cash{font-size:23px;font-weight:700;color:var(--text);line-height:1;font-variant-numeric:tabular-nums}
+.phrisk-cash-sub{font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums}
+.phrisk-inv{font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums}
+.phrisk-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:rgba(122,144,176,.14)}
+.phrisk-bar-cash{background:var(--text3)}
+.phrisk-bar-inv{background:var(--blue)}
+.phrisk-line{display:flex;align-items:baseline;gap:6px;font-size:10.5px;color:var(--text3);font-variant-numeric:tabular-nums}
+.phrisk-line .k{color:var(--text3)}
+.phrisk-line .v{color:var(--text2);font-weight:600}
+.phrisk-dd{font-weight:700}
+.phrisk-empty{font-size:10.5px;color:var(--text3)}
 .phz-cartera .ph-table th:nth-child(2),.phz-cartera .ph-table td:nth-child(2),.phz-cartera .ph-table th:nth-child(3),.phz-cartera .ph-table td:nth-child(3),.phz-cartera .ph-table th:nth-child(4),.phz-cartera .ph-table td:nth-child(4),.phz-cartera .ph-table th:nth-child(6),.phz-cartera .ph-table td:nth-child(6){display:none}
 .phz-table-scroll{flex:1;min-height:0;overflow-y:auto;border-top:1px solid var(--border)}
 /* ── Layout terminal: grilla de 3 columnas que llena el alto del home ──
@@ -1848,9 +1848,9 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
                reescribe el innerHTML de #ph-alloc entero, así que un hijo suyo
                se borraría en cada repintado. Separados, el riesgo se refresca
                con el rango del chart sin repintar la dona ni resetear PH_LOCKED. -->
-          <div class="phr-row">
+          <div class="phrisk-row">
             <div class="ph-alloc" id="ph-alloc"></div>
-            <div class="phr" id="phr"></div>
+            <div class="phrisk" id="phrisk"></div>
           </div>
           <div class="ph-table-wrap phz-table-scroll" id="ph-table"></div>
         </div>
@@ -9529,7 +9529,7 @@ function renderHome(){
   renderDayPL();          // P&L del día (exacto: equity − last_equity)
   phmvRender();           // R1 · Movimiento de hoy — qué posiciones explican ese P&L
   renderHomeAllocation();
-  phrRender();            // R2 · riesgo/exposición — pinta ya con equity/efectivo;
+  phriskRender();         // R2 · riesgo/exposición — pinta ya con equity/efectivo;
                           // el drawdown se completa cuando la serie del chart llega
   renderHomeTable();
   renderPortfolioValueChart(PH_RANGE);
@@ -10597,7 +10597,7 @@ function renderHomeAllocation(){
   const top3 = PH_SLICES.filter(s=>s.label!=='Efectivo').slice(0,3).reduce((a,s)=>a+s.pct,0);
   const top1 = PH_SLICES.find(s=>s.label!=='Efectivo');
   const conc = (PH_ALLOC_MODE==='pos' && top1)
-    ? `<div class="ph-conc"><span class="ph-conc-dot" style="background:${phrConcColor(top1.pct)}"></span>Concentración · Top-3 = <b>${top3.toFixed(1)}%</b> · mayor: <b>${top1.label} ${top1.pct.toFixed(1)}%</b></div>`
+    ? `<div class="ph-conc"><span class="ph-conc-dot" style="background:${phriskConcColor(top1.pct)}"></span>Concentración · Top-3 = <b>${top3.toFixed(1)}%</b> · mayor: <b>${top1.label} ${top1.pct.toFixed(1)}%</b></div>`
     : '';
 
   wrap.innerHTML = `
@@ -10625,18 +10625,23 @@ function renderHomeAllocation(){
    - El drawdown se rotula con SU rango. renderPortfolioValueChart puede salir
      temprano sin limpiar PH_DRAW (histórico no disponible), así que la etiqueta
      dice a qué ventana pertenece el número y no se lee como si fuera otra.   */
-const PHR_CONC_AMBAR = 10;   // % de la mayor posición sobre el equity
-const PHR_CONC_ROJO  = 20;
+/* NOMBRES: prefijo `phrisk*`, NO `phr*`. El prefijo `phr` ya era de "Operados
+   recientemente" (Paso 6: phrAgoDays/phrAgoTxt/phrBuild/phrRender + .phr-row y
+   compañía). R2 lo pisó y dejó a Paso 6 sin pintar durante 3 commits, en
+   silencio: `phrRender` quedó declarada dos veces y la segunda ganaba, y el
+   `try/catch` del llamador se tragaba el síntoma. Renombrado en el fix.      */
+const PHRISK_CONC_AMBAR = 10;   // % de la mayor posición sobre el equity
+const PHRISK_CONC_ROJO  = 20;
 
-function phrConcColor(pct){
+function phriskConcColor(pct){
   if(pct==null || isNaN(pct)) return 'var(--text3)';
-  if(pct > PHR_CONC_ROJO)  return 'var(--red)';
-  if(pct > PHR_CONC_AMBAR) return 'var(--orange)';
+  if(pct > PHRISK_CONC_ROJO)  return 'var(--red)';
+  if(pct > PHRISK_CONC_AMBAR) return 'var(--orange)';
   return 'var(--green)';
 }
 
 /* Mayor posición por valor de mercado. Devuelve {symbol, value} o null. */
-function phrMayorExposicion(){
+function phriskMayorExposicion(){
   let top=null;
   (POSITIONS||[]).forEach(p=>{
     if(p.value==null || isNaN(p.value)) return;
@@ -10648,7 +10653,7 @@ function phrMayorExposicion(){
 /* Caída % desde el MÁXIMO de la ventana visible hasta el último valor.
    No es el peor pico-a-valle del período: es cuánto está por debajo del techo
    de esta ventana, ahora. Devuelve un número ≤ 0, o null si no hay serie. */
-function phrDrawdown(vals){
+function phriskDrawdown(vals){
   if(!Array.isArray(vals) || vals.length<2) return null;
   const nums = vals.filter(v => v!=null && !isNaN(v));
   if(nums.length<2) return null;
@@ -10658,43 +10663,43 @@ function phrDrawdown(vals){
   return (last-max)/max*100;
 }
 
-function phrRender(){
-  const el=$('phr'); if(!el) return;
+function phriskRender(){
+  const el=$('phrisk'); if(!el) return;
   const eq = (EQUITY!=null && !isNaN(EQUITY) && EQUITY>0) ? EQUITY : null;
   const cash = (CASH_AVAIL!=null && !isNaN(CASH_AVAIL)) ? CASH_AVAIL : null;
   const inv = (typeof homeAggregates==='function') ? homeAggregates().mv : null;
 
   if(eq==null || (cash==null && !inv)){
-    el.innerHTML = '<div class="phr-hdr">Riesgo · exposición</div>'
-                 + '<div class="phr-empty">Sin datos de la cuenta.</div>';
+    el.innerHTML = '<div class="phrisk-hdr">Riesgo · exposición</div>'
+                 + '<div class="phrisk-empty">Sin datos de la cuenta.</div>';
     return;
   }
 
   const cashPct = cash!=null ? cash/eq*100 : null;
   const invPct  = (inv!=null && !isNaN(inv)) ? inv/eq*100 : null;
-  const top = phrMayorExposicion();
-  const dd  = phrDrawdown(PH_DRAW && PH_DRAW.vals);
+  const top = phriskMayorExposicion();
+  const dd  = phriskDrawdown(PH_DRAW && PH_DRAW.vals);
 
-  const barra = `<div class="phr-bar">`
-    + (cashPct!=null ? `<div class="phr-bar-cash" style="width:${Math.max(0,Math.min(100,cashPct)).toFixed(2)}%"></div>` : '')
-    + (invPct!=null  ? `<div class="phr-bar-inv"  style="width:${Math.max(0,Math.min(100,invPct)).toFixed(2)}%"></div>`  : '')
+  const barra = `<div class="phrisk-bar">`
+    + (cashPct!=null ? `<div class="phrisk-bar-cash" style="width:${Math.max(0,Math.min(100,cashPct)).toFixed(2)}%"></div>` : '')
+    + (invPct!=null  ? `<div class="phrisk-bar-inv"  style="width:${Math.max(0,Math.min(100,invPct)).toFixed(2)}%"></div>`  : '')
     + `</div>`;
 
   const ddHtml = (dd!=null)
-    ? `<span class="v phr-dd" style="color:${dd<0?'var(--red)':'var(--text2)'}">${dd<=0?'':'+'}${dd.toFixed(2)}%</span>`
+    ? `<span class="v phrisk-dd" style="color:${dd<0?'var(--red)':'var(--text2)'}">${dd<=0?'':'+'}${dd.toFixed(2)}%</span>`
       + `<span class="k">desde el máximo · ${PH_RANGE}</span>`
     : `<span class="v">—</span><span class="k">sin serie del rango</span>`;
 
   el.innerHTML = `
-    <div class="phr-hdr">Riesgo · exposición</div>
-    <div class="phr-cash">${cashPct!=null ? cashPct.toFixed(1)+'%' : '—'}</div>
-    <div class="phr-cash-sub">${cash!=null ? fP(cash) : '—'} en efectivo</div>
-    <div class="phr-inv">${invPct!=null ? invPct.toFixed(1)+'%' : '—'} invertido${inv!=null && !isNaN(inv) ? ' · '+fP(inv)+' en mercado' : ''}</div>
+    <div class="phrisk-hdr">Riesgo · exposición</div>
+    <div class="phrisk-cash">${cashPct!=null ? cashPct.toFixed(1)+'%' : '—'}</div>
+    <div class="phrisk-cash-sub">${cash!=null ? fP(cash) : '—'} en efectivo</div>
+    <div class="phrisk-inv">${invPct!=null ? invPct.toFixed(1)+'%' : '—'} invertido${inv!=null && !isNaN(inv) ? ' · '+fP(inv)+' en mercado' : ''}</div>
     ${barra}
-    <div class="phr-line"><span class="k">Mayor exposición</span>${
+    <div class="phrisk-line"><span class="k">Mayor exposición</span>${
       top ? `<span class="v">${top.symbol} · ${fP(top.value)}</span>` : '<span class="v">—</span>'
     }</div>
-    <div class="phr-line"><span class="k">Drawdown</span>${ddHtml}</div>`;
+    <div class="phrisk-line"><span class="k">Drawdown</span>${ddHtml}</div>`;
 }
 
 function phSetAllocMode(btn){
@@ -11319,7 +11324,7 @@ async function renderPortfolioValueChart(range){
   PH_DRAW.tickerLines = phBuildTickerLines();
   phPaintValueChart();
   phEnsureTickerHistories();
-  phrRender();   // R2 · el drawdown sigue al rango visible (phSetRange entra por aquí)
+  phriskRender();   // R2 · el drawdown sigue al rango visible (phSetRange entra por aquí)
 }
 
 /* ── Tooltip de la curva (fecha + valor; SPY si está) ──────────────────── */
