@@ -1168,6 +1168,14 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .phz-term-news .phnews-body{flex:1;min-height:0;max-height:none;overflow-y:auto}
 .phz-term-cartera{grid-column:3;grid-row:1/3;min-height:0;overflow:hidden}
 @media(max-width:1100px){.phz-term{grid-template-columns:1fr;grid-template-rows:none;min-height:0}.phz-term-chart,.phz-term-left,.phz-term-news,.phz-term-cartera{grid-column:auto;grid-row:auto;overflow:visible}.phz-term-cartera,.phz-term-news{height:520px;overflow:hidden}}
+/* ══ R5 · Síntesis del portafolio — tarjeta delgada sobre "Movimiento de hoy" ══
+   Estilo NEUTRO (azul apagado, no dorado) porque no es una opinión de IA: es
+   una plantilla determinista sobre números ya calculados. */
+.phsyn{display:flex;align-items:baseline;gap:8px;padding:7px 11px;border:1px solid var(--border);border-left:3px solid var(--blue-dim);border-radius:8px;background:var(--bg3);font-size:11.5px;line-height:1.5;color:var(--text2)}
+.phsyn-ico{color:var(--text3);font-size:10px;flex-shrink:0}
+.phsyn-txt{min-width:0}
+.phsyn-txt b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+
 /* ══ R1 · Movimiento de hoy — tira horizontal bajo los KPIs ═══════════════
    Vive FUERA de .phz-term: no toca la grilla de 3 columnas del layout
    terminal. Rollback: borrar este bloque + la tira HTML #phmv + las
@@ -1731,6 +1739,13 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
         <div class="ph-kpis" id="ph-kpis"></div>
       </div>
       <div class="ph-bp-note" id="ph-bp-note"></div>
+
+      <!-- ══ R5 · Síntesis del portafolio ═════════════════════════════════
+           Frase armada por PLANTILLA desde los números que R2/R3 ya
+           calcularon. Determinista, sin LLM, sin red. Describe, NO aconseja:
+           indicativo, sin imperativos ni adjetivos de juicio. Estilo NEUTRO a
+           propósito (no dorado): no es una opinión de IA, es una plantilla. -->
+      <div class="phsyn" id="phsyn" style="display:none"></div>
 
       <!-- ══ R1 · Movimiento de hoy ═══════════════════════════════════════
            Qué posiciones explican el KPI "P&L del día" de arriba. Frontend
@@ -9527,6 +9542,7 @@ async function getPortfolioHistory(range){
 function renderHome(){
   renderHomeKPIs();
   renderDayPL();          // P&L del día (exacto: equity − last_equity)
+  phsynRender();          // R5 · Síntesis — se completa cuando lleguen señales y serie
   phmvRender();           // R1 · Movimiento de hoy — qué posiciones explican ese P&L
   renderHomeAllocation();
   phriskRender();         // R2 · riesgo/exposición — pinta ya con equity/efectivo;
@@ -10349,7 +10365,7 @@ async function phdLoad(){
   // R3: las señales llegan DESPUÉS del primer pintado de la tabla (phdLoad es
   // fire-and-forget desde renderHome), así que sin esto la Cartera se quedaría
   // sin marcas para siempre.
-  if(CP_VIEW === 'home') renderHomeTable();
+  if(CP_VIEW === 'home'){ renderHomeTable(); phsynRender(); }  // R5 · los conflictos son el titular
 }
 
 /* El benchmark SPY usa el OHLCV de SPY. En arranque directo al Home ese cache
@@ -10453,6 +10469,96 @@ function phFillDayPL(pl, pct){
   const cls = pl>=0 ? 'ph-pos' : 'ph-neg';
   v.textContent = fPS(pl); v.className='ph-kpi-val '+cls;
   if(s) s.innerHTML = (pct!=null ? `<span class="${cls}">${fPct(pct)}</span> hoy` : 'hoy');
+}
+
+/* ══ R5 · Síntesis del portafolio ═══════════════════════════════════════════
+   Una frase que integra lo que las tarjetas ya calcularon, priorizando lo que
+   está FUERA DE LO NORMAL. Armada por PLANTILLA: cada fragmento sale de un
+   umbral sobre un número real, es trazable y no puede alucinar. NO usa LLM,
+   NO agrega red, NO recalcula nada — consume phConflictos() (R3),
+   phsynConcentracion() / phsynExposicion() y phriskDrawdown() (R2).
+
+   REGLAS DE REDACCIÓN, no negociables:
+   - Indicativo, describiendo hechos. CERO imperativos ("reduce", "vende",
+     "considera"): el home describe, no aconseja.
+   - Sin adjetivos de juicio ("arriesgada", "sólida", "repartida"). Si algo se
+     puede decir con un número, se dice con el número.
+   - Español neutro (Colombia): "tienes", nunca "tenés".
+   - Nunca inventa una alerta que no existe, ni afirma lo que no sabe: si el
+     libro de señales no se pudo leer, la parte de conflictos se OMITE (decir
+     "0 conflictos" sería afirmar algo que no sabemos).                        */
+const PHSYN_CONC_PCT = PHRISK_CONC_ROJO;  // >20% de la cartera → se destaca (mismo umbral que el semáforo rojo de R2)
+const PHSYN_DD_PCT   = 10;                // caída >10% desde el máximo → se menciona
+const PHSYN_MAX_DEST = 2;                 // como mucho 2 destacados + exposición de cierre
+
+function phsynEsc(s){
+  return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+function phsynNum(n, dec){ return `<b>${Number(n).toFixed(dec==null?1:dec)}</b>`; }
+
+/* Arma los fragmentos priorizados. Devuelve { frases:[], hayPos, alineadas }.
+   Separada del render para poder probarla sin DOM. */
+function phsynFrases(){
+  const X    = (typeof phConflictos === 'function') ? phConflictos() : null;
+  const conc = phsynConcentracion();
+  const expo = phsynExposicion();
+  const dd   = (typeof phriskDrawdown === 'function') ? phriskDrawdown(PH_DRAW && PH_DRAW.vals) : null;
+  const nPos = (POSITIONS||[]).length;
+  if(!nPos) return { frases:[], hayPos:false, alineadas:false };
+
+  const destacados = [];
+
+  // 1 · Conflictos del modelo — el titular cuando existe.
+  //     Si el libro no se pudo leer (disponible=false) se omite por completo.
+  const hayLibro = !!(X && X.disponible);
+  const nC = hayLibro ? X.conflictos.length : 0;
+  if(hayLibro && nC > 0){
+    const tks = X.conflictos.map(c => phsynEsc(c.ticker)).join(', ');
+    // Con una sola posición, "1 de tus 1 posiciones" suena a máquina.
+    destacados.push(nPos === 1
+      ? `El modelo contradice tu única posición (${tks}).`
+      : `El modelo contradice <b>${nC}</b> de tus <b>${nPos}</b> posiciones (${tks}).`);
+  }
+
+  // 2 · Concentración de la mayor posición.
+  if(conc.top && conc.top.pct > PHSYN_CONC_PCT){
+    destacados.push(`${phsynEsc(conc.top.symbol)} concentra el ${phsynNum(conc.top.pct)}% de tu cartera.`);
+  }
+
+  // 3 · Drawdown desde el máximo de la ventana visible.
+  if(dd != null && Math.abs(dd) > PHSYN_DD_PCT){
+    destacados.push(`Tu cartera cae ${phsynNum(dd)}% desde el máximo del período (${phsynEsc(PH_RANGE)}).`);
+  }
+
+  const frases = destacados.slice(0, PHSYN_MAX_DEST);
+
+  // 4 · Exposición: contexto de cierre, siempre que haya con qué.
+  const tieneExpo = expo.cashPct != null && expo.invPct != null;
+  if(tieneExpo){
+    frases.push(`Tienes el ${phsynNum(expo.cashPct)}% en efectivo y el ${phsynNum(expo.invPct)}% invertido.`);
+  }
+
+  // Estado tranquilo: nada disparado. Se afirma la alineación con el modelo
+  // SOLO si el libro se pudo leer; si no, se describe lo que sí se sabe.
+  if(!destacados.length){
+    const cabeza = hayLibro
+      ? `Tus <b>${nPos}</b> ${nPos===1?'posición está alineada':'posiciones están alineadas'} con el modelo.`
+      : `Tienes <b>${nPos}</b> ${nPos===1?'posición abierta':'posiciones abiertas'}.`;
+    frases.unshift(cabeza);
+    if(conc.top){
+      frases.push(`Ninguna posición supera el ${phsynNum(PHSYN_CONC_PCT, 0)}% de la cartera.`);
+    }
+  }
+
+  return { frases, hayPos:true, alineadas: hayLibro && nC === 0 };
+}
+
+function phsynRender(){
+  const el = $('phsyn'); if(!el) return;
+  const r = phsynFrases();
+  if(!r.hayPos || !r.frases.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.innerHTML = '<span class="phsyn-ico">◆</span><span class="phsyn-txt">' + r.frases.join(' ') + '</span>';
+  el.style.display = 'flex';
 }
 
 /* ══ R1 · Movimiento de hoy ═══════════════════════════════════════════════
@@ -10594,10 +10700,13 @@ function renderHomeAllocation(){
     </div>`).join('');
 
   // Línea de concentración (insight de trader): top-3 + mayor posición.
-  const top3 = PH_SLICES.filter(s=>s.label!=='Efectivo').slice(0,3).reduce((a,s)=>a+s.pct,0);
-  const top1 = PH_SLICES.find(s=>s.label!=='Efectivo');
+  // Sale de phsynConcentracion() —fuente compartida con R5— y no de PH_SLICES,
+  // para que la cifra no dependa del modo de la dona. Mismo denominador que
+  // antes (Σ posiciones>0 + efectivo), así el número visible no cambia.
+  const c1 = phsynConcentracion();
+  const top1 = c1.top;
   const conc = (PH_ALLOC_MODE==='pos' && top1)
-    ? `<div class="ph-conc"><span class="ph-conc-dot" style="background:${phriskConcColor(top1.pct)}"></span>Concentración · Top-3 = <b>${top3.toFixed(1)}%</b> · mayor: <b>${top1.label} ${top1.pct.toFixed(1)}%</b></div>`
+    ? `<div class="ph-conc"><span class="ph-conc-dot" style="background:${phriskConcColor(top1.pct)}"></span>Concentración · Top-3 = <b>${c1.top3Pct.toFixed(1)}%</b> · mayor: <b>${top1.symbol} ${top1.pct.toFixed(1)}%</b></div>`
     : '';
 
   wrap.innerHTML = `
@@ -10640,6 +10749,47 @@ function phriskConcColor(pct){
   return 'var(--green)';
 }
 
+/* ══ Fuentes compartidas R2 ↔ R5 ═══════════════════════════════════════════
+   Extraídas para que el bloque de riesgo (R2) y la síntesis (R5) NUNCA digan
+   cifras distintas del mismo dato — misma disciplina que phConflictos() en R3.
+
+   Los dos denominadores son distintos A PROPÓSITO y NO se unifican:
+     · exposición   → sobre EQUITY, con homeAggregates().mv (incluye negativos
+                      si hubiera cortos).
+     · concentración → sobre Σ(value>0) + efectivo, que es exactamente la base
+                      de la dona. Unificarlos cambiaría números de R2 que ya
+                      están desplegados: sería meter una regresión por
+                      elegancia. Dos funciones honestas > una elegante.        */
+
+/* Concentración de la cartera. Sale de POSITIONS, NO de las rebanadas: así la
+   cifra no cambia si el usuario toca el selector Por posición / Por clase. */
+function phsynConcentracion(){
+  const cash = (CASH_AVAIL!=null && !isNaN(CASH_AVAIL) && CASH_AVAIL>0) ? CASH_AVAIL : 0;
+  const pos = (POSITIONS||[])
+    .filter(p => p && p.value!=null && !isNaN(p.value) && p.value>0)
+    .slice().sort((a,b)=>b.value-a.value);
+  const base = pos.reduce((s,p)=>s+p.value, 0) + cash;   // el efectivo entra en el
+  if(!base || !pos.length) return { top:null, top3Pct:0, base:base||0 };  // denominador, nunca es candidato
+  const pct = v => v/base*100;
+  return {
+    top: { symbol:pos[0].symbol, value:pos[0].value, pct:pct(pos[0].value) },
+    top3Pct: pos.slice(0,3).reduce((s,p)=>s+pct(p.value), 0),
+    base
+  };
+}
+
+/* Exposición de la cuenta: efectivo vs invertido sobre EQUITY. */
+function phsynExposicion(){
+  const eq = (EQUITY!=null && !isNaN(EQUITY) && EQUITY>0) ? EQUITY : null;
+  const cash = (CASH_AVAIL!=null && !isNaN(CASH_AVAIL)) ? CASH_AVAIL : null;
+  const inv = (typeof homeAggregates==='function') ? homeAggregates().mv : null;
+  return {
+    eq, cash, inv,
+    cashPct: (eq!=null && cash!=null) ? cash/eq*100 : null,
+    invPct : (eq!=null && inv!=null && !isNaN(inv)) ? inv/eq*100 : null
+  };
+}
+
 /* Mayor posición por valor de mercado. Devuelve {symbol, value} o null. */
 function phriskMayorExposicion(){
   let top=null;
@@ -10665,9 +10815,8 @@ function phriskDrawdown(vals){
 
 function phriskRender(){
   const el=$('phrisk'); if(!el) return;
-  const eq = (EQUITY!=null && !isNaN(EQUITY) && EQUITY>0) ? EQUITY : null;
-  const cash = (CASH_AVAIL!=null && !isNaN(CASH_AVAIL)) ? CASH_AVAIL : null;
-  const inv = (typeof homeAggregates==='function') ? homeAggregates().mv : null;
+  const x = phsynExposicion();                 // fuente compartida con R5
+  const eq = x.eq, cash = x.cash, inv = x.inv;
 
   if(eq==null || (cash==null && !inv)){
     el.innerHTML = '<div class="phrisk-hdr">Riesgo · exposición</div>'
@@ -10675,8 +10824,7 @@ function phriskRender(){
     return;
   }
 
-  const cashPct = cash!=null ? cash/eq*100 : null;
-  const invPct  = (inv!=null && !isNaN(inv)) ? inv/eq*100 : null;
+  const cashPct = x.cashPct, invPct = x.invPct;
   const top = phriskMayorExposicion();
   const dd  = phriskDrawdown(PH_DRAW && PH_DRAW.vals);
 
@@ -11325,6 +11473,7 @@ async function renderPortfolioValueChart(range){
   phPaintValueChart();
   phEnsureTickerHistories();
   phriskRender();   // R2 · el drawdown sigue al rango visible (phSetRange entra por aquí)
+  phsynRender();    // R5 · la síntesis cita ese mismo drawdown y su rango
 }
 
 /* ── Tooltip de la curva (fecha + valor; SPY si está) ──────────────────── */
