@@ -14,7 +14,30 @@
 > `git revert`. Cada uno se hace en su propia sesión, con revisión de shape → diseño →
 > criterio de éxito → confirmación → código.
 
-## Prioridad sugerida
+## Estado final (30-jul-2026)
+
+**La capa de riesgo y decisión está cerrada: R1, R2 y R3 implementados; R4 cubierto por R2.**
+El home dejó de ser un panel de *situación* y pasa a ser un **cockpit de riesgo**: R1 da la
+atribución del P&L del día, R2 la exposición + efectivo + concentración + drawdown, y R3 la señal
+del modelo por posición.
+
+| paso | estado | commit |
+|---|---|---|
+| R1 · Top movers del día | **COMPLETO** | `27fff81` (+ backend `4c104c3`) |
+| R2 · Riesgo / exposición | **COMPLETO** | `388ffcf` |
+| R3 · Señal por posición | **COMPLETO** | `ec1eb9f` |
+| R4 · Cash como decisión | **CUBIERTO POR R2** — no se implementa aparte | — |
+| R5 · Síntesis del portafolio | **PENDIENTE** — no implementada | — |
+
+**R5 sigue abierta.** No entró en esta tanda y no se descartó: queda como la evolución natural
+cuando se quiera un resumen ejecutivo sobre lo que R1–R3 ya exponen. Lo que cierra acá es la capa
+de **riesgo y decisión** (R1–R4), no el documento entero.
+
+**Excepción al guardrail "frontend puro", registrada.** R1 requirió **un** cambio de backend
+acotado (ver su sección). Fue una decisión explícita, en la capa de datos del broker y **no** en el
+motor. El guardrail sigue vigente para todo lo demás.
+
+## Prioridad sugerida (original)
 
 **R1 (Top movers) → R2 (Riesgo) → R3 (Señal por posición) → R4 (Cash) → R5 (Síntesis).**
 R1 es el más barato y cierra un loop obvio (el P&L del día sin culpable); R2 es el hueco de más
@@ -22,9 +45,32 @@ valor (riesgo); R3 y R4 son refinamientos; **R5 va última a propósito** — si
 las tarjetas ya exponen, así que gana valor cuando el resto ya está. El orden es sugerencia, no
 atadura.
 
+*Se siguió ese orden. R4 se resolvió dentro de R2 en vez de como paso propio.*
+
 ---
 
-## R1 — Top movers del día (atribución del P&L)
+## R1 — Top movers del día (atribución del P&L) · **COMPLETO** (`27fff81`)
+
+> **Cerrado el 30-jul-2026.** Tira **"Movimiento de hoy"** bajo los KPIs del header, con las 2 que
+> más suman y las 2 que más restan, su aporte en $ y %, y `Σ posiciones · resto` explícito.
+>
+> **Requirió un cambio de backend — excepción deliberada al guardrail.** La investigación inicial
+> dio por bueno que `change_today` llegaba al front porque el mapper lo leía; era falso: el campo
+> se consumía pero **nadie lo producía**. La whitelist de `list_positions()` en
+> `alpaca_client.py` no lo copiaba, así que llegaba `undefined → null` y la tira nunca se pintaba
+> (código muerto en producción hasta detectarlo). Se agregó **una línea** —
+> `"change_today": _f(getattr(p, "change_today", None))` — en el commit de backend **`4c104c3`**.
+> Es **capa de datos del broker**, NO el motor: no toca `MOTOR_V3` / `usa_v3()` / `data_fetcher` /
+> el ejecutor. De regalo revivieron los chips `day-` del panel izquierdo, muertos por lo mismo.
+>
+> **Lección que vale para los próximos pasos:** verificar el **productor** del dato, no solo el
+> consumidor. Que el front lea un campo no prueba que el backend lo mande.
+>
+> **Honestidad.** El aporte sale exacto de `value × ct/(1+ct)` (derivación de `change_today`), sin
+> inventar datos. La suma de posiciones **no** reconcilia sola con el P&L del día del header —que
+> es un delta de *cuenta* e incluye lo operado hoy y movimientos de efectivo—, así que el residuo
+> se **muestra** como `resto` en vez de normalizarse. Sin `change_today` usable la tira se oculta:
+> no se degrada a `unrealized_pl`, que es P&L de vida de la posición y respondería otra pregunta.
 
 **El hueco.** El header dice "P&L del día −$1,145" pero no **qué posición** lo causó. El trader
 ve la pérdida sin el culpable, y tiene que cruzarlo mentalmente contra la tabla.
@@ -50,7 +96,33 @@ a "aporte sobre costo" (`unrealized_pl`) o se omite — sin bloquear el resto.
 
 ---
 
-## R2 — Tarjeta de riesgo (exposición · concentración · drawdown)
+## R2 — Tarjeta de riesgo (exposición · concentración · drawdown) · **COMPLETO** (`388ffcf`)
+
+> **Cerrado el 30-jul-2026.** No salió como card aparte sino como **bloque dentro de la tarjeta
+> Cartera**, a la derecha de la dona —espacio que era aire muerto—, en dos columnas:
+> - **Izquierda:** la dona, y **debajo** la concentración (antes al costado), ahora con
+>   **semáforo**: verde <10% · ámbar 10–20% · rojo >20% de la mayor posición. Solo el color
+>   comunica el nivel; sin palabras de juicio.
+> - **Derecha:** **efectivo %** como métrica protagónica, `$X en efectivo`, `Y% invertido · $Z en
+>   mercado`, **barra efectivo|invertido**, **mayor exposición** (ticker y $) y **drawdown**
+>   reactivo al selector 1S/1M/3M/1A.
+>
+> **Decisiones de honestidad.**
+> - **Denominador `EQUITY` con residuo visible:** si hay órdenes pendientes o margen, efectivo% +
+>   invertido% no dan 100 y **la barra no cierra**. No se normaliza: cuadrar a la fuerza inventaría
+>   una precisión que no existe. Mismo principio que el `resto` de R1.
+> - **Colores neutros para magnitudes sin signo:** efectivo y exposición van en gris/azul. Verde y
+>   rojo quedan reservados para el **drawdown**, que sí tiene dirección.
+> - **Sin adjetivos.** Nada de "pólvora seca" ni "diversificado": el dato desnudo.
+> - **Drawdown = actual desde el máximo de la ventana visible**, no la peor caída pico-a-valle del
+>   período. Va **rotulado con su rango** (`−4.2% · 3M`) porque el repintado del chart puede salir
+>   temprano sin limpiar `PH_DRAW`, y así el número nunca se lee como si fuera de otra ventana.
+> - **Beta omitida.** Era el opcional de esta sección; se descartó por serie corta: una beta sobre
+>   pocas semanas es ruido con apariencia de métrica.
+>
+> **Costo de layout, aceptado.** La zona creció ~20–30px que cede la tabla scrolleable (1–2 filas
+> menos antes del scroll). El `152px`/`flex-shrink:0` de la dona y el `flex:1;min-height:0` de la
+> tabla quedaron intactos.
 
 **El hueco (el más grande).** El home dice *qué* tenés y *qué opina* el modelo, pero no **cuánto
 podés perder**. Falta lo que un trader mira primero.
@@ -78,7 +150,36 @@ chica.
 
 ---
 
-## R3 — Señal del modelo por posición (cruce Cartera ↔ modelo)
+## R3 — Señal del modelo por posición (cruce Cartera ↔ modelo) · **COMPLETO** (`ec1eb9f`)
+
+> **Cerrado el 30-jul-2026.** Se implementó **conflict-only**, no un chip de señal en cada fila:
+> se marcan con **⚠ ámbar** (más borde izquierdo y fondo tenue) solo las posiciones que el modelo
+> contradice —largo + SELL, o corto + BUY—. Una fila sin marca es una fila sin fricción. En el
+> header de la tarjeta, junto a "N posiciones", un **pie de cobertura**:
+> `⚠ N en conflicto · ● M confirmada · K sin señal`. El ⚠ va dentro de la celda del símbolo, no en
+> una columna nueva: la tabla ya había cedido alto con R2.
+>
+> **Requirió refactor de `phdRender` (S3).** El cruce señal↔posición vivía **inline** dentro del
+> Pulso, en un arrow local inaccesible desde fuera. Se extrajo a **`phConflictos()`**, ahora
+> **única fuente de verdad** que consumen el Pulso y la tabla: es imposible que una tarjeta cuente
+> 2 conflictos y la otra 3. La regla no cambió (`qty null` sigue asumiendo largo). Se agregó
+> normalización de ticker en **ambos** lados: antes solo `POSITIONS` venía en mayúsculas y una fila
+> del libro con otro case no cruzaba, **en silencio**. El refactor se validó con un **snapshot
+> byte-a-byte** de la salida de `phdRender` en 7 escenarios, capturado *antes* de tocar el código:
+> sin regresiones, mismo `N=2` y mismos tickers.
+>
+> **`sig null` ≠ `sig []`.** Si el libro no se pudo leer, **no se marca nada**: la ausencia de ⚠
+> debe significar "sin conflicto", nunca "no sé".
+>
+> **⚠️ NOTA PARA EL FUTURO — el title NO muestra la confianza, a propósito.** El libro
+> (`GET /v1/papertrading/señales`) devuelve `confianza` en **dos escalas mezcladas dentro del mismo
+> `job_date`** y **ninguna fila declara cuál**: verificado en runtime, 52 filas en puntos v2
+> [30,95] (`NKE 53`, `SONY 60`) y 6 en probabilidad v3 [0,1] (`AAPL 0.5705`, `AMD 0.6109`). Como el
+> convenio del front es "sin etiqueta ⇒ v2", una fila v3 se imprimiría como **`1%` en vez de 57%** —
+> un número falso, no un redondeo. El Pulso ya evitaba `confianza` deliberadamente ("a prueba del
+> flip") y R3 mantiene esa línea: **ningún dato es mejor que un dato mentiroso**.
+> **Es un bug del libro/motor, fuera del alcance de este roadmap**, registrado como pendiente. Al
+> arreglarlo, la fila debería emitir `motor_version` — el front ya sabe leerlo (`confPct()`).
 
 **El hueco.** La Cartera muestra estado (TSLA −23%), no acción. El Pulso dice "0 conflictos" en
 **agregado**; el trader quiere, **por posición**, qué dice el modelo de *ese* ticker (señal +
@@ -105,7 +206,24 @@ degradado) para no mostrar ruido no-operable como si fuera señal.
 
 ---
 
-## R4 — Cash como decisión, no como dato
+## R4 — Cash como decisión, no como dato · **CUBIERTO POR R2** (no se implementa aparte)
+
+> **Resuelto dentro de R2 el 30-jul-2026 — esto no es un olvido, es una decisión.**
+>
+> El objetivo de R4 era *"que el efectivo se lea como proporción del equity e invite a decidir, sin
+> inventar recomendaciones"*. **R2 ya lo cumple:** el **efectivo %** es la métrica **protagónica**
+> del bloque de riesgo —el número más grande, arriba de todo—, con su monto en $ debajo y la barra
+> efectivo|invertido al lado. Dejó de ser un dato plano en la fila de KPIs.
+>
+> **Lo que sí se descartó, y por qué:** la "lectura" que R4 proponía —etiquetar el cash como
+> *"pólvora seca / capital ocioso según tu estilo"*—. La app **no puede saber** si ese efectivo es
+> intencional u ocioso: eso depende de la tesis del trader, que el home no conoce. Ponerle esa
+> etiqueta sería que la interfaz **decida por el trader**, justo la línea que este roadmap promete
+> no cruzar ("describe, no aconseja"). El **dato desnudo y prominente** es la forma honesta de
+> cumplir el objetivo: el % grande invita a la decisión sin tomarla.
+>
+> Por eso no queda un paso R4 pendiente: su hueco está cerrado, y la parte que no se hizo fue
+> **descartada a propósito**, no postergada.
 
 **El hueco.** $25k efectivo (27%) es mucho cash. ¿Es intencional (pólvora seca) o capital ocioso?
 El trader se lo pregunta; el home lo muestra plano.
@@ -124,7 +242,19 @@ decidir; no inventa recomendaciones (Claude/el home no es asesor financiero — 
 
 ---
 
-## R5 — Síntesis del portafolio (frase por reglas, no "opinión IA")
+## R5 — Síntesis del portafolio (frase por reglas, no "opinión IA") · **PENDIENTE**
+
+> **No implementada.** Queda abierta como evolución natural, ahora con más insumos que antes:
+> R1–R3 dejaron calculados exposición, efectivo %, concentración, drawdown y conflictos.
+>
+> **Decisión de diseño ya tomada (30-jul-2026), para cuando se retome.** Dos variantes en
+> discusión: **(A) síntesis por REGLAS** — una línea construida por plantilla a partir de los
+> números ya calculados (exposición, concentración, drawdown, conflictos), determinista, sin
+> alucinación; **(B) opinión por LLM** que lea el estado y lo verbalice. **Recomendación: empezar
+> por (A)** — honesta y determinista. **(B) queda diferida** y requiere **IA ANCLADA** (solo
+> verbalizar los números calculados, prohibido agregar juicios o recomendaciones) **+ harness
+> anti-alucinación**, porque es el punto donde la app puede cruzar de *"describe"* a *"aconseja"* —
+> lo que promete no hacer.
 
 **El hueco.** El home tiene 6–7 tarjetas; el trader tiene que **integrar mentalmente** cartera +
 modelo + noticias + eventos para saber "qué historia cuentan juntas". Falta el **resumen ejecutivo
@@ -177,10 +307,35 @@ recomendaciones de inversión; resume estado.
 
 ---
 
+## Fuera del roadmap, hechos en la misma sesión (30-jul-2026)
+
+Se dejan asentados porque tocaron el mismo archivo y conviven con estos commits:
+
+- **Órdenes Manuales · Alpaca por defecto** (`3eb536d`). La sub-pestaña "Alpaca" (órdenes reales de
+  la cuenta) pasa a ser la primera y la seleccionada al abrir; "Bitácora" (registro local) queda
+  segunda. La bitácora suele estar vacía y confundía como pantalla de entrada. El arranque pasó a
+  ir por `moSetSource(MO_SOURCE)` para que los filtros de estado y "+ Registrar orden" —que solo
+  aplican a la bitácora— queden sincronizados desde el primer pintado.
+- **Corrección de idioma a español neutro** (`540eb48`). Se coló voseo en textos de UI: el title
+  del ⚠ de R3, la línea de conflicto del Pulso y un "acá" en P&L Realizado. Solo texto, 8 líneas.
+
+## Pendientes que dejó esta tanda (fuera de alcance, para otro roadmap)
+
+- **Escalas mezcladas en el libro de señales.** `GET /v1/papertrading/señales` devuelve `confianza`
+  en puntos [30,95] y en probabilidad [0,1] dentro del mismo `job_date`, sin que la fila declare
+  cuál (`_row()` no emite `motor_version`). Mientras siga así, **ningún consumidor del front
+  debería leer `confianza` de ese endpoint** — es la razón por la que el ⚠ de R3 no la muestra.
+  Es del libro/motor, no del home.
+- **Verificación visual pendiente** de R1/R2/R3 en el navegador (el harness cubre cálculos,
+  clasificación y cableado, no el render): alineado del ⚠ en la columna del símbolo, que el pie de
+  cobertura no rompa el header a dos líneas, y confirmar la escala de `change_today` en runtime.
+
 ## Fuera de alcance (por ahora)
 
 - Cualquier cosa que requiera **endpoints nuevos** o toque el **backend/motor/ejecutor**. Si un
   paso lo necesitara, se saca a su propio roadmap y se decide aparte.
+  *(Excepción registrada: R1 necesitó una línea en la whitelist de `list_positions()` —capa de
+  datos del broker, no el motor—. Se decidió explícitamente y se acotó a ese campo; ver R1.)*
 - **Recomendaciones de inversión.** El home describe riesgo y estado; no dice "comprá/vendé". Las
   señales del modelo se muestran como lo que son (salida del sistema), no como consejo.
 - Order entry / ejecución desde el home. Esto es un **cockpit de lectura**, no una mesa de órdenes.
