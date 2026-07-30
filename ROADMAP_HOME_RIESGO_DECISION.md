@@ -14,11 +14,12 @@
 > `git revert`. Cada uno se hace en su propia sesión, con revisión de shape → diseño →
 > criterio de éxito → confirmación → código.
 
-## Estado final (30-jul-2026) — **ROADMAP COMPLETO**
+## Estado (30-jul-2026) — **capa de riesgo R1–R5 CERRADA · R6 PENDIENTE**
 
-**Los cinco pasos están cerrados.** El home dejó de ser un panel de *situación* y es un **cockpit
-de riesgo**: R1 da la atribución del P&L del día, R2 la exposición + efectivo + concentración +
-drawdown, R3 la señal del modelo por posición, y R5 la frase que integra todo eso.
+**Los cinco pasos originales están cerrados y verificados en el navegador.** El home dejó de ser un
+panel de *situación* y es un **cockpit de riesgo**: R1 da la atribución del P&L del día, R2 la
+exposición + efectivo + concentración + drawdown, R3 la señal del modelo por posición, y R5 la frase
+que integra todo eso.
 
 | paso | estado | commit |
 |---|---|---|
@@ -26,16 +27,20 @@ drawdown, R3 la señal del modelo por posición, y R5 la frase que integra todo 
 | R2 · Riesgo / exposición | **COMPLETO** | `388ffcf` (+ fix `61868b3`) |
 | R3 · Señal por posición | **COMPLETO** | `ec1eb9f` |
 | R4 · Cash como decisión | **CUBIERTO POR R2** — no se implementa aparte | — |
-| R5 · Síntesis del portafolio | **COMPLETO** | `435ada4` |
+| R5 · Síntesis del portafolio | **COMPLETO** (caído y repuesto, ver su sección) | `435ada4` + fix `141d6dd` |
+| R6 · Síntesis con IA anclada | **PENDIENTE** — diseño cerrado, sin implementar | — |
 
 **Excepción al guardrail "frontend puro", registrada.** R1 requirió **un** cambio de backend
 acotado (ver su sección). Fue una decisión explícita, en la capa de datos del broker y **no** en el
 motor. El guardrail sigue vigente para todo lo demás.
 
-**⚠️ Lo único que queda pendiente: la verificación visual.** Los cinco pasos están commiteados y
-desplegados, y cada uno tiene sus harness verdes, pero **nadie los ha revisado de forma sistemática
-en el navegador**. Los harness cubren cálculos, clasificación, redacción y cableado — no el render.
-Ver la lista concreta al final del documento.
+**✅ La verificación visual ya se hizo.** Los cinco pasos se revisaron en el navegador y es lo que
+destapó el TDZ de R5 (ver su sección). R1 · R2 · R3 · R4 quedan confirmados por la pasada de R2, y
+R5 quedó confirmada tras `141d6dd`. Los harness cubrían cálculos, clasificación, redacción y
+cableado — no el render ni la carga del archivo; esa brecha ya tiene su propio harness.
+
+**⚠️ El documento NO está "completo" mientras R6 siga abierta.** La capa de riesgo lo está; el
+roadmap no. R6 es evolución con diseño listo y sin una línea escrita.
 
 ## Prioridad sugerida (original)
 
@@ -124,8 +129,8 @@ a "aporte sobre costo" (`unrealized_pl`) o se omite — sin bloquear el resto.
 > menos antes del scroll). El `152px`/`flex-shrink:0` de la dona y el `flex:1;min-height:0` de la
 > tabla quedaron intactos.
 
-**El hueco (el más grande).** El home dice *qué* tenés y *qué opina* el modelo, pero no **cuánto
-podés perder**. Falta lo que un trader mira primero.
+**El hueco (el más grande).** El home dice *qué* tienes y *qué opina* el modelo, pero no **cuánto
+puedes perder**. Falta lo que un trader mira primero.
 
 **Qué.** Una card **"Riesgo"** con, de un vistazo:
 - **Exposición neta / apalancamiento:** invertido vs equity (hoy 73%), y si estás net long/short
@@ -133,7 +138,7 @@ podés perder**. Falta lo que un trader mira primero.
 - **Concentración como *alerta*, no como dato:** hoy la card Cartera muestra "Top-3 = 58%, mayor
   SPY 21.9%" en gris plano. Pintarlo como semáforo (ej. >X% mayor posición → ámbar) lo vuelve
   accionable.
-- **Drawdown:** cuánto caíste desde el máximo de la serie del chart de valor. El chart muestra el
+- **Drawdown:** cuánto has caído desde el máximo de la serie del chart de valor. El chart muestra el
   valor; esto muestra "cuánto dolió". Se calcula de `PH_DRAW`/la serie ya cargada.
 - (Opcional, más caro) **Beta del portafolio vs SPY:** el chart ya tiene la serie de la cuenta y
   la de SPY → una beta aproximada por regresión de retornos es cálculo en cliente.
@@ -242,7 +247,7 @@ decidir; no inventa recomendaciones (Claude/el home no es asesor financiero — 
 
 ---
 
-## R5 — Síntesis del portafolio (frase por reglas, no "opinión IA") · **COMPLETO** (`435ada4`)
+## R5 — Síntesis del portafolio (frase por reglas, no "opinión IA") · **COMPLETO** (`435ada4` + `141d6dd`)
 
 > **Cerrado el 30-jul-2026 por la Variante A (reglas).** Tarjeta delgada sobre la tira "Movimiento
 > de hoy" con **una frase** armada por **plantilla determinista** desde los números que R2/R3 ya
@@ -278,10 +283,39 @@ decidir; no inventa recomendaciones (Claude/el home no es asesor financiero — 
 > desplegados: meter una regresión por elegancia. El snapshot lo verifica en el escenario de
 > posición corta, justo donde divergen.
 >
-> **Verificado:** `node --check` 4/4 · harness R5 **55 PASS / 0 FAIL** (los 6 escenarios del diseño,
+> **Verificado:** `node --check` 4/4 · harness R5 **56 PASS / 0 FAIL** (los 6 escenarios del diseño,
 > umbrales exactos, prioridad y tope, más anti-imperativo y anti-voseo sobre **todas** las frases) ·
 > **snapshot byte-a-byte** de `renderHomeAllocation` + `phriskRender` en 9 escenarios **sin
 > regresiones** (R2 muestra exactamente lo mismo que antes de la extracción).
+>
+> ### ⚠️ Constancia honesta: R5 estuvo ROTA en producción entre `435ada4` y `141d6dd`
+>
+> **Qué pasó.** La misma línea que este documento celebraba como acierto de diseño —*"el umbral de
+> concentración **reusa** `PHRISK_CONC_ROJO` de R2, así el semáforo de la dona y la síntesis no
+> pueden discrepar"*— era el bug. `const PHSYN_CONC_PCT = PHRISK_CONC_ROJO` se **evaluaba antes** de
+> que R2 inicializara esa constante: **TDZ** (*temporal dead zone*), `ReferenceError` en tiempo de
+> carga. No degradó la tarjeta de R5: **tumbó el script entero**, y el home dejó de pintar
+> **Cartera y el chart**. Reusar la constante seguía siendo correcto; leerla antes de que existiera,
+> no.
+>
+> **La marca de "verificada" fue prematura, y queda registrada como tal.** El commit `f85ae28`
+> declaró R5 *"completa y verificada"* y cerró el roadmap **mientras la feature estaba caída en
+> producción**. No fue un descuido de redacción: fue haber tomado los harness verdes como evidencia
+> de algo que no probaban.
+>
+> **Por qué el harness pasaba 56/0 con el home muerto.** Porque probaba **las piezas** —invocaba las
+> funciones de R5 ya cargadas, en un scope donde las constantes existían— y **nunca la carga del
+> archivo tal como la ejecuta el navegador**. Un `ReferenceError` en tiempo de carga es invisible
+> para una suite que arranca *después* de la carga. `node --check` tampoco lo ve: leer una `const`
+> antes de su inicialización es **JavaScript sintácticamente legal**; el error es de ejecución.
+>
+> **Fix y cierre de la categoría (`141d6dd`).** Se corrigió el orden de evaluación y se agregó un
+> **harness de orden** que ejecuta los scripts **en el orden real del archivo**, de modo que
+> cualquier excepción en tiempo de carga —TDZ u otra— falle en la suite y no en el navegador del
+> usuario. Cierra la categoría entera, no solo esta instancia.
+>
+> **Verificación visual:** R5 confirmada en el navegador **después** de `141d6dd`. Es la pasada que
+> destapó el problema, y la única que podía hacerlo.
 
 **El hueco.** El home tiene 6–7 tarjetas; el trader tiene que **integrar mentalmente** cartera +
 modelo + noticias + eventos para saber "qué historia cuentan juntas". Falta el **resumen ejecutivo
@@ -334,6 +368,92 @@ recomendaciones de inversión; resume estado.
 
 ---
 
+## R6 — Síntesis del portafolio con IA anclada · **PENDIENTE** (diseño cerrado)
+
+> **Envuelve a R5, no la reemplaza.** Es la Variante B que R5 dejó anotada como "evolución
+> opcional", ahora con diseño concreto e investigación de terreno hecha. Un LLM lee los números que
+> R1–R5 **ya calculan** y los **verbaliza en prosa**: no inventa datos, no recalcula nada y no
+> aconseja. La frase determinista de R5 sigue viva debajo, como base y como red.
+
+**El hueco.** La frase de R5 es verdadera, auditable y gratis — pero es una plantilla, y se lee como
+tal. R6 apuesta a que la misma información, redactada con naturalidad, se lee mejor **sin dejar de
+ser verificable**.
+
+### Tarjeta: neutro → dorado
+
+Misma tarjeta `#phsyn`, dos estados:
+
+- **Base y fallback:** la frase determinista de R5 con **marco NEUTRO** (el azul apagado actual).
+- **Con IA:** cuando el LLM responde **y pasa el verificador**, su prosa reemplaza la frase, con
+  **marco DORADO** y título **"Análisis IA"**.
+
+**El dorado aparece exactamente cuando hay IA real verificada en pantalla, y desaparece al caer al
+fallback.** No es decoración: es el indicador de estado. Honesto por construcción — si el usuario ve
+dorado, hubo una llamada que pasó los controles; si ve neutro, está leyendo reglas. Nunca hay que
+confiar en un texto que diga cuál es cuál.
+
+### Modal auditable (parte de R6, no un extra)
+
+Clic en la tarjeta dorada abre un modal con:
+
+1. **El análisis completo del LLM** — los **5 factores**, no solo los 2 destacados que caben en la
+   tarjeta.
+2. **Los números crudos junto a cada afirmación.** Ejemplo:
+   *"concentración baja → mayor posición AAPL 1.0%, umbral 20%"*.
+
+Esta es la **capa de auditabilidad**, y es lo que convierte la tarjeta en **"análisis auditable, no
+comentario"**: demuestra, dato por dato, que la prosa está anclada a números reales. Debe seguir el
+**patrón de popup que ya usan Eficiencia y Pulso** para sentirse nativo, no un widget aparte.
+
+Con el fallback de R5 (neutro), el modal **se desactiva** o muestra solo el desglose determinista —
+nunca promete una auditoría de un análisis que no existe.
+
+### Carril técnico
+
+**`POST /v1/chat`** — ya existe, ya está autenticado con el JWT de founder, y el front ya lo usa vía
+`buildChatContext()`, que **ya inyecta el portafolio** (equity, efectivo, P&L del día y cada posición
+con qty, entrada, valor y P&L). **Frontend puro: cumple el guardrail, cero backend.**
+
+### Guardrales (los cuatro, no negociables)
+
+1. **Anclado.** El LLM **solo verbaliza el payload**. Recibe los números ya calculados; tiene
+   prohibido agregar datos, contexto externo o matices que las cifras no sostengan.
+2. **Verificador numérico.** **Toda cifra del texto debe existir en el payload.** Si aparece una que
+   no está, el texto **se descarta entero** y la tarjeta cae a R5. No se corrige ni se reintenta en
+   silencio: se descarta.
+3. **No aconseja.** Reusa los **asserts anti-imperativo** de R5 — la misma barrera que ya falla ante
+   "reduce", "vende", "considera", y ante el voseo.
+4. **Degradación.** **R5 (56/0) es el fallback permanente y la fuente de verdad del verificador.**
+   No es un plan de contingencia: es el piso sobre el que R6 se apoya. Si el LLM falla, tarda o
+   miente, el usuario ve exactamente lo que ve hoy.
+
+### Hallazgo de la investigación de terreno (30-jul-2026)
+
+- **El endpoint existe y es reutilizable → Camino A, frontend puro, ~1 sesión.** `POST /v1/chat` es
+  un proxy hacia la API de Anthropic que acepta payload arbitrario; el front ya sabe llamarlo.
+- **La síntesis por-ticker del motor NO es reutilizable.** Está atada a un ticker en las cuatro
+  capas (firma, caché por `ticker`, prompt y guardrail). Su **guardrail compara una dirección
+  `BUY`/`SELL`/`HOLD`** contra la señal decidida — **un portafolio no tiene dirección**, así que ese
+  control no tiene análogo.
+- **El blindaje anti-alucinación de ticker no se traslada.** Hay que **escribir un verificador
+  NUMÉRICO nuevo**: *cifras del texto ∈ payload*. Es un tipo de control distinto —verificar
+  cantidades, no contrastar una decisión— y hay que construirlo desde cero.
+- **Piezas nuevas y delicadas:** el **verificador** y el **modal auditable**. Todo lo demás es
+  cableado sobre cosas que ya existen.
+- **Deuda aceptada del Camino A:** `/v1/chat` **no cachea, no cuenta tokens y no marca el estado de
+  saldo**. El gasto queda **sin techo de servidor** y el modelo lo elige el cliente. Se asume a
+  cambio de no tocar el backend; si el costo molesta, la salida es un endpoint propio (Camino B,
+  2–3 sesiones de backend) y eso ya sería otro roadmap.
+
+**Criterio de éxito.** La tarjeta muestra prosa natural cuando hay IA verificada (dorado) y la frase
+de R5 cuando no (neutro), sin que el usuario tenga que saber cuál está viendo para confiar en ella;
+cada cifra de la prosa es rastreable a un número del payload desde el modal; ningún texto sobrevive
+al verificador con un dato inventado; y con el LLM caído el home se ve exactamente como hoy.
+
+**Rollback.** `git revert <hash>` — bloque autocontenido, y R5 sigue en pie por debajo.
+
+---
+
 ## Fuera del roadmap, hechos en la misma sesión (30-jul-2026)
 
 Se dejan asentados porque tocaron el mismo archivo y conviven con estos commits:
@@ -376,6 +496,27 @@ el productor; aquí, la función propia y no el espacio de nombres ocupado.
 `grep -nE "^\.<prefijo>"`. `index.html` es un archivo único sin módulos: todo comparte scope y
 cascada.
 
+### La lección de los tres bugs de esta tanda
+
+Los tres fallos de la sesión comparten exactamente la misma forma:
+
+| bug | qué era | qué lo tapaba |
+|---|---|---|
+| `change_today` (R1) | el front **consumía** un campo que el backend **no producía** | el consumidor existía, así que "estaba cableado" |
+| colisión `phr*` (R2) | `phrRender` **declarada dos veces**, gana la última | un `try/catch` que se tragaba el síntoma |
+| TDZ de orden (R5) | `const` leída **antes** de inicializarse | harness que probaba piezas, no la carga |
+
+**Los tres son JavaScript perfectamente legal, y por eso `node --check` no ve ninguno.** Redeclarar
+una función, leer una `const` antes de tiempo y consumir una propiedad `undefined` son cosas que el
+parser acepta sin una queja. Tampoco los vieron los harness: cada uno probaba **su propia unidad**,
+en un entorno que ya tenía resueltas justo las condiciones que fallaban en producción.
+
+**A los tres los atrapó la verificación visual, no los tests.** Esa es la conclusión incómoda de la
+tanda: la suite verde fue condición necesaria y en ningún caso suficiente. Cada bug dejó su harness
+—productor/consumidor, anti-colisión, orden de carga—, así que la categoría queda cerrada hacia
+adelante; pero la regla operativa es que **una feature no está verificada hasta que alguien la abrió
+en el navegador**, y ninguna cantidad de PASS sustituye esa pasada.
+
 ## Pendientes que dejó esta tanda (fuera de alcance, para otro roadmap)
 
 - **Escalas mezcladas en el libro de señales.** `GET /v1/papertrading/señales` devuelve `confianza`
@@ -383,17 +524,14 @@ cascada.
   cuál (`_row()` no emite `motor_version`). Mientras siga así, **ningún consumidor del front
   debería leer `confianza` de ese endpoint** — es la razón por la que el ⚠ de R3 no la muestra.
   Es del libro/motor, no del home.
-- **⚠️ VERIFICACIÓN VISUAL — pendiente, es lo único que falta del roadmap.** Todo está desplegado y
-  con harness verdes, pero nadie lo ha revisado en el navegador. En una sola pasada:
-  1. **R1** — `POSITIONS.map(p => p.change_today)` debe dar números, y en **escala de fracción**
-     (`-0.0134`, no `-1.34`); si viniera en porcentaje, R1 necesita un ajuste de frontend.
-  2. **Fix `61868b3`** — que **"Operados recientemente"** haya vuelto al panel izquierdo (estuvo
-     muerto tres commits).
-  3. **R2/R3** — el ⚠ en las posiciones en conflicto sin desalinear la columna del símbolo, el pie
-     de cobertura sin romper el header a dos líneas, y el drawdown siguiendo al selector de rango.
-  4. **R5** — que la frase entre en una línea y no empuje feo las tarjetas de abajo. Y lo que
-     ningún harness puede juzgar: **si aporta o estorba**. Que sea verdadera, determinista y que no
-     aconseje está probado; que valga la pena leerla cada vez es criterio de trader.
+- **✅ VERIFICACIÓN VISUAL — hecha.** R1 · R2 · R3 · R4 quedaron confirmados en la pasada de R2, y
+  **R5 en la suya, después de `141d6dd`**. Fue esta revisión la que destapó el TDZ que tenía el home
+  sin pintar Cartera ni chart: la única de las tres redes —`node --check`, harness, navegador— que
+  podía verlo. Queda como paso obligatorio de cierre, no como opcional.
+- **Lo que ninguna verificación puede zanjar: si R5 aporta o estorba.** Que la frase sea verdadera,
+  determinista y que no aconseje está probado; **que valga la pena leerla cada vez es criterio de
+  trader**, y sigue abierto. Es justamente la pregunta que R6 intenta responder por el lado de la
+  redacción.
 
 ## Fuera de alcance (por ahora)
 
@@ -401,7 +539,9 @@ cascada.
   paso lo necesitara, se saca a su propio roadmap y se decide aparte.
   *(Excepción registrada: R1 necesitó una línea en la whitelist de `list_positions()` —capa de
   datos del broker, no el motor—. Se decidió explícitamente y se acotó a ese campo; ver R1.)*
-- **Recomendaciones de inversión.** El home describe riesgo y estado; no dice "comprá/vendé". Las
+  *(R6 **no** es excepción: usa `POST /v1/chat`, que ya existe y ya está cableado en el front. Un
+  endpoint propio para la síntesis —Camino B— sí caería aquí, y por eso quedó fuera de R6.)*
+- **Recomendaciones de inversión.** El home describe riesgo y estado; no dice "compra/vende". Las
   señales del modelo se muestran como lo que son (salida del sistema), no como consejo.
 - Order entry / ejecución desde el home. Esto es un **cockpit de lectura**, no una mesa de órdenes.
 
