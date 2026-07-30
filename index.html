@@ -1130,6 +1130,18 @@ body.home-mode #cp-home{display:flex}
    superior) para que la zona crezca lo mínimo y la tabla ceda poco alto. */
 .phz-cartera .ph-conc{border-top:none;padding-top:0;text-align:left;font-size:10px;width:152px}
 .ph-conc-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+/* ══ R3 · conflicto modelo↔posición en la tabla de Cartera ═══════════════
+   Se marcan SOLO los conflictos: una fila sin marca es una fila sin fricción.
+   El ⚠ va dentro de la celda del símbolo (no en una columna nueva: la tabla
+   ya cedió alto con R2 y una columna más la aprieta). */
+.ph-row-warn{margin-left:5px;color:var(--orange);cursor:help;font-size:10px}
+tr.ph-row-conflict > td:first-child{box-shadow:inset 3px 0 0 var(--orange)}
+tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
+.ph-cover{display:inline-flex;align-items:center;gap:5px;margin-left:6px}
+.ph-cover-i{white-space:nowrap}
+.ph-cover-c{color:var(--orange)}
+.ph-cover-k{color:var(--green)}
+.ph-cover-s{color:var(--text3)}
 .phr-hdr{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
 .phr-cash{font-size:23px;font-weight:700;color:var(--text);line-height:1;font-variant-numeric:tabular-nums}
 .phr-cash-sub{font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums}
@@ -10069,6 +10081,51 @@ function phdDriftEval(st){
 }
 
 /* Pinta la card desde PHD_STATE. Idempotente · CERO fetch. */
+/* ══ R3 · Cruce señal↔posición · ÚNICA definición ═══════════════════════════
+   La consumen el Pulso (S3, phdRender) y la tabla de Cartera (R3). Dos
+   definiciones de "conflicto" que puedan divergir es exactamente el bug que
+   nadie encuentra hasta que una tarjeta dice 2 y la otra marca 3.
+
+   Regla extraída de phdRender SIN cambiarla: largo+SELL o corto+BUY, y qty
+   null ⇒ se asume largo (criterio conservador ya vigente).
+
+   Normaliza el ticker de AMBOS lados: hasta acá solo POSITIONS venía en
+   mayúsculas (lo fuerza el mapper) y una fila del libro con otro case no
+   cruzaba — fallaba en silencio, sin conflicto ni confirmación.
+
+   NO lee `confianza` a propósito: el libro mezcla puntos [30,95] y probabilidad
+   [0,1] en el mismo job_date sin declarar cuál (la fila no trae motor_version),
+   así que ese número puede ser falso. El Pulso ya la evitaba "a prueba del
+   flip"; R3 mantiene esa línea.                                              */
+function phNormTk(t){ return String(t==null?'':t).trim().toUpperCase(); }
+
+function phConflictos(){
+  const st  = (typeof PHD_STATE !== 'undefined') ? PHD_STATE : null;
+  const pos = (typeof POSITIONS !== 'undefined' && Array.isArray(POSITIONS)) ? POSITIONS : [];
+  const sig = (st && Array.isArray(st.sig)) ? st.sig : null;
+  const jd  = (st && st.sigJobDate) || null;
+
+  // sig null (no se pudo leer el libro) ≠ sig [] (job sin señales / todo HOLD).
+  if(!sig) return { disponible:false, sigJobDate:jd, porTicker:{}, conflictos:[], confirmas:[], rest:[], nPos:pos.length };
+
+  const posBy = {};
+  pos.forEach(p => { if(p && p.symbol) posBy[phNormTk(p.symbol)] = p; });
+
+  const porTicker = {}, conflictos = [], confirmas = [], rest = [];
+  sig.forEach(s => {
+    const p = posBy[phNormTk(s.ticker)];
+    if(!p){ rest.push(s); return; }                 // el resto del libro (investigación)
+    const largo = (p.qty == null) ? true : (p.qty >= 0);
+    const sen = s['señal'];                          // OJO: clave con ñ, siempre por corchetes
+    const conflicto = (largo && sen === 'SELL') || (!largo && sen === 'BUY');
+    const e = { ticker:s.ticker, 'señal':sen, largo, conflicto, sig:s, pos:p };
+    porTicker[phNormTk(s.ticker)] = e;
+    (conflicto ? conflictos : confirmas).push(e);
+  });
+
+  return { disponible:true, sigJobDate:jd, porTicker, conflictos, confirmas, rest, nPos:pos.length };
+}
+
 function phdRender(){
   const body = $('phd-body'); if(!body) return;
   const st = PHD_STATE;
@@ -10121,13 +10178,9 @@ function phdRender(){
         + '<span class="phd-unit">señales de investigación · ' + nBuy + ' BUY / ' + nSell + ' SELL</span></div>'
         + '<div class="phd-foot phd-muted">Sin cartera conectada para cruzar · ' + mkFoot(st.sig) + '</div>';
     } else {
-      const posBy = {}; pos.forEach(p => { if(p && p.symbol) posBy[p.symbol] = p; });
-      const held = st.sig.filter(s => posBy[s.ticker]);
-      const rest = st.sig.filter(s => !posBy[s.ticker]);
-      const esConflicto = s => { const p = posBy[s.ticker]; const largo = (p.qty == null) ? true : (p.qty >= 0);
-        return (largo && s['señal'] === 'SELL') || (!largo && s['señal'] === 'BUY'); };
-      const conflictos = held.filter(esConflicto);
-      const confirmas  = held.filter(s => !esConflicto(s));
+      // R3: el cruce vive en phConflictos() — misma regla, un solo lugar.
+      const X = phConflictos();
+      const conflictos = X.conflictos, confirmas = X.confirmas, rest = X.rest;
 
       const nC = conflictos.length;
       const headCol = nC > 0 ? 'var(--orange)' : 'var(--green)';
@@ -10138,8 +10191,8 @@ function phdRender(){
             : 'el modelo no contradice tus posiciones hoy') + '</span></div>';
 
       if(nC > 0){
-        html += '<div style="margin-top:8px">' + conflictos.map(s => {
-          const p = posBy[s.ticker];
+        html += '<div style="margin-top:8px">' + conflictos.map(c => {
+          const s = c.sig, p = c.pos;
           const buy = s['señal'] === 'BUY';
           const arr = buy ? '▲' : '▼';
           const dcol = buy ? 'var(--green)' : 'var(--red)';
@@ -10293,6 +10346,10 @@ async function phdLoad(){
   PHD_STATE = next;
   PHD_LOADING = false;
   phdRender();
+  // R3: las señales llegan DESPUÉS del primer pintado de la tabla (phdLoad es
+  // fire-and-forget desde renderHome), así que sin esto la Cartera se quedaría
+  // sin marcas para siempre.
+  if(CP_VIEW === 'home') renderHomeTable();
 }
 
 /* El benchmark SPY usa el OHLCV de SPY. En arranque directo al Home ese cache
@@ -10822,11 +10879,52 @@ function phClassChip(ac){
   const lbl = v.includes('crypto') ? 'Cripto' : (v.includes('equity') ? 'Equity' : ac);
   return `<span class="ph-row-cls">${lbl}</span>`;
 }
+/* ══ R3 · title del ⚠ y pie de cobertura ═══════════════════════════════════
+   El title NO lleva la confianza a propósito: el libro mezcla puntos [30,95] y
+   probabilidad [0,1] en el mismo job_date sin declarar cuál, así que ese número
+   puede estar 100× errado. Un dato ausente es mejor que uno falso, y el Pulso
+   ya tomó esa misma decisión ("a prueba del flip").                          */
+function phWarnTitle(e, jobDate){
+  const sen = e && e['señal'] ? e['señal'] : '—';
+  const lado = (e && e.largo === false) ? 'en corto' : 'en largo';
+  return `El modelo marca ${sen} y la tenés ${lado}`
+       + (jobDate ? ` · última lectura: cierre ${jobDate}` : '');
+}
+
+/* Pie de cobertura en el header de la tarjeta, junto a "N posiciones" (no bajo
+   la tabla: no le saca otra fila al scroll, que ya cedió alto con R2).
+   "sin señal" ≡ el ticker no vino en el libro de este cierre — puede ser HOLD
+   (se filtran en phdLoad) o estar fuera del universo. No afirmamos cuál.     */
+function phCoverInto(cnt, pos, X, marcado){
+  const base = pos.length ? `${pos.length} ${pos.length===1?'posición':'posiciones'}` : '';
+  if(!pos.length || !marcado){ cnt.textContent = base; return; }
+  let nc=0, nk=0;
+  pos.forEach(p=>{
+    const e = X.porTicker[phNormTk(p.symbol)];
+    if(!e) return;
+    if(e.conflicto) nc++; else nk++;
+  });
+  const ns = pos.length - nc - nk;
+  cnt.innerHTML = base
+    + `<span class="ph-cover">`
+    +   `<span class="ph-cover-i ph-cover-c">⚠ ${nc} en conflicto</span>`
+    +   `<span class="ph-cover-i ph-cover-k">● ${nk} confirmada${nk===1?'':'s'}</span>`
+    +   `<span class="ph-cover-i ph-cover-s">${ns} sin señal</span>`
+    + `</span>`;
+}
+
 function renderHomeTable(){
   const wrap=$('ph-table'); if(!wrap) return;
   const cnt=$('ph-pos-count');
   const pos = (POSITIONS||[]).slice().sort((x,y)=>(y.value||0)-(x.value||0));
-  if(cnt) cnt.textContent = pos.length ? `${pos.length} ${pos.length===1?'posición':'posiciones'}` : '';
+
+  /* R3 · conflictos modelo↔posición. Misma fuente que el Pulso (phConflictos),
+     así que la tabla y la mini-card nunca pueden contar distinto. Si el libro
+     no se pudo leer, X.disponible=false y NO se marca nada: ausencia de ⚠ debe
+     significar "sin conflicto", nunca "no sé". */
+  const X = (typeof phConflictos === 'function') ? phConflictos() : null;
+  const marcado = !!(X && X.disponible);
+  if(cnt) phCoverInto(cnt, pos, X, marcado);
 
   if(!pos.length){
     wrap.innerHTML = `<div class="ph-table-empty">
@@ -10844,8 +10942,12 @@ function renderHomeTable(){
     if(pl!=null && !isNaN(pl)) tPl+=pl;
     const plCls = (pl!=null && pl<0) ? 'ph-neg' : 'ph-pos';
     const wPct = (eq && v!=null) ? (v/eq*100) : null;
-    return `<tr id="ph-trow-${p.symbol}" onclick="pick('${p.symbol}')" onmouseover="phHiliteSym('${p.symbol}')" onmouseout="phSliceLeave()" title="Abrir ${p.symbol} en la gráfica">
-      <td><span class="ph-row-sym">${p.symbol}</span>${phClassChip(p.asset_class)}</td>
+    // R3: ⚠ solo si el modelo contradice esta posición.
+    const e = marcado ? X.porTicker[phNormTk(p.symbol)] : null;
+    const chocan = !!(e && e.conflicto);
+    const warn = chocan ? `<span class="ph-row-warn" title="${phWarnTitle(e, X.sigJobDate)}">⚠</span>` : '';
+    return `<tr id="ph-trow-${p.symbol}" class="${chocan?'ph-row-conflict':''}" onclick="pick('${p.symbol}')" onmouseover="phHiliteSym('${p.symbol}')" onmouseout="phSliceLeave()" title="Abrir ${p.symbol} en la gráfica">
+      <td><span class="ph-row-sym">${p.symbol}</span>${phClassChip(p.asset_class)}${warn}</td>
       <td>${p.qty!=null && !isNaN(p.qty) ? (+p.qty).toLocaleString('en-US',{maximumFractionDigits:6}) : '—'}</td>
       <td>${fP(p.avg_entry_price)}</td>
       <td>${fP(p.current_price)}</td>
