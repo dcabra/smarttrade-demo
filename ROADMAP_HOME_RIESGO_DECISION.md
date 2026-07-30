@@ -14,28 +14,28 @@
 > `git revert`. Cada uno se hace en su propia sesión, con revisión de shape → diseño →
 > criterio de éxito → confirmación → código.
 
-## Estado final (30-jul-2026)
+## Estado final (30-jul-2026) — **ROADMAP COMPLETO**
 
-**La capa de riesgo y decisión está cerrada: R1, R2 y R3 implementados; R4 cubierto por R2.**
-El home dejó de ser un panel de *situación* y pasa a ser un **cockpit de riesgo**: R1 da la
-atribución del P&L del día, R2 la exposición + efectivo + concentración + drawdown, y R3 la señal
-del modelo por posición.
+**Los cinco pasos están cerrados.** El home dejó de ser un panel de *situación* y es un **cockpit
+de riesgo**: R1 da la atribución del P&L del día, R2 la exposición + efectivo + concentración +
+drawdown, R3 la señal del modelo por posición, y R5 la frase que integra todo eso.
 
 | paso | estado | commit |
 |---|---|---|
 | R1 · Top movers del día | **COMPLETO** | `27fff81` (+ backend `4c104c3`) |
-| R2 · Riesgo / exposición | **COMPLETO** | `388ffcf` |
+| R2 · Riesgo / exposición | **COMPLETO** | `388ffcf` (+ fix `61868b3`) |
 | R3 · Señal por posición | **COMPLETO** | `ec1eb9f` |
 | R4 · Cash como decisión | **CUBIERTO POR R2** — no se implementa aparte | — |
-| R5 · Síntesis del portafolio | **PENDIENTE** — no implementada | — |
-
-**R5 sigue abierta.** No entró en esta tanda y no se descartó: queda como la evolución natural
-cuando se quiera un resumen ejecutivo sobre lo que R1–R3 ya exponen. Lo que cierra acá es la capa
-de **riesgo y decisión** (R1–R4), no el documento entero.
+| R5 · Síntesis del portafolio | **COMPLETO** | `435ada4` |
 
 **Excepción al guardrail "frontend puro", registrada.** R1 requirió **un** cambio de backend
 acotado (ver su sección). Fue una decisión explícita, en la capa de datos del broker y **no** en el
 motor. El guardrail sigue vigente para todo lo demás.
+
+**⚠️ Lo único que queda pendiente: la verificación visual.** Los cinco pasos están commiteados y
+desplegados, y cada uno tiene sus harness verdes, pero **nadie los ha revisado de forma sistemática
+en el navegador**. Los harness cubren cálculos, clasificación, redacción y cableado — no el render.
+Ver la lista concreta al final del documento.
 
 ## Prioridad sugerida (original)
 
@@ -242,19 +242,46 @@ decidir; no inventa recomendaciones (Claude/el home no es asesor financiero — 
 
 ---
 
-## R5 — Síntesis del portafolio (frase por reglas, no "opinión IA") · **PENDIENTE**
+## R5 — Síntesis del portafolio (frase por reglas, no "opinión IA") · **COMPLETO** (`435ada4`)
 
-> **No implementada.** Queda abierta como evolución natural, ahora con más insumos que antes:
-> R1–R3 dejaron calculados exposición, efectivo %, concentración, drawdown y conflictos.
+> **Cerrado el 30-jul-2026 por la Variante A (reglas).** Tarjeta delgada sobre la tira "Movimiento
+> de hoy" con **una frase** armada por **plantilla determinista** desde los números que R2/R3 ya
+> calcularon. Sin LLM, sin red, sin recalcular nada. **Estilo neutro a propósito** (azul apagado,
+> no dorado): no es una opinión de IA y no debe parecerlo.
 >
-> **Decisión de diseño ya tomada (30-jul-2026), para cuando se retome.** Dos variantes en
-> discusión: **(A) síntesis por REGLAS** — una línea construida por plantilla a partir de los
-> números ya calculados (exposición, concentración, drawdown, conflictos), determinista, sin
-> alucinación; **(B) opinión por LLM** que lea el estado y lo verbalice. **Recomendación: empezar
-> por (A)** — honesta y determinista. **(B) queda diferida** y requiere **IA ANCLADA** (solo
-> verbalizar los números calculados, prohibido agregar juicios o recomendaciones) **+ harness
-> anti-alucinación**, porque es el punto donde la app puede cruzar de *"describe"* a *"aconseja"* —
-> lo que promete no hacer.
+> **Priorización — destaca lo que está fuera de lo normal:** conflictos del modelo (titular) >
+> concentración >20% > drawdown >10% > exposición (siempre, como cierre). Máximo **2 destacados**
+> más la exposición. Si nada dispara, describe el estado tranquilo; **nunca inventa una alerta**.
+> El umbral de concentración **reusa** `PHRISK_CONC_ROJO` de R2, así el semáforo de la dona y la
+> síntesis no pueden discrepar.
+>
+> **Describe, NO aconseja.** Indicativo, hechos. Cero imperativos ("reduce", "vende", "considera").
+> Sin adjetivos de juicio: el mockup original decía *"exposición repartida"* y se cambió por el
+> hecho verificable *"Ninguna posición supera el 20% de la cartera"* — misma razón por la que R4
+> descartó "pólvora seca". Español neutro. El harness **falla** si aparece un imperativo o voseo en
+> cualquiera de las frases generadas.
+>
+> **Estados honestos.** Si el libro de señales no se pudo leer (`disponible === false`) se **omite**
+> la parte de conflictos y la frase **no** afirma "alineadas con el modelo": decir "0 conflictos"
+> sería afirmar algo que no sabemos. Sin posiciones, la tarjeta se oculta. Sin `EQUITY`, se omite la
+> exposición.
+>
+> **Fuentes compartidas — misma disciplina que `phConflictos()` en R3.** Se extrajeron
+> **`phsynConcentracion()`** y **`phsynExposicion()`**, que ahora consumen **tanto R2 como R5**:
+> es imposible que el bloque de riesgo y la síntesis digan cifras distintas del mismo dato. La
+> concentración sale de `POSITIONS`, **no** de las rebanadas de la dona, para que la cifra no cambie
+> al tocar el selector *Por posición / Por clase*.
+>
+> **Los dos denominadores se mantienen SEPARADOS a propósito.** Exposición divide por `EQUITY` con
+> `homeAggregates().mv` (incluye negativos si hay cortos); concentración divide por
+> `Σ(value>0) + efectivo`, que es la base de la dona. Unificarlos habría cambiado números de R2 ya
+> desplegados: meter una regresión por elegancia. El snapshot lo verifica en el escenario de
+> posición corta, justo donde divergen.
+>
+> **Verificado:** `node --check` 4/4 · harness R5 **55 PASS / 0 FAIL** (los 6 escenarios del diseño,
+> umbrales exactos, prioridad y tope, más anti-imperativo y anti-voseo sobre **todas** las frases) ·
+> **snapshot byte-a-byte** de `renderHomeAllocation` + `phriskRender` en 9 escenarios **sin
+> regresiones** (R2 muestra exactamente lo mismo que antes de la extracción).
 
 **El hueco.** El home tiene 6–7 tarjetas; el trader tiene que **integrar mentalmente** cartera +
 modelo + noticias + eventos para saber "qué historia cuentan juntas". Falta el **resumen ejecutivo
@@ -319,6 +346,36 @@ Se dejan asentados porque tocaron el mismo archivo y conviven con estos commits:
 - **Corrección de idioma a español neutro** (`540eb48`). Se coló voseo en textos de UI: el title
   del ⚠ de R3, la línea de conflicto del Pulso y un "acá" en P&L Realizado. Solo texto, 8 líneas.
 
+## ⚠️ Regresión propia encontrada y corregida (`61868b3`)
+
+Durante la investigación de R5 apareció un bug que **R2 había introducido y llevaba tres commits
+desplegado**: el prefijo `phr*` ya era de **"Operados recientemente" (Paso 6)** —`phrAgoDays`,
+`phrAgoTxt`, `phrBuild`, `phrRender`, y las clases `.phr-row/-sym/-pnl/…`— y R2 lo reutilizó sin
+comprobar que estuviera libre.
+
+- **`phrRender` quedaba declarada dos veces** (Paso 6 con `(r, nowMs)`; R2 sin argumentos). Son dos
+  `function` de nivel superior en el mismo scope: **gana la última**. La llamada de Paso 6
+  —`try{ phrRender(r); }catch(e){}`— ejecutaba la de R2, que ignora el argumento. Resultado:
+  **"Operados recientemente" dejó de pintarse desde `388ffcf`**, y el `try/catch` puesto para
+  aislarlo **se tragó el síntoma**: sin error en consola, sin pista visible.
+- **`.phr-row` estaba definida dos veces**, así que las filas de Paso 6 heredaban el
+  `align-items`/`gap`/`padding` de R2.
+
+**Fix:** se renombró **lo de R2** a `phrisk*` / `.phrisk-*` (Paso 6 tiene el prefijo por antigüedad
+y más superficie), verificando por hash que sus regiones quedaran byte-idénticas.
+
+**Lección, y el harness que la fija.** `node --check` **no ve** una función redeclarada: es
+JavaScript legal. Y el harness de R2 probaba su propia función aislada, sin preguntar si el nombre
+ya existía. Se agregó un **harness anti-colisión** con dos chequeos —(1) ninguna función declarada
+dos veces; (2) clases CSS con regla base duplicada en bloques separados, contra un *baseline* de los
+12 overrides deliberados preexistentes— **validado contra el código con el bug**, donde reporta
+`phrRender` y `.phr-row`. Es la misma lección de R1 en otro eje: allí se verificó el consumidor y no
+el productor; aquí, la función propia y no el espacio de nombres ocupado.
+
+**Antes de agregar una tarjeta nueva:** `grep -nE "^(function|const|let) <prefijo>"` y
+`grep -nE "^\.<prefijo>"`. `index.html` es un archivo único sin módulos: todo comparte scope y
+cascada.
+
 ## Pendientes que dejó esta tanda (fuera de alcance, para otro roadmap)
 
 - **Escalas mezcladas en el libro de señales.** `GET /v1/papertrading/señales` devuelve `confianza`
@@ -326,9 +383,17 @@ Se dejan asentados porque tocaron el mismo archivo y conviven con estos commits:
   cuál (`_row()` no emite `motor_version`). Mientras siga así, **ningún consumidor del front
   debería leer `confianza` de ese endpoint** — es la razón por la que el ⚠ de R3 no la muestra.
   Es del libro/motor, no del home.
-- **Verificación visual pendiente** de R1/R2/R3 en el navegador (el harness cubre cálculos,
-  clasificación y cableado, no el render): alineado del ⚠ en la columna del símbolo, que el pie de
-  cobertura no rompa el header a dos líneas, y confirmar la escala de `change_today` en runtime.
+- **⚠️ VERIFICACIÓN VISUAL — pendiente, es lo único que falta del roadmap.** Todo está desplegado y
+  con harness verdes, pero nadie lo ha revisado en el navegador. En una sola pasada:
+  1. **R1** — `POSITIONS.map(p => p.change_today)` debe dar números, y en **escala de fracción**
+     (`-0.0134`, no `-1.34`); si viniera en porcentaje, R1 necesita un ajuste de frontend.
+  2. **Fix `61868b3`** — que **"Operados recientemente"** haya vuelto al panel izquierdo (estuvo
+     muerto tres commits).
+  3. **R2/R3** — el ⚠ en las posiciones en conflicto sin desalinear la columna del símbolo, el pie
+     de cobertura sin romper el header a dos líneas, y el drawdown siguiendo al selector de rango.
+  4. **R5** — que la frase entre en una línea y no empuje feo las tarjetas de abajo. Y lo que
+     ningún harness puede juzgar: **si aporta o estorba**. Que sea verdadera, determinista y que no
+     aconseje está probado; que valga la pena leerla cada vez es criterio de trader.
 
 ## Fuera de alcance (por ahora)
 
