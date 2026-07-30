@@ -2271,8 +2271,8 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       <div class="mo-head">
         <span class="mo-title">📋 Órdenes</span>
         <div class="mo-src-seg" id="mo-src-seg">
-          <button class="mo-src on" data-src="local"  onclick="moSetSource('local')" title="Registros manuales guardados en este navegador">Bitácora</button>
-          <button class="mo-src"    data-src="alpaca" onclick="moSetSource('alpaca')" title="Órdenes reales enviadas a tu cuenta de Alpaca (estado en vivo)">Alpaca</button>
+          <button class="mo-src on" data-src="alpaca" onclick="moSetSource('alpaca')" title="Órdenes reales enviadas a tu cuenta de Alpaca (estado en vivo)">Alpaca</button>
+          <button class="mo-src"    data-src="local"  onclick="moSetSource('local')" title="Registros manuales guardados en este navegador">Bitácora</button>
         </div>
         <span class="mo-count" id="mo-count">0</span>
         <button class="mo-new" id="mo-new-btn" onclick="moOpenForm(null)">+ Registrar orden</button>
@@ -8045,8 +8045,11 @@ function bootUI(){
   setTimeout(()=>{
     MARKET_PROXIES.forEach(t => fetchContext(t));
   }, 3000);
-  // Bitácora de órdenes manuales: cargar y pintar al iniciar
-  moLoad(); moRender();
+  // Órdenes manuales: cargar la bitácora local y pintar al iniciar.
+  // Vía moSetSource (no moRender) para que el chrome dependiente de la fuente
+  // —filtros de estado y "+ Registrar orden", que solo aplican a la bitácora—
+  // quede sincronizado con MO_SOURCE desde el primer pintado.
+  moLoad(); moSetSource(MO_SOURCE);
 }
 
 /* ══════════════════════════════════════════════
@@ -8094,7 +8097,11 @@ function moRender(){
    Antes había dos fuentes de verdad desconectadas: la bitácora local y
    /v1/broker/orders (visible solo dentro del modal). Ahora la pestaña las
    unifica con este selector de fuente. */
-let MO_SOURCE='local';
+/* Default: 'alpaca' — las órdenes reales de la cuenta son el caso común; la
+   bitácora local suele estar vacía y confundía como pantalla de entrada.
+   Debe quedar en sync con la clase 'on' del markup (#mo-src-seg) y con el
+   moSetSource(MO_SOURCE) del arranque en bootUI(). */
+let MO_SOURCE='alpaca';
 let ALPACA_ORDERS=null;   // caché de la última consulta
 function moSetSource(src){
   MO_SOURCE=src;
