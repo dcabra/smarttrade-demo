@@ -1757,11 +1757,11 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
         </div>
 
         <!-- Centro · Noticias (alto, scroll interno) -->
-        <!-- S5 · Noticias de mis posiciones. Fan-out GET /v1/context/{ticker} (LECTURA). -->
+        <!-- S5 · Noticias de mis tickers (posiciones + watchlist). Fan-out GET /v1/context/{ticker} (LECTURA). -->
         <div class="ph-card phz-term-news" id="phnews-card" style="display:none">
           <div class="ph-card-hdr">
             <div class="ph-card-hdr-left">
-              <span class="ph-card-title">Noticias de mis posiciones</span>
+              <span class="ph-card-title">Noticias de mis tickers</span>
               <span class="ph-card-sub" id="phnews-sub"></span>
             </div>
           </div>
@@ -9570,7 +9570,7 @@ async function phcalLoad(){
   phcalRender();
 }
 
-/* ═══ S5 · Noticias de mis posiciones ═════════════════════════════════════════
+/* ═══ S5 · Noticias de mis tickers (posiciones + watchlist) ═══════════════════
    Fan-out de GET /v1/context/{ticker} (LECTURA) reusando fetchContext /
    CONTEXT_CACHE / sentColor (todo ya existe). Cache-first: pinta al instante los
    tickers ya cacheados (el home suele prefetchear context) y rellena los que
@@ -9613,10 +9613,10 @@ function phnewsRender(tickers){
   const subEl = $('phnews-sub');
   if(!tickers || !tickers.length){
     if(subEl) subEl.textContent = '';
-    body.innerHTML = '<div class="phnews-empty">Sin posiciones en el portafolio.</div>';
+    body.innerHTML = '<div class="phnews-empty">Sin tickers en el portafolio ni en el watchlist.</div>';
     return;
   }
-  if(subEl) subEl.textContent = tickers.length + (tickers.length === 1 ? ' posición' : ' posiciones');
+  if(subEl) subEl.textContent = tickers.length + (tickers.length === 1 ? ' ticker' : ' tickers');
   body.innerHTML = tickers.map(t => {
     const r = PHNEWS_ROWS[t] || { status:'loading' };
     const safe = String(t).replace(/[^A-Z0-9.\-]/gi, '');
@@ -9642,7 +9642,14 @@ function phnewsRender(tickers){
 async function phnewsLoad(){
   const card = $('phnews-card'); if(!card) return;
   card.style.display = '';
-  const tickers = [...new Set((typeof TICKERS !== 'undefined' && TICKERS ? TICKERS : []).filter(Boolean))];
+  // Mis tickers = posiciones abiertas + watchlist — la misma unión que phcalLoad
+  // (Paso 4) y loadCalendar (L7292). Antes solo TICKERS: con 0 posiciones la
+  // función retornaba ANTES de cualquier fetch y la tarjeta quedaba muda aunque
+  // hubiera watchlist.
+  const tickers = [...new Set([
+    ...(typeof TICKERS   !== 'undefined' && TICKERS   ? TICKERS   : []),
+    ...(typeof WATCHLIST !== 'undefined' && WATCHLIST ? WATCHLIST : [])
+  ])].filter(Boolean);
   if(!tickers.length){ phnewsRender([]); return; }
 
   const fresh = PHNEWS_AT && (Date.now() - PHNEWS_AT) < PHNEWS_TTL_MS && tickers.every(t => PHNEWS_ROWS[t] && PHNEWS_ROWS[t].status !== 'loading' && PHNEWS_ROWS[t].status !== 'error');
