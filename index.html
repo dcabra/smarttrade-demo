@@ -1119,7 +1119,7 @@ body.home-mode #cp-home{display:flex}
 .ph-kpi-val.big{font-size:19px}
 .ph-kpi-sub{font-size:9px}
 /* R2: la zona superior de la Cartera pasa a dos columnas (.phr-row). La dona
-   queda en columna con la concentración DEBAJO (la leyenda sigue oculta acá);
+   queda en columna con la concentración DEBAJO (la leyenda sigue oculta aquí);
    el bloque de riesgo ocupa la derecha, que antes era aire muerto. */
 .phz-cartera .ph-alloc{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:8px;padding:12px 0 0 14px}
 .phz-cartera .ph-legend{display:none}
@@ -3225,7 +3225,7 @@ function sendBrokerOrder(){
   }
   // M2: el gasto diario y su tope son 100% SERVER_CAPS (GET /v1/broker/caps),
   // la misma fuente que usa el backend para decidir. Ya no hay fallback local
-  // (localStorage) — si SERVER_CAPS aún no llegó, este chequeo se salta acá
+  // (localStorage) — si SERVER_CAPS aún no llegó, este chequeo se salta aquí
   // (el backend lo sigue aplicando igual del lado servidor).
   const topeDiario = SERVER_CAPS?.cap_daily;
   const gastadoHoy = SERVER_CAPS?.gastado_hoy || 0;
@@ -3802,7 +3802,7 @@ function journalRender(tripsArg){
   if(!rows.length){
     wrap.innerHTML = `<div class="jr-table-empty">
         <strong>Sin operaciones cerradas aún</strong>
-        <span class="sub">En cuanto haya un round-trip (entrada + salida emparejadas) en tu cuenta paper, aparecerá acá.</span>
+        <span class="sub">En cuanto haya un round-trip (entrada + salida emparejadas) en tu cuenta paper, aparecerá aquí.</span>
       </div>`;
     return;
   }
@@ -10089,7 +10089,7 @@ function phdDriftEval(st){
    Regla extraída de phdRender SIN cambiarla: largo+SELL o corto+BUY, y qty
    null ⇒ se asume largo (criterio conservador ya vigente).
 
-   Normaliza el ticker de AMBOS lados: hasta acá solo POSITIONS venía en
+   Normaliza el ticker de AMBOS lados: hasta aquí solo POSITIONS venía en
    mayúsculas (lo fuerza el mapper) y una fila del libro con otro case no
    cruzaba — fallaba en silencio, sin conflicto ni confirmación.
 
@@ -10155,7 +10155,7 @@ function phdRender(){
   // ── (a) señales del último cierre · CONFLICT-FIRST cruzadas contra tu cartera ─
   //   El libro es un universo de investigación multi-mercado (US + BVC Colombia);
   //   tu cuenta Alpaca es US. El único evento accionable es CONFLICTO: el modelo
-  //   pide salir de algo que tenés. Ese es el titular. Confirmaciones (refuerzo)
+  //   pide salir de algo que tienes. Ese es el titular. Confirmaciones (refuerzo)
   //   y el resto del libro (no operable / datos ralos) van degradados al pie, en
   //   gris. No depende del motor ni de la escala de confianza ⇒ a prueba del flip.
   let sigHtml;
@@ -10206,7 +10206,7 @@ function phdRender(){
           }
           return '<div class="phd-sig phd-conflict"><span class="phd-sig-dir" style="color:' + dcol + '">' + arr + '</span>'
             + '<span class="phd-sig-tk">' + pheEsc(s.ticker) + '</span>'
-            + '<span class="phd-sig-meta"><b style="color:var(--orange)">⚠ ' + s['señal'] + ' · lo tenés ' + (largo ? 'largo' : 'corto') + '</b>'
+            + '<span class="phd-sig-meta"><b style="color:var(--orange)">⚠ ' + s['señal'] + ' · lo tienes ' + (largo ? 'largo' : 'corto') + '</b>'
             + '<span style="color:' + pcol + '">' + pnlTxt + '</span></span></div>';
         }).join('') + '</div>';
       } else {
@@ -10887,7 +10887,7 @@ function phClassChip(ac){
 function phWarnTitle(e, jobDate){
   const sen = e && e['señal'] ? e['señal'] : '—';
   const lado = (e && e.largo === false) ? 'en corto' : 'en largo';
-  return `El modelo marca ${sen} y la tenés ${lado}`
+  return `El modelo marca ${sen} y la tienes ${lado}`
        + (jobDate ? ` · última lectura: cierre ${jobDate}` : '');
 }
 
@@ -11319,7 +11319,7 @@ async function renderPortfolioValueChart(range){
   PH_DRAW.tickerLines = phBuildTickerLines();
   phPaintValueChart();
   phEnsureTickerHistories();
-  phrRender();   // R2 · el drawdown sigue al rango visible (phSetRange entra por acá)
+  phrRender();   // R2 · el drawdown sigue al rango visible (phSetRange entra por aquí)
 }
 
 /* ── Tooltip de la curva (fecha + valor; SPY si está) ──────────────────── */
