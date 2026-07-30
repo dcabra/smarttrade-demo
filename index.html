@@ -10487,9 +10487,18 @@ function phFillDayPL(pl, pct){
    - Nunca inventa una alerta que no existe, ni afirma lo que no sabe: si el
      libro de señales no se pudo leer, la parte de conflictos se OMITE (decir
      "0 conflictos" sería afirmar algo que no sabemos).                        */
-const PHSYN_CONC_PCT = PHRISK_CONC_ROJO;  // >20% de la cartera → se destaca (mismo umbral que el semáforo rojo de R2)
-const PHSYN_DD_PCT   = 10;                // caída >10% desde el máximo → se menciona
-const PHSYN_MAX_DEST = 2;                 // como mucho 2 destacados + exposición de cierre
+const PHSYN_DD_PCT   = 10;   // caída >10% desde el máximo → se menciona
+const PHSYN_MAX_DEST = 2;    // como mucho 2 destacados + exposición de cierre
+
+/* Umbral de concentración: se lee EN TIEMPO DE EJECUCIÓN, no en una const de
+   nivel superior. Este bloque (R5) está ANTES que el de R2 en el archivo, así
+   que `const PHSYN_CONC_PCT = PHRISK_CONC_ROJO` reventaba con "Cannot access
+   before initialization" (temporal dead zone): la excepción cortaba el script
+   entero y dejaba la Cartera y el chart en blanco. Leerlo dentro de la función
+   mantiene la fuente única del umbral sin acoplar el orden de declaración. */
+function phsynConcUmbral(){
+  return (typeof PHRISK_CONC_ROJO === 'number') ? PHRISK_CONC_ROJO : 20;
+}
 
 function phsynEsc(s){
   return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -10521,7 +10530,8 @@ function phsynFrases(){
   }
 
   // 2 · Concentración de la mayor posición.
-  if(conc.top && conc.top.pct > PHSYN_CONC_PCT){
+  const concPct = phsynConcUmbral();
+  if(conc.top && conc.top.pct > concPct){
     destacados.push(`${phsynEsc(conc.top.symbol)} concentra el ${phsynNum(conc.top.pct)}% de tu cartera.`);
   }
 
@@ -10546,7 +10556,7 @@ function phsynFrases(){
       : `Tienes <b>${nPos}</b> ${nPos===1?'posición abierta':'posiciones abiertas'}.`;
     frases.unshift(cabeza);
     if(conc.top){
-      frases.push(`Ninguna posición supera el ${phsynNum(PHSYN_CONC_PCT, 0)}% de la cartera.`);
+      frases.push(`Ninguna posición supera el ${phsynNum(concPct, 0)}% de la cartera.`);
     }
   }
 
