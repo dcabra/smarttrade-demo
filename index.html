@@ -8664,7 +8664,7 @@ function stratDefaultParams(perfil){
   return {
     timeframe:'1D',
     universo:{modo:'portafolio_watchlist', tickers:[]},
-    entrada:{confianza_min:0.65, concordancia_forecast:true, horizonte_ref:'3D', direccion:'solo_buy', rr_min:0, min_ratio_tp_peaje:null},
+    entrada:{confianza_min:0.65, concordancia_forecast:true, regimen_permitido:[], horizonte_ref:'3D', direccion:'solo_buy', rr_min:0, min_ratio_tp_peaje:null},
     salida:{obedecer_sl:true, obedecer_tp:true, tp_nivel:'tp1', salida_por_vencimiento:true, trailing_pct:0, cerrar_si_senal_invierte:false},
     riesgo:{perfil:perfil||'moderado', pct_capital_por_senal:S.p, max_posiciones:S.m, max_exposicion_clase:{equity:70,crypto:30}, drawdown_max_pct:0, cooldown_ciclos:0, ring_fence_pct:100, riesgo_por_trade_pct:0},
     temporalidad:{vigencia_fin:null, solo_market_hours:true, evitar_eventos:[], ventana_evento_horas:48, ventanas_bloqueo:[]},
@@ -8916,12 +8916,17 @@ function stratRulesStrip(d){
   const nt=(p.universo.tickers||[]).length;
   const ev=(p.temporalidad&&(p.temporalidad.evitar_eventos||[]).length)
     ? `<span class="smon-rule" title="Filtro de calendario activo">📅 <b>evita ${p.temporalidad.evitar_eventos.join('/')}</b></span>` : '';
+  /* E4: una estrategia restringida por régimen NO debe parecer irrestricta en la
+     tira que resume su constitución. Vacío = sin filtro = no pinta nada. */
+  const rg=(p.entrada&&(p.entrada.regimen_permitido||[]).length)
+    ? `<span class="smon-rule" title="Filtro por régimen del ticker activo">🧭 <b>Régimen: ${p.entrada.regimen_permitido.join(', ')}</b></span>` : '';
   return `<div class="smon-rules">
     <span class="smon-rule">Universo <b>${u}${nt?` · ${nt} tk`:''}</b></span>
     <span class="smon-rule">Entrada <b>prob ≥${p.entrada.confianza_min} · ${p.entrada.horizonte_ref}</b></span>
     <span class="smon-rule">Riesgo <b>${p.riesgo.pct_capital_por_senal}%/señal · máx ${p.riesgo.max_posiciones}</b></span>
     <span class="smon-rule">Salida <b>SL ✓ · ${(p.salida.tp_nivel||'').toUpperCase()}</b></span>
     ${ev}
+    ${rg}
   </div>`;
 }
 
@@ -9158,6 +9163,9 @@ function stratModalForm(d){
   const tf=(p.timeframe||'1D');
   const tk=(p.universo.tickers||[]).join(', ');
   const ee=(p.temporalidad.evitar_eventos||[]);
+  /* E4: lista de regímenes permitidos. `||[]` porque una estrategia guardada
+     antes de E4 no trae la llave — y sin lista, `.includes` reventaría. */
+  const rp=(p.entrada.regimen_permitido||[]);
   const mec=p.riesgo.max_exposicion_clase||{equity:70,crypto:30};
   const trail=(p.salida.trailing_pct??0), dd=(p.riesgo.drawdown_max_pct??0), cd=(p.riesgo.cooldown_ciclos??0), rf=(p.riesgo.ring_fence_pct??100);
   const rpt=(p.riesgo.riesgo_por_trade_pct??0), cinv=!!p.salida.cerrar_si_senal_invierte;
@@ -9215,7 +9223,19 @@ function stratModalForm(d){
        <!-- E2 (11-jul-2026): gate de alta correlación (opt-in, default OFF). Reutiliza
             el termómetro GET /v1/papertrading/regimen vía el motor (mismo molde que
             el filtro de calendario). Bloquea SOLO entradas, nunca salidas. -->
-       <label class="smf-check"><input type="checkbox" id="smf-corr" ${p.entrada.evitar_alta_correlacion?'checked':''}> Evitar entradas en alta correlación ${smfHelp('Si las señales del día apuntan mayoritariamente en la misma dirección (régimen de alta correlación), no abre posiciones nuevas ese ciclo — las trata como UNA tesis macro, no como N señales independientes. Las salidas no se ven afectadas.')}</label></div>
+       <label class="smf-check"><input type="checkbox" id="smf-corr" ${p.entrada.evitar_alta_correlacion?'checked':''}> Evitar entradas en alta correlación ${smfHelp('Si las señales del día apuntan mayoritariamente en la misma dirección (régimen de alta correlación), no abre posiciones nuevas ese ciclo — las trata como UNA tesis macro, no como N señales independientes. Las salidas no se ven afectadas.')}</label>
+       <!-- E4 (01-ago-2026): filtro por régimen del TICKER (Efficiency Ratio de
+            Kaufman sobre su propio precio), leído de paper_signals.regimen_ticker
+            que puebla la corrida v3. Opt-in: NINGUNO marcado = todos = cero cambio.
+            Molde del filtro de calendario (checkboxes + helper que arma la lista),
+            no un multi-select: es el patrón de la casa para vocabulario cerrado. -->
+       <div class="smf-note"><b>Operar solo en estos regímenes</b> ${smfHelp('Filtra las entradas por el régimen del TICKER (Efficiency Ratio de Kaufman sobre su propio precio, NO el de SPY). Sin ninguno marcado = todos los regímenes, que es el comportamiento por defecto. Una señal cuyo régimen no esté marcado se omite con motivo auditable; una señal sin régimen conocido (motor v2 o filas anteriores a E4) NO se filtra: pasa.')}</div>
+       <div class="smf-row smf-cal-row" id="smf-reg">
+         <label class="smf-check"><input type="checkbox" id="smf-reg-tendencia" ${rp.includes('tendencia')?'checked':''}> Tendencia</label>
+         <label class="smf-check"><input type="checkbox" id="smf-reg-rango" ${rp.includes('rango')?'checked':''}> Rango</label>
+         <label class="smf-check"><input type="checkbox" id="smf-reg-mixto" ${rp.includes('mixto')?'checked':''}> Mixto</label>
+       </div>
+       <div class="smf-note">Ninguno marcado = <b>todos los regímenes</b> (sin filtro). Las señales sin régimen conocido <b>pasan</b>: el filtro no bloquea lo que no puede clasificar.</div></div>
       </div>
       <div class="smf-col">
        <div class="smf-grp"><h4>📤 Salida y riesgo ${smfHelp('Cómo se cierra y cuánto se arriesga: nivel de TP, perfil de riesgo, % de capital por señal, exposición máxima por clase y el SL obligatorio (siempre activo).')}</h4>
@@ -9348,6 +9368,18 @@ function stratReadEvitar(){
   if($('smf-ev-cpi')&&$('smf-ev-cpi').checked) out.push('cpi');
   return out;
 }
+/* ── E4: lectura del filtro por régimen del ticker ──
+   Devuelve SIEMPRE un array — [] cuando no hay nada marcado, NUNCA null. El
+   backend valida en RUIDOSO (400 ante un valor fuera de {tendencia,rango,mixto}
+   y ante null explícito), así que mandar null rebotaría la edición entera; []
+   es el valor canónico de "sin filtro". */
+function stratReadRegimen(){
+  const out=[];
+  if($('smf-reg-tendencia')&&$('smf-reg-tendencia').checked) out.push('tendencia');
+  if($('smf-reg-rango')&&$('smf-reg-rango').checked) out.push('rango');
+  if($('smf-reg-mixto')&&$('smf-reg-mixto').checked) out.push('mixto');
+  return out;
+}
 function stratBoRender(){
   const host=$('smf-bo-list'); if(!host) return;
   const arr=STRAT.modalBlackout||[];
@@ -9393,7 +9425,7 @@ function stratModalRead(){
     params:{
       timeframe:($('smf-tf')?$('smf-tf').value:'1D'),
       universo:{modo, tickers:stratResolveUniverse(modo,explic)},
-      entrada:{confianza_min:parseFloat($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, evitar_alta_correlacion:$('smf-corr').checked, horizonte_ref:$('smf-hz').value, direccion:prevDir, rr_min:stratReadRR(), min_ratio_tp_peaje:stratReadPeaje()},
+      entrada:{confianza_min:parseFloat($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, evitar_alta_correlacion:$('smf-corr').checked, regimen_permitido:stratReadRegimen(), horizonte_ref:$('smf-hz').value, direccion:prevDir, rr_min:stratReadRR(), min_ratio_tp_peaje:stratReadPeaje()},
       salida:{obedecer_sl:true, obedecer_tp:$('smf-tpchk').checked, tp_nivel:$('smf-tp').value, salida_por_vencimiento:$('smf-venc').checked, trailing_pct:stratRiskVal('smf-trail',1,50,0), cerrar_si_senal_invierte:$('smf-cinv').checked},
       riesgo:{perfil:$('smf-perfil').value, pct_capital_por_senal:parseFloat($('smf-pct').value), max_posiciones:parseInt($('smf-maxp').value), max_exposicion_clase:{equity:stratClamp($('smf-exp-eq').value,0,100,70), crypto:crVal}, drawdown_max_pct:stratRiskVal('smf-dd',1,90,0), cooldown_ciclos:stratRiskVal('smf-cd',1,30,0), ring_fence_pct:stratRiskVal('smf-rf',1,100,100), riesgo_por_trade_pct:stratRiskValFloat('smf-rpt',0.1,10,0)},
       temporalidad:{vigencia_fin:null, solo_market_hours:$('smf-mh').checked, evitar_eventos:stratReadEvitar(), ventana_evento_horas:parseInt($('smf-ev-win').value)||48, ventanas_bloqueo:(STRAT.modalBlackout||[])},
@@ -9430,6 +9462,10 @@ const SMF_DIFF_MAP = [
   ['entrada.min_ratio_tp_peaje',         'smf-peaje',  'Conciencia de costos (TP×peaje)'],
   ['entrada.concordancia_forecast',      'smf-conc',   'Concordancia forecast'],
   ['entrada.evitar_alta_correlacion',    'smf-corr',   'Evitar alta correlación'],
+  /* E4: la lista vive repartida en 3 checkboxes, así que el ancla del resaltado
+     es el CONTENEDOR (#smf-reg). smfDiffHighlight compara con JSON.stringify,
+     que trata arrays correctamente. */
+  ['entrada.regimen_permitido',          'smf-reg',    'Filtro por régimen'],
   ['salida.tp_nivel',                    'smf-tp',     'Nivel TP'],
   ['salida.obedecer_tp',                 'smf-tpchk',  'Obedecer TP'],
   ['salida.salida_por_vencimiento',      'smf-venc',   'Salir al vencer'],
