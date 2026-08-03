@@ -1285,7 +1285,21 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 #motor-ia.motor-ia-vacio{display:none}
 .motor-ia-hdr{font-size:9px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:.1em;display:flex;align-items:center;gap:5px}
 .motor-ia-hdr::after{content:'';flex:1;height:1px;background:var(--border2)}
-.motor-ia-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px;align-items:start;overflow:visible}
+/* La columna derecha se clava al ancho de la columna de Cartera para que
+   Eficiencia, Pulso y Cartera se vean del mismo ancho. Los números salen de
+   .phz-term (l.1175): fracciones 0.85|1|1.1 y DOS gaps de 12px, o sea
+   col3 = (ancho − 24px) × 1.1/2.95. Aquí se replica esa expresión.
+   Funciona porque el `100%` de un calc se resuelve contra el elemento que lo
+   usa, y .motor-ia-grid y .phz-term son ambos hijos de #cp-home: miden lo
+   mismo. Es relativo, sin píxeles fijos salvo la constante de los gaps, así
+   que el ajuste se mantiene a cualquier ancho.
+   Se eligió el ancho de Cartera —el más angosto de los tres, por ~3% del
+   ancho útil— para que ninguna tarjeta se deforme ni se desborde; el efecto
+   es que la columna de R6 pasa de 60% a ~62.5%.
+   ACOPLE, anotado a propósito: si algún día cambian las fracciones o el gap
+   de .phz-term, hay que actualizar --ph-col-der o la alineación se rompe en
+   silencio.                                                                */
+.motor-ia-grid{--ph-col-der:calc((100% - 24px) * 1.1 / 2.95);display:grid;grid-template-columns:minmax(0,1fr) var(--ph-col-der);gap:12px;align-items:start;overflow:visible}
 .motor-ia-kpis{display:flex;flex-direction:column;gap:12px;min-width:0}
 @media(max-width:900px){.motor-ia-grid{grid-template-columns:1fr}}
 .phz-pop{display:none;position:fixed;z-index:9999;width:340px;max-width:92vw;max-height:72vh;overflow:auto;background:var(--bg4,#131f38);border:1px solid var(--border2);border-radius:10px;box-shadow:0 14px 38px rgba(0,0,0,.6);pointer-events:none}
