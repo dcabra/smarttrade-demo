@@ -1267,6 +1267,27 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .phz-mini-sep{color:var(--text3);font-size:12px}
 .phz-mini-chip{font-size:9px;font-weight:700;border-radius:4px;padding:1px 6px;background:rgba(122,144,176,.14);letter-spacing:.03em}
 .phz-info{font-size:11px;color:var(--text3);cursor:help}
+/* ══ MOTOR IA · sección unificada del Home ════════════════════════════════
+   Agrupa ANÁLISIS IA (R6) al 60% con Eficiencia y Pulso apilados al 40%.
+   `align-items:start` es la pieza clave: por defecto el grid estira
+   (`stretch`) y al desplegar el desglose de R6 las tarjetas de KPI crecerían
+   con él. Con `start` cada columna se dimensiona a su contenido y R6 crece
+   hacia abajo sola.
+   `overflow:visible` NO es cosmético: el popup de Eficiencia/Pulso es
+   .phz-pop (position:fixed, z-index 9999) y un ancestro que recorte lo
+   mataría — es la misma razón por la que .phz-term-left lleva su
+   overflow:visible explícito (l.1259).
+   El rótulo va en --text-label, NO en dorado: en la gramática de R6 el
+   dorado significa "IA verificada en pantalla", y un encabezado dorado
+   permanente sobre una tarjeta que puede estar mostrando la plantilla
+   determinista de R5 diluiría esa señal. Cambiar a .rp-lbl es una línea. */
+#motor-ia{display:flex;flex-direction:column;gap:8px;overflow:visible}
+#motor-ia.motor-ia-vacio{display:none}
+.motor-ia-hdr{font-size:9px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:.1em;display:flex;align-items:center;gap:5px}
+.motor-ia-hdr::after{content:'';flex:1;height:1px;background:var(--border2)}
+.motor-ia-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px;align-items:start;overflow:visible}
+.motor-ia-kpis{display:flex;flex-direction:column;gap:12px;min-width:0}
+@media(max-width:900px){.motor-ia-grid{grid-template-columns:1fr}}
 .phz-pop{display:none;position:fixed;z-index:9999;width:340px;max-width:92vw;max-height:72vh;overflow:auto;background:var(--bg4,#131f38);border:1px solid var(--border2);border-radius:10px;box-shadow:0 14px 38px rgba(0,0,0,.6);pointer-events:none}
 .phd-warn{color:var(--orange)}
 .phd-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:110px;gap:6px}
@@ -12447,6 +12468,85 @@ function phiaMontar(){
   if(phiaListo()){ phiaCargar(); return; }   // camino A · oleadas completas
   phiaArmarEspera();                         // camino B · red de seguridad
 }
+
+/* Envoltorio: phiaMontar es el único punto que corre en cada repintado de R5,
+   así que la sección MOTOR IA se reconcilia colgada de él. Se envuelve en vez
+   de editar phiaMontar para que su cuerpo —y sus 21 casos de harness— queden
+   intactos. Si motorIaSync no existe todavía, no pasa nada.               */
+const phiaMontarSolo = phiaMontar;
+phiaMontar = function(){
+  phiaMontarSolo();
+  if(typeof motorIaSync === 'function') motorIaSync();
+};
+
+/* ══ MOTOR IA · reorganización del Home ═══════════════════════════════════
+   Agrupa ANÁLISIS IA (R6) + Eficiencia + Pulso en una sección 60/40.
+
+   Se hace con appendChild/insertBefore y NO regenerando markup, y eso es lo
+   que salva el auto-disparo: esos métodos MUEVEN el nodo —no lo clonan ni lo
+   recrean—, y el registro de un MutationObserver vive en el NODO, no en su
+   posición en el árbol. #phsyn cambia de padre y su observador sigue
+   conectado. Lo que SÍ lo mataría es un innerHTML sobre un ancestro, que
+   destruiría el nodo observado y crearía otro con el mismo id sin
+   suscripción: por eso la sección se arma vacía y las tarjetas se MUEVEN
+   dentro, en vez de reconstruirlas.
+
+   Corre ANTES del IIFE del observador para que el arranque sea determinista
+   (el observer engancha ya sobre el árbol final), aunque el orden inverso
+   también funcionaría por lo dicho arriba.
+
+   Idempotente: si la sección ya existe, no hace nada. Todo el resto del Home
+   —el chart, Noticias, Cartera— no se toca: sus posiciones en .phz-term son
+   explícitas (grid-column/grid-row), así que quitar dos hijos de
+   .phz-term-left no los reflowea.                                          */
+function motorIaMontar(){
+  if(typeof document === 'undefined' || !document.getElementById) return;
+  if(document.getElementById('motor-ia')) return;          // ya montada
+  const home = document.getElementById('cp-home');
+  const wrap = document.getElementById('phia-wrap');
+  if(!home || !wrap) return;
+  const phe = document.getElementById('phe-card');
+  const phd = document.getElementById('phd-card');
+
+  /* Andamiaje con createElement, NO con innerHTML: así en toda esta función
+     no hay una sola escritura de innerHTML, y el invariante "aquí nada se
+     reconstruye" se sostiene por construcción, no por disciplina. */
+  const nuevo = (tag, cls, txt) => {
+    const e = document.createElement(tag);
+    if(cls) e.className = cls;
+    if(txt) e.textContent = txt;
+    return e;
+  };
+  const sec  = nuevo('section', 'motor-ia-vacio');
+  sec.id = 'motor-ia';
+  const grid = nuevo('div', 'motor-ia-grid');
+  const kpis = nuevo('div', 'motor-ia-kpis');
+  sec.appendChild(nuevo('div', 'motor-ia-hdr', 'Motor IA'));
+  sec.appendChild(grid);
+  grid.appendChild(kpis);
+  home.insertBefore(sec, wrap);                            // ocupa el sitio de R6
+
+  grid.insertBefore(wrap, kpis);                           // R6 a la izquierda (60%)
+  if(phe) kpis.appendChild(phe);                           // Eficiencia arriba
+  if(phd) kpis.appendChild(phd);                           // Pulso debajo
+  motorIaSync();
+}
+
+/* Oculta la sección entera si las tres tarjetas están ocultas, para no dejar
+   el encabezado flotando sobre el vacío. Lo llama phiaMontar, que corre en
+   cada repintado de R5 (tres por render del Home), así que se reconcilia
+   solo. Lee la INTENCIÓN: la clase .phia-vacio en R6 y el display inline en
+   las otras dos, que es lo que escriben sus propios render.               */
+function motorIaSync(){
+  const sec = document.getElementById('motor-ia'); if(!sec) return;
+  const wrap = document.getElementById('phia-wrap');
+  const phe  = document.getElementById('phe-card');
+  const phd  = document.getElementById('phd-card');
+  const vis = e => !!e && e.style.display !== 'none' && !e.classList.contains('phia-vacio');
+  sec.classList.toggle('motor-ia-vacio', !(vis(wrap) || vis(phe) || vis(phd)));
+}
+
+motorIaMontar();
 
 /* Arranque: el <script> corre al final del body, así que #phsyn ya existe. */
 (function phiaObservar(){
