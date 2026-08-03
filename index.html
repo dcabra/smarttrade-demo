@@ -1190,7 +1190,6 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .phia-wrap{position:relative}
 .phia-wrap.phia-vacio{display:none}
 .phia-wrap.phia-on #phsyn{display:none!important}
-.phia-wrap #phsyn,.phia-prosa{padding-right:26px}
 /* La tarjeta en estado IA replica .rp-sec (l.153), el contenedor de "SEÑAL IA"
    y "FORECAST IA": marco parejo de 1px en rgba(245,197,24,.18) y radio 8px, en
    los CUATRO lados, sin acento izquierdo y sin glow —.rp-sec no tiene ninguno—.
@@ -1218,9 +1217,24 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
    bloque .rp-lbl con su filete los sustituye, y las tarjetas IA del panel
    derecho no llevan ninguno de los dos. */
 .phia-txt{min-width:0}
-.phia-caret{position:absolute;top:4px;right:4px;display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;cursor:pointer;color:var(--text2);font-size:14px;line-height:1;background:rgba(255,255,255,.06);border:1px solid var(--border);transition:transform .2s,background .15s,color .15s,border-color .15s;user-select:none}
-.phia-caret:hover{color:var(--text);background:rgba(255,255,255,.14);border-color:var(--text3)}
-.phia-wrap.phia-col .phia-caret{transform:rotate(180deg)}
+/* Control de desplegar. Ya NO es un cuadrado con un glifo suelto: lleva texto,
+   porque desde el auto-disparo (8d65cd1) su única función es expandir y
+   colapsar el desglose, y un ⌄ a secas no lo comunicaba.
+   Sale del `position:absolute` y pasa al flujo, entre la prosa y el
+   desplegable — que es su orden en el DOM. Por eso desaparece también el
+   `padding-right:26px` que reservaba hueco al cuadrado flotante.
+   El label alterna SIN tocar JS: cuelga de .phia-col, la misma clase que
+   phiaAplicarAbierto ya pone y quita. Se va el transform:rotate — girar un
+   botón con texto no tiene sentido; el cambio de glifo lo sustituye.
+   Neutro por defecto y dorado sólo bajo .phia-on, para no romper la
+   gramática de R6: el dorado significa "IA verificada en pantalla", y este
+   control existe también cuando la tarjeta muestra la plantilla de R5.    */
+.phia-caret{display:inline-flex;align-items:center;margin:5px 0 0 11px;padding:3px 8px;border-radius:6px;cursor:pointer;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;line-height:1.4;color:var(--text-label);background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s,background .15s,border-color .15s;user-select:none}
+.phia-caret:hover{color:var(--text);background:rgba(255,255,255,.10);border-color:var(--text3)}
+.phia-wrap.phia-on .phia-caret{color:rgba(245,197,24,.7);background:rgba(245,197,24,.07);border-color:rgba(245,197,24,.18)}
+.phia-wrap.phia-on .phia-caret:hover{color:var(--gold);background:rgba(245,197,24,.16);border-color:rgba(245,197,24,.4)}
+.phia-wrap.phia-col .phia-caret-cerrar{display:none}
+.phia-wrap:not(.phia-col) .phia-caret-abrir{display:none}
 .phia-body{overflow:hidden;transition:max-height .2s ease;max-height:340px;margin-top:5px;border:1px solid var(--border);border-radius:8px}
 .phia-wrap.phia-on .phia-body{border-color:rgba(245,197,24,.18)}
 /* Colapsado: sin el border-width:0 el marco seguiría pintando 2px de línea
@@ -1847,7 +1861,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       <div class="phia-wrap phia-vacio phia-col" id="phia-wrap">
         <div class="phsyn" id="phsyn" style="display:none"></div>
         <div class="phia-prosa" id="phia-prosa"></div>
-        <span class="phia-caret" id="phia-caret" title="Ver el detalle" onclick="phiaToggle()">⌄</span>
+        <span class="phia-caret" id="phia-caret" onclick="phiaToggle()"><span class="phia-caret-abrir">Ver desglose ⌄</span><span class="phia-caret-cerrar">Ocultar desglose ⌃</span></span>
         <div class="phia-body" id="phia-body"></div>
       </div>
 
