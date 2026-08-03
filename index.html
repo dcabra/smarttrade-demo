@@ -11606,6 +11606,331 @@ function getSpyBenchmark(startValue, t0, t1){
 
 /* Reencuadre de la curva al redimensionar mientras el Home está activo. */
 window.addEventListener('resize', ()=>{ if(CP_VIEW==='home') renderPortfolioValueChart(PH_RANGE); });
+
+/* ══ R6 · Síntesis del portafolio verbalizada por LLM — NÚCLEO LÓGICO ═══════
+   Capa CONDICIONAL sobre R5. R5 (phsynFrases/phsynRender) sigue siendo la
+   frase por defecto y la fuente de verdad: R6 sólo la reemplaza si el LLM
+   responde Y los DOS verificadores pasan. Aquí va únicamente el núcleo puro
+   + el orquestador: NADA de esto está cableado a la UI todavía.
+
+   NO toca MOTOR_V3 / motor_flags / usa_v3() / data_fetcher / ejecutor, y NO
+   recalcula ningún número: consume phsynConcentracion(), phsynExposicion(),
+   phConflictos() y phriskDrawdown(), que ya son la fuente compartida R2↔R5.
+
+   Prefijo `phia*`, NO `phsyn*`. R5 es el fallback permanente y R6 el reemplazo
+   condicional; compartir espacio de nombres haría indistinguible cuál capa
+   falló en un grep o un stack trace — la lección de `phr*` (61868b3).
+
+   Colocado al FINAL del <script> a propósito: lee PHRISK_CONC_ROJO (l.10789) y
+   PHSYN_DD_PCT (l.10526), ambos declarados antes. Aun así los umbrales se leen
+   EN TIEMPO DE EJECUCIÓN (phiaUmbrales), nunca en una const de nivel superior:
+   es exactamente el patrón que costó el TDZ de `141d6dd`.                    */
+
+const PHIA_TIMEOUT_MS = 2500;   // hay fallback que mostrar: no se espera indefinido
+const PHIA_MAX_TOKENS = 200;    // 2-3 líneas
+const PHIA_MODEL      = 'claude-sonnet-4-6';   // el mismo que usa sendChat()
+
+const PHIA_SYSTEM = `Eres un componente de SmartTrade que convierte un estado de portafolio ya calculado en una frase de 2 a 3 líneas. No eres analista ni asesor. No opinas, no evalúas, no recomiendas. Tu único trabajo es decir en prosa natural lo que los números ya dicen — nada más.
+
+Recibirás un objeto JSON con los datos del portafolio. Esa es la única fuente de cifras que existe; no hay otras.
+
+REGLAS DE CIFRAS (inviolables):
+- Usa solo los números del JSON, tal como están. No los redondees distinto, no los recalcules, no derives nuevos (nada de "el resto", "aproximadamente", "un tercio").
+- No infieras un porcentaje a partir de otro. Efectivo e invertido tienen bases distintas y pueden no sumar 100; no los cuadres.
+- Menciona solo tickers que aparezcan en los datos. Ningún símbolo que no esté en el JSON.
+- Si un número no está en los datos, no existe. No lo inventes para completar una frase.
+
+REGLAS DE REDACCIÓN (inviolables):
+- Indicativo, describiendo hechos. Cero imperativos: nada de "reduce", "vende", "considera", "compra", "mantén", "ajusta", "evita", "revisa" ni ningún verbo de acción dirigido al usuario. Describe, no aconseja.
+- Sin adjetivos de juicio: nada de "arriesgada", "sólida", "repartida", "concentrada", "saludable", "diversificada". Si algo se puede decir con un número, se dice con el número. En vez de "exposición repartida", di "ninguna posición supera el 20%".
+- Español neutro de Colombia: "tienes", nunca "tenés". Sin voseo.
+
+QUÉ PRIORIZAR (2-3 líneas, lo fuera de lo normal primero):
+1. Si hay posiciones en conflicto → encabeza con eso.
+2. Si la concentración supera 20% → menciónala con el ticker y el porcentaje.
+3. Si el drawdown supera 10% en magnitud → menciónalo con su período.
+4. Exposición (efectivo/invertido) como contexto de fondo.
+Si nada de 1-3 aplica: describe el estado con las cifras de exposición y la alineación con el modelo. No inventes una alerta que no existe.
+
+Devuelve solo la frase, sin preámbulo, sin comillas, sin markdown.`;
+
+/* ── Léxico de la barrera lingüística ──────────────────────────────────────
+   Imperativos y adjetivos se buscan sobre el texto SIN acentos (así "mantén" y
+   "manten" caen igual). El voseo NO: se busca sobre el texto acentuado, porque
+   al quitar tildes "debés"→"debes" y "sabés"→"sabes" chocan con las formas de
+   "tú" perfectamente correctas, y la barrera empezaría a rechazar español
+   neutro válido. Por eso sólo aquí se conserva la tilde.
+   Ojo con los vecinos legítimos: va "cierra" pero NO "cierre" (precio de
+   cierre), "revisa" pero NO "revisión", "concentrada" pero NO "concentración"
+   —que es el nombre del propio dato—. El harness lo fija en ambos sentidos. */
+const PHIA_IMPERATIVOS = [
+  'reduce','reduci','reduzca','vende','venda','considera','considere','compra','compre',
+  'manten','mantene','mantenga','ajusta','ajuste','evita','evite','revisa','revise',
+  'aumenta','aumente','disminuye','disminuya','diversifica','diversifique','rebalancea',
+  'rebalancee','protege','proteja','limita','limite','cierra','abre','mira','deberias',
+  'recomiendo','sugiero','te conviene','te recomiendo'
+];
+const PHIA_JUICIO = [
+  'arriesgada','arriesgado','riesgosa','riesgoso','solida','solido','repartida','repartido',
+  'concentrada','concentrado','diversificada','diversificado','saludable','peligrosa',
+  'peligroso','agresiva','agresivo','conservadora','conservador','prudente','excesiva',
+  'excesivo','sana','sano','debil','fuerte','preocupante','comoda','comodo','robusta',
+  'robusto','fragil'
+];
+const PHIA_VOSEO = [
+  'tenés','podés','querés','debés','sabés','hacés','tomás','sos','vos','vení','tené',
+  'mirá','fijate','fijáte','andá','dejá','poné','llevá','ponés','llevás'
+];
+
+/* Umbrales EN TIEMPO DE EJECUCIÓN (ver nota del TDZ en la cabecera). */
+function phiaUmbrales(){
+  return {
+    conc: (typeof phsynConcUmbral === 'function') ? phsynConcUmbral() : 20,
+    dd:   (typeof PHSYN_DD_PCT === 'number') ? PHSYN_DD_PCT : 10
+  };
+}
+
+function phiaRound(n, dec){
+  if(n == null || isNaN(n)) return null;
+  const f = Math.pow(10, dec);
+  return Math.round(Number(n) * f) / f;
+}
+
+/* ── 1 · Payload ───────────────────────────────────────────────────────────
+   El ÚNICO lugar donde se redondea. A partir de aquí el payload es la única
+   fuente de verdad numérica: el verificador compara contra él, no contra los
+   originales. Devuelve null si no hay con qué (sin posiciones o sin equity) y
+   entonces ni siquiera se intenta el POST.
+
+   `conflictos`/`confirmadas` se OMITEN (no van en null) cuando el libro de
+   señales no se pudo leer: el modelo no puede afirmar sobre un campo que no
+   ve, y así no puede decir "alineadas con el modelo" sin saberlo — la regla
+   de honestidad de R5 (l.10523-10525), que ningún verificador detectaría.
+
+   Los umbrales VIAJAN en el payload porque el system prompt ordena escribir
+   "ninguna posición supera el 20%": ese 20 es PHRISK_CONC_ROJO, no un dato de
+   la cartera, y sin esto el verificador numérico lo leería como cifra
+   inventada y descartaría el texto justo en el escenario tranquilo.
+
+   Drawdown, opción (A): número y período se sellan JUNTOS en el mismo
+   instante. La serie sólo existe para la ventana visible (PH_DRAW.vals la
+   rellena renderPortfolioValueChart con el rango activo), así que un período
+   fijo de verdad exigiría una segunda serie —red nueva, fuera de R6—. Si el
+   usuario mueve el selector, este payload queda obsoleto y se reconstruye. */
+function phiaPayload(){
+  const nPos = (typeof POSITIONS !== 'undefined' && POSITIONS) ? POSITIONS.length : 0;
+  if(!nPos) return null;
+
+  const x = phsynExposicion();
+  if(x.eq == null) return null;
+
+  const conc = phsynConcentracion();
+  const X    = (typeof phConflictos === 'function') ? phConflictos() : null;
+  const dd   = (typeof phriskDrawdown === 'function')
+                 ? phriskDrawdown(typeof PH_DRAW !== 'undefined' && PH_DRAW ? PH_DRAW.vals : null)
+                 : null;
+  const plDia = (typeof EQUITY !== 'undefined' && typeof LAST_EQUITY !== 'undefined'
+                 && EQUITY != null && LAST_EQUITY != null) ? (EQUITY - LAST_EQUITY) : null;
+  const u = phiaUmbrales();
+
+  const p = {
+    equity:        phiaRound(x.eq, 2),
+    efectivo:      phiaRound(x.cash, 2),
+    efectivo_pct:  phiaRound(x.cashPct, 1),
+    invertido_pct: phiaRound(x.invPct, 1),
+    concentracion: (conc && conc.top) ? {
+      ticker: conc.top.symbol,
+      pct:    phiaRound(conc.top.pct, 1),
+      valor:  phiaRound(conc.top.value, 2)
+    } : null,
+    drawdown_pct:      phiaRound(dd, 1),
+    drawdown_periodo:  (dd != null && typeof PH_RANGE !== 'undefined') ? String(PH_RANGE) : null,
+    pl_dia:            phiaRound(plDia, 2),
+    n_posiciones:      nPos,
+    umbral_concentracion_pct: u.conc,
+    umbral_drawdown_pct:      u.dd
+  };
+  if(X && X.disponible){
+    p.conflictos  = { n: X.conflictos.length, tickers: X.conflictos.map(c => c.ticker) };
+    p.confirmadas = X.confirmas.length;
+  }
+  return p;
+}
+
+/* ── 2 · Llamada al LLM ────────────────────────────────────────────────────
+   Mismo endpoint y forma que sendChat() (l.8070), pero con AbortController:
+   sendChat puede esperar indefinido porque no tiene nada que mostrar mientras
+   tanto; R6 sí. NUNCA lanza: todo fallo se convierte en {ok:false}. Sin
+   reintentos y sin corrección silenciosa — se descarta y manda R5.          */
+async function phiaSolicitar(payload){
+  if(!payload) return { ok:false, motivo:'sin_payload' };
+  const tok = (typeof getBrokerToken === 'function') ? getBrokerToken() : null;
+  if(!tok) return { ok:false, motivo:'sin_token' };
+
+  const ctrl  = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), PHIA_TIMEOUT_MS) : null;
+  try{
+    const res = await fetch(API + '/v1/chat', {
+      method : 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':'Bearer ' + tok },
+      body   : JSON.stringify({
+        model      : PHIA_MODEL,
+        max_tokens : PHIA_MAX_TOKENS,
+        system     : PHIA_SYSTEM,
+        // El payload viaja como JSON literal, no interpolado en prosa: así el
+        // verificador compara contra exactamente lo que el modelo recibió.
+        messages   : [{ role:'user', content: JSON.stringify(payload) }]
+      }),
+      signal : ctrl ? ctrl.signal : undefined
+    });
+    if(!res.ok) return { ok:false, motivo:'http' };
+    const data  = await res.json();
+    const texto = ((data && data.content) || [])
+      .filter(b => b && b.type === 'text').map(b => b.text).join('').trim();
+    if(!texto) return { ok:false, motivo:'vacio' };
+    return { ok:true, texto };
+  }catch(e){
+    return { ok:false, motivo: (e && e.name === 'AbortError') ? 'timeout' : 'red' };
+  }finally{
+    if(timer) clearTimeout(timer);
+  }
+}
+
+/* ── 3 · Verificador numérico ──────────────────────────────────────────────
+   Toda cifra del texto debe existir en el payload. Si aparece una que no
+   está, el texto se descarta ENTERO: no se corrige ni se reintenta.         */
+
+/* Formas admitidas de cada campo. Los valores ya vienen redondeados, así que
+   la comparación numérica absorbe sola "25" ≡ "25.0" ≡ "25.00".
+   Campos CON SIGNO (drawdown, P&L del día) admiten además su valor absoluto:
+   el signo lo carga el verbo ("cae 12,3%"), y exigir el "−" rechazaría la
+   redacción natural. El precio es que un "sube 12,3%" con drawdown negativo
+   pasaría: es un error semántico, que esta barrera nunca prometió cubrir. */
+function phiaNumSet(p){
+  const s = new Set();
+  const add = v => { if(v != null && !isNaN(v)) s.add(Number(v)); };
+  add(p.equity); add(p.efectivo); add(p.efectivo_pct); add(p.invertido_pct);
+  add(p.n_posiciones); add(p.umbral_concentracion_pct); add(p.umbral_drawdown_pct);
+  if(p.concentracion){ add(p.concentracion.pct); add(p.concentracion.valor); }
+  if(p.conflictos){ add(p.conflictos.n); }
+  if(p.confirmadas != null) add(p.confirmadas);
+  if(p.drawdown_pct != null){ add(p.drawdown_pct); add(Math.abs(p.drawdown_pct)); }
+  if(p.pl_dia != null){ add(p.pl_dia); add(Math.abs(p.pl_dia)); }
+  return s;
+}
+
+/* Lecturas posibles de un token: es-CO escribe "4.123,77" y en-US "4,123.77".
+   Con los dos separadores presentes, el ÚLTIMO es el decimal. Con uno solo el
+   caso es ambiguo ("1,234" puede ser mil doscientos treinta y cuatro o 1.234),
+   y se prueban AMBAS lecturas: no cuela ninguna cifra ajena, porque cualquiera
+   de las dos tiene que existir en el payload igual. La lectura de miles sólo
+   se ofrece si todos los grupos tras el primero tienen exactamente 3 dígitos,
+   que es lo que impide que "24,7" se lea como 247.                          */
+function phiaCandidatos(tok){
+  let t = String(tok), neg = false;
+  if(t.charAt(0) === '-'){ neg = true; t = t.slice(1); }
+  const out = [];
+  const mk = v => { if(!isNaN(v) && t !== '') out.push(neg ? -v : v); };
+  const hasDot = t.indexOf('.') >= 0, hasCom = t.indexOf(',') >= 0;
+
+  if(hasDot && hasCom){
+    if(t.lastIndexOf('.') > t.lastIndexOf(',')) mk(Number(t.split(',').join('')));
+    else mk(Number(t.split('.').join('').split(',').join('.')));
+  }else if(hasDot || hasCom){
+    const sep = hasCom ? ',' : '.';
+    const g = t.split(sep);
+    if(g.slice(1).every(x => /^\d{3}$/.test(x))) mk(Number(g.join('')));
+    if(g.length === 2) mk(Number(g.join('.')));
+  }else{
+    mk(Number(t));
+  }
+  return out;
+}
+
+function phiaNormTexto(txt){
+  return String(txt == null ? '' : txt)
+    .replace(/−/g, '-')      // menos tipográfico → menos ASCII
+    .replace(/<[^>]*>/g, ' ')     // por si llegara con marcado
+    .replace(/ /g, ' ')   // NBSP
+    .replace(/\s+/g, ' ');
+}
+
+function phiaEscRe(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function phiaVerifNum(texto, payload){
+  if(!payload) return false;
+  let t = phiaNormTexto(texto);
+  if(!t.trim()) return false;
+
+  // La etiqueta del período ("3M") mete un dígito que no es una cifra del
+  // payload: se retira antes de tokenizar, no se le busca excusa después.
+  if(payload.drawdown_periodo){
+    t = t.replace(new RegExp('\\b' + phiaEscRe(payload.drawdown_periodo) + '\\b', 'gi'), ' ');
+  }
+
+  const set = phiaNumSet(payload);
+  const toks = (t.match(/-?\d[\d.,]*/g) || []).map(s => s.replace(/[.,]+$/, ''));
+  for(let i = 0; i < toks.length; i++){
+    const cand = phiaCandidatos(toks[i]);
+    if(!cand.length) return false;
+    if(!cand.some(v => set.has(v))) return false;
+  }
+
+  // Tickers: sólo los de la cartera. Mínimo 2 caracteres para no confundir la
+  // inicial de una palabra capitalizada con un símbolo.
+  const perm = new Set();
+  const nk = (typeof phNormTk === 'function') ? phNormTk : (v => String(v || '').trim().toUpperCase());
+  ((typeof POSITIONS !== 'undefined' && POSITIONS) || []).forEach(p => { if(p && p.symbol) perm.add(nk(p.symbol)); });
+  const men = t.match(/\b[A-Z][A-Z0-9.\-]{1,9}\b/g) || [];
+  for(let i = 0; i < men.length; i++){
+    if(!perm.has(nk(men[i]))) return false;
+  }
+  return true;
+}
+
+/* ── 4 · Verificador lingüístico ───────────────────────────────────────────
+   Barrera NUEVA: R5 no la necesita porque arma frases por plantilla fija.
+   Aquí el texto lo escribe un LLM, así que hay que mirarlo.                 */
+function phiaSinAcentos(s){
+  return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function phiaHallaAlguno(txt, lista){
+  for(let i = 0; i < lista.length; i++){
+    if(new RegExp('(^|[^\\wáéíóúüñ])' + phiaEscRe(lista[i]) + '($|[^\\wáéíóúüñ])', 'i').test(txt)) return true;
+  }
+  return false;
+}
+
+function phiaVerifLing(texto){
+  const crudo = phiaNormTexto(texto);
+  if(!crudo.trim()) return false;
+  const plano = phiaSinAcentos(crudo).toLowerCase();   // imperativos y juicio
+  const conTilde = crudo.toLowerCase();                // voseo: la tilde ES el dato
+  if(phiaHallaAlguno(plano, PHIA_IMPERATIVOS)) return false;
+  if(phiaHallaAlguno(plano, PHIA_JUICIO))      return false;
+  if(phiaHallaAlguno(conTilde, PHIA_VOSEO))    return false;
+  return true;
+}
+
+/* ── 5 · Orquestador ───────────────────────────────────────────────────────
+   Cascada con salida a R5 en cada peldaño. Los dos verificadores son AND y se
+   evalúan sobre el texto crudo ANTES de tocar el DOM.
+
+   AÚN NO SE LLAMA DESDE NINGÚN RENDER: phsynRender() (l.10602) sigue siendo la
+   única ruta de pintado y R5 la única frase que se ve. El cableado es el
+   siguiente paso.                                                           */
+async function phiaSintetizar(){
+  const payload = phiaPayload();
+  if(!payload) return { ok:false, motivo:'sin_payload' };
+
+  const r = await phiaSolicitar(payload);
+  if(!r.ok) return { ok:false, motivo:r.motivo, payload };
+
+  if(!phiaVerifNum(r.texto, payload))  return { ok:false, motivo:'num',  payload, texto:r.texto };
+  if(!phiaVerifLing(r.texto))          return { ok:false, motivo:'ling', payload, texto:r.texto };
+  return { ok:true, texto:r.texto, payload };
+}
 </script>
 <!-- ══════════════════════════ /HOME · PORTAFOLIO ══════════════════════════ -->
 
