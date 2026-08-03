@@ -11934,6 +11934,19 @@ function phiaVerifNum(texto, payload){
     t = t.replace(new RegExp('\\b' + phiaEscRe(payload.drawdown_periodo) + '\\b', 'gi'), ' ');
   }
 
+  /* Ropaje de moneda. Medido, no supuesto: el tokenizador de NÚMEROS nunca
+     tuvo problema con él —"$201.76" y "201.76 dólares" ya daban 201.76 y
+     pasaban—. El que rechazaba era el escaneo de TICKERS de más abajo, que
+     leía "USD" y "US" como símbolos ausentes de la cartera y tumbaba la frase
+     entera. Quitado el ropaje, el falso ticker desaparece.
+     La guarda (^|[^\w-]) protege los pares cripto: BTC-USD es un ticker
+     legítimo (isCryptoTicker usa /-USD$/i) y un \bUSD\b suelto lo dejaría en
+     "BTC", que no está en POSITIONS → rechazaría una frase correcta.       */
+  t = t.replace(/(^|[^\w-])US\$/g, '$1 ')
+       .replace(/(^|[^\w-])USD\b/g, '$1 ')
+       .replace(/\$/g, ' ')
+       .replace(/\b(d[oó]lares|d[oó]lar)\b/gi, ' ');
+
   const set = phiaNumSet(payload);
   const toks = (t.match(/-?\d[\d.,]*/g) || []).map(s => s.replace(/[.,]+$/, ''));
   for(let i = 0; i < toks.length; i++){
