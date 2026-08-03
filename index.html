@@ -11699,8 +11699,15 @@ const PHIA_TIMEOUT_MS = 8000;   // hay fallback que mostrar: no se espera indefi
                                 // 2500 expiraba SIEMPRE: el backend responde sano
                                 // (200 en 1.7s con prompt mínimo), pero la síntesis
                                 // real con PHIA_SYSTEM completo tarda más.
-const PHIA_MAX_TOKENS = 200;    // 2-3 líneas
-const PHIA_MODEL      = 'claude-sonnet-4-6';   // el mismo que usa sendChat()
+const PHIA_MAX_TOKENS = 150;    // 2-3 líneas
+/* Haiku, no Sonnet. R6 habia caido en el carril caro por copiar el body de
+   sendChat(): /v1/dev/status confirma que from_prompt va a Sonnet ($3/$15)
+   mientras la sintesis nativa del motor usa Haiku ($1/$5). Verificado en vivo
+   que Haiku produce una sintesis correcta para R6 —atribucion "cuenta", cifras
+   cuadradas—, y si se desviara el colchon ya existe: los verificadores la
+   tumban y cae a R5, nunca sale algo malo con dorado.
+   sendChat() sigue en Sonnet: es otra llamada, con otro proposito.        */
+const PHIA_MODEL      = 'claude-haiku-4-5-20251001';
 
 const PHIA_SYSTEM = `Eres un componente de SmartTrade que convierte un estado de portafolio ya calculado en una frase de 2 a 3 líneas. No eres analista ni asesor. No opinas, no evalúas, no recomiendas. Tu único trabajo es decir en prosa natural lo que los números ya dicen — nada más.
 
