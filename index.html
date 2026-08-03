@@ -1175,6 +1175,30 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .phsyn-ico{color:var(--text3);font-size:10px;flex-shrink:0}
 .phsyn-txt{min-width:0}
 .phsyn-txt b{color:var(--text);font-weight:700;font-variant-numeric:tabular-nums}
+/* ── R6 · revestimiento IA sobre la tarjeta de R5 ────────────────────────
+   .phia-on oculta #phsyn con !important: gana sobre el display inline que
+   phsynRender reescribe en cada repintado. Mismo recurso que
+   .bottom-panel.minimized .bp-body (l.426). .phia-vacio es OBLIGATORIO: sin
+   él, un wrapper de altura 0 aportaría los 14px de gap de #cp-home a cada
+   lado y dejaría un hueco muerto donde hoy no hay nada.                   */
+.phia-wrap{position:relative}
+.phia-wrap.phia-vacio{display:none}
+.phia-wrap.phia-on #phsyn{display:none!important}
+.phia-wrap #phsyn,.phia-prosa{padding-right:26px}
+.phia-prosa{display:none;align-items:baseline;gap:8px;padding:7px 11px;border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:8px;background:var(--bg3);font-size:11.5px;line-height:1.5;color:var(--text2)}
+.phia-wrap.phia-on .phia-prosa{display:flex}
+.phia-ico{color:var(--gold);font-size:10px;flex-shrink:0}
+.phia-txt{min-width:0}
+.phia-tag{display:inline-block;margin-right:6px;padding:1px 5px;border-radius:3px;background:rgba(212,175,55,.12);color:var(--gold);font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:1px}
+.phia-caret{position:absolute;top:6px;right:9px;cursor:pointer;color:var(--text3);font-size:12px;line-height:1;transition:transform .2s;user-select:none}
+.phia-caret:hover{color:var(--text2)}
+.phia-wrap.phia-col .phia-caret{transform:rotate(180deg)}
+.phia-body{overflow:hidden;transition:max-height .2s ease;max-height:340px;margin-top:5px}
+.phia-wrap.phia-col .phia-body{max-height:0!important;margin-top:0}
+.phia-hdr{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:3px 11px 4px}
+.phia-fact{display:flex;justify-content:space-between;gap:10px;padding:3px 11px;font-size:10.5px;border-top:1px solid var(--border)}
+.phia-fact .k{color:var(--text3);flex-shrink:0}
+.phia-fact .v{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
 
 /* ══ R1 · Movimiento de hoy — tira horizontal bajo los KPIs ═══════════════
    Vive FUERA de .phz-term: no toca la grilla de 3 columnas del layout
@@ -1745,7 +1769,19 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
            calcularon. Determinista, sin LLM, sin red. Describe, NO aconseja:
            indicativo, sin imperativos ni adjetivos de juicio. Estilo NEUTRO a
            propósito (no dorado): no es una opinión de IA, es una plantilla. -->
-      <div class="phsyn" id="phsyn" style="display:none"></div>
+      <!-- ══ R6 · revestimiento IA ═════════════════════════════════════════
+           R5 sigue siendo dueño ABSOLUTO de #phsyn (innerHTML y display).
+           R6 vive en HERMANOS: caret absoluto, prosa dorada y cuerpo
+           desplegable. Cuando la IA verifica, el wrapper toma .phia-on y el
+           CSS oculta #phsyn con !important — que gana sobre el display inline
+           que phsynRender reescribe en cada repintado. Swap de visibilidad
+           entre hermanos, nunca disputa del mismo nodo.                    -->
+      <div class="phia-wrap phia-vacio phia-col" id="phia-wrap">
+        <div class="phsyn" id="phsyn" style="display:none"></div>
+        <div class="phia-prosa" id="phia-prosa"></div>
+        <span class="phia-caret" id="phia-caret" title="Ver el detalle" onclick="phiaToggle()">⌄</span>
+        <div class="phia-body" id="phia-body"></div>
+      </div>
 
       <!-- ══ R1 · Movimiento de hoy ═══════════════════════════════════════
            Qué posiciones explican el KPI "P&L del día" de arriba. Frontend
@@ -11990,6 +12026,268 @@ async function phiaSintetizar(){
   if(!phiaVerifLing(r.texto, payload)) return { ok:false, motivo:'ling', payload, texto:r.texto };
   return { ok:true, texto:r.texto, payload };
 }
+
+/* ══ R6 · UI · revestimiento de la tarjeta #phsyn ══════════════════════════
+   Capa de presentación sobre el núcleo phia* (c8f5214 + 1bd5554). R5 queda
+   INTACTO: phsynRender()/phsynFrases() no se tocan ni se llaman desde aquí.
+
+   El problema que resuelve el diseño: phsynRender() reescribe innerHTML Y
+   style.display de #phsyn en cada uno de sus 3 repintados. Cualquier chrome
+   que R6 metiera DENTRO de #phsyn se borraría, y cualquier display:none
+   inline que R6 pusiera lo pisaría el siguiente `el.style.display='flex'`.
+
+   Solución, sin disputa de nodos: R6 vive en HERMANOS dentro de un wrapper, y
+   la ocultación de #phsyn va por clase del wrapper + !important, que gana
+   sobre el estilo inline de R5. R5 puede repintar cuanto quiera: no se ve.
+   Es el patrón que ya usa la casa (.bottom-panel.minimized .bp-body, l.426).
+
+   Clave de la coordinación: el estilo INLINE sigue siendo legible aunque el
+   CSS !important gane en el pintado. R6 lee ahí la INTENCIÓN de R5 y el CSS
+   decide qué se muestra.
+
+   Tres estados, dos clases sobre el wrapper:
+     S0 sin posiciones → .phia-vacio  (wrapper oculto; obligatorio, si no el
+                         gap:14px de #cp-home deja 28px de hueco muerto)
+     S1 R5 visible     → sin clase    (frase determinista, marco neutro)
+     S2 R6 activo      → .phia-on     (#phsyn oculto, prosa dorada visible)
+
+   NO toca MOTOR_V3 / motor_flags / usa_v3() / data_fetcher / ejecutor.      */
+
+const PHIA_MAXH = 340;   // px del cuerpo desplegado (5 factores caben de sobra)
+
+/* Caché POR SESIÓN DE HOME: una sola llamada al LLM. `sig` sella el payload
+   contra el que se verificó la prosa — ver phiaMontar().                    */
+let PHIA_UI = { abierto:false, estado:'idle', res:null, sig:null, obs:null };
+
+function phiaEscHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* Intención de R5, no lo que se ve. El CSS !important puede estar ocultando
+   #phsyn y aun así este valor refleja lo último que escribió phsynRender.  */
+function phiaHayFrase(){
+  const el = $('phsyn');
+  return !!el && el.style.display !== 'none' && el.innerHTML.trim() !== '';
+}
+
+/* ── Catálogo de factores ──────────────────────────────────────────────────
+   Una sola definición de la línea de detalle, compartida por el camino IA
+   (audita lo afirmado) y el camino determinista (desglose de reglas): así los
+   dos no pueden decir cifras distintas del mismo dato — misma disciplina que
+   las fuentes compartidas R2↔R5.                                           */
+const PHIA_CAT = {
+  conflictos: {
+    etiqueta: 'Conflictos modelo↔cartera',
+    detalle: p => p.conflictos.n + ' de ' + p.n_posiciones + ' posiciones'
+                  + (p.conflictos.tickers.length ? ' — ' + p.conflictos.tickers.join(', ') : '')
+  },
+  concentracion: {
+    etiqueta: 'Concentración',
+    detalle: p => p.concentracion.ticker + ' ' + p.concentracion.pct + '%'
+                  + ', umbral ' + p.umbral_concentracion_pct + '%'
+  },
+  drawdown: {
+    etiqueta: 'Drawdown',
+    detalle: p => p.drawdown_pct + '% en ' + (p.drawdown_periodo || '—')
+                  + ', umbral ' + p.umbral_drawdown_pct + '%'
+  },
+  exposicion: {
+    etiqueta: 'Exposición',
+    detalle: p => p.efectivo_pct + '% efectivo · ' + p.invertido_pct + '% invertido'
+  },
+  pl_dia: {
+    etiqueta: 'P&L del día',
+    detalle: p => fPS(p.pl_dia)
+  }
+};
+
+function phiaLineas(claves, p){
+  return claves.filter(k => PHIA_CAT[k]).map(k => ({
+    clave: k, etiqueta: PHIA_CAT[k].etiqueta, detalle: PHIA_CAT[k].detalle(p)
+  }));
+}
+
+/* Números del texto, en forma canónica y con la etiqueta del período fuera
+   (si no, el "3" de "3M" contaría como cifra). Mismo tokenizador que ya usa
+   el verificador, para que "23,4" y "23.4" cuenten igual.                  */
+function phiaNumsTexto(texto, p){
+  let t = phiaNormTexto(texto);
+  if(p && p.drawdown_periodo){
+    t = t.replace(new RegExp('\\b' + phiaEscRe(p.drawdown_periodo) + '\\b', 'gi'), ' ');
+  }
+  const toks = (t.match(/-?\d[\d.,]*/g) || []).map(s => s.replace(/[.,]+$/, ''));
+  const out = [];
+  toks.forEach(tk => phiaCandidatos(tk).forEach(v => out.push(v)));
+  return out;
+}
+
+/* ── Qué factores mencionó la prosa ────────────────────────────────────────
+   El verificador numérico devuelve Boolean y su Set aplana los valores, así
+   que NO expone de qué campo vino cada cifra: hay que derivarlo. Un factor
+   cuenta como mencionado si aparece alguno de sus números —lo que es sólido
+   porque phiaVerifNum ya garantizó que toda cifra del texto sale del
+   payload— o su ticker, porque el modelo puede nombrar el conflicto sin
+   cifra ("contradice tu única posición (NVDA)").
+
+   Límite conocido: si dos campos comparten valor, ambos se dan por
+   mencionados y sobra un factor. Es el lado barato — se audita de más,
+   nunca de menos.
+
+   Excepción a la regla del ticker, encontrada en pruebas: el ticker de la
+   mayor posición SUELE ser también el del conflicto, así que "NVDA concentra
+   el 23,4%" delataba un conflicto que la frase no afirma. Por eso `conflictos`
+   exige además una PALABRA de conflicto: su número (1, 2, 3…) choca con
+   n_posiciones y su ticker choca con concentración, de modo que ninguna de
+   las dos señales se sostiene sola.                                         */
+const PHIA_KW_CONFLICTO = ['contradice','contradicen','contradiccion','conflicto','conflictos','en contra'];
+
+function phiaFactores(texto, p){
+  if(!p) return [];
+  const nums = phiaNumsTexto(texto, p);
+  const tks  = (phiaNormTexto(texto).match(/\b[A-Z][A-Z0-9.\-]{1,9}\b/g) || []);
+  const hay  = vals => vals.some(v => v != null && !isNaN(v) && nums.indexOf(Number(v)) >= 0);
+  const hayTk = s => !!s && tks.indexOf(String(s).toUpperCase()) >= 0;
+  const kwConf = phiaHallaAlguno(phiaSinAcentos(phiaNormTexto(texto)).toLowerCase(), PHIA_KW_CONFLICTO);
+
+  const claves = [];
+  if(p.conflictos && kwConf && (hay([p.conflictos.n]) || (p.conflictos.tickers || []).some(hayTk))) claves.push('conflictos');
+  if(p.concentracion && (hay([p.concentracion.pct, p.concentracion.valor]) || hayTk(p.concentracion.ticker))) claves.push('concentracion');
+  if(p.drawdown_pct != null && hay([p.drawdown_pct, Math.abs(p.drawdown_pct)])) claves.push('drawdown');
+  if(hay([p.efectivo_pct, p.invertido_pct, p.efectivo])) claves.push('exposicion');
+  if(p.pl_dia != null && hay([p.pl_dia, Math.abs(p.pl_dia)])) claves.push('pl_dia');
+  return phiaLineas(claves, p);
+}
+
+/* Desglose determinista para el fallback: los mismos umbrales que dispara R5,
+   leídos del payload. NO llama a phsynFrases() — sólo replica el criterio.  */
+function phiaFactoresR5(p){
+  if(!p) return [];
+  const claves = [];
+  if(p.conflictos && p.conflictos.n > 0) claves.push('conflictos');
+  if(p.concentracion && p.concentracion.pct > p.umbral_concentracion_pct) claves.push('concentracion');
+  if(p.drawdown_pct != null && Math.abs(p.drawdown_pct) > p.umbral_drawdown_pct) claves.push('drawdown');
+  if(p.efectivo_pct != null && p.invertido_pct != null) claves.push('exposicion');
+  return phiaLineas(claves, p);
+}
+
+/* ── Pintado del cuerpo desplegable ────────────────────────────────────── */
+function phiaDetalleHTML(){
+  const st = PHIA_UI.estado, res = PHIA_UI.res;
+  if(st === 'cargando'){
+    return '<div class="phia-hdr">Consultando el análisis…</div>';
+  }
+  const iaOk = (st === 'listo' && res && res.ok);
+  const p    = iaOk ? res.payload : phiaPayload();
+  if(!p) return '<div class="phia-hdr">Sin datos de la cuenta.</div>';
+
+  const lineas = iaOk ? phiaFactores(res.texto, p) : phiaFactoresR5(p);
+  const hdr = iaOk
+    ? '<div class="phia-hdr">Lo que afirma el análisis · verificado contra los datos</div>'
+    : '<div class="phia-hdr">Desglose por reglas' + (st === 'obsoleto'
+        ? ' · los datos cambiaron desde el análisis'
+        : (res && res.motivo ? ' · análisis no disponible' : '')) + '</div>';
+
+  if(!lineas.length) return hdr + '<div class="phia-fact"><span class="k">Sin factores fuera de lo normal.</span></div>';
+  return hdr + lineas.map(f =>
+    '<div class="phia-fact"><span class="k">' + phiaEscHtml(f.etiqueta) + '</span>'
+    + '<span class="v">' + phiaEscHtml(f.detalle) + '</span></div>').join('');
+}
+
+function phiaPintar(){
+  const body = $('phia-body');
+  if(body) body.innerHTML = phiaDetalleHTML();
+
+  const prosa = $('phia-prosa');
+  if(prosa){
+    const res = PHIA_UI.res;
+    prosa.innerHTML = (PHIA_UI.estado === 'listo' && res && res.ok)
+      ? '<span class="phia-ico">◆</span><span class="phia-txt">'
+        + '<span class="phia-tag">Análisis IA</span>' + phiaEscHtml(res.texto) + '</span>'
+      : '';
+  }
+}
+
+function phiaAplicarAbierto(){
+  const w = $('phia-wrap'); if(!w) return;
+  if(PHIA_UI.abierto) w.classList.remove('phia-col');
+  else                w.classList.add('phia-col');
+}
+
+/* ── Disparo one-shot ──────────────────────────────────────────────────────
+   Una sola llamada por sesión de home. El segundo despliegue lee la caché.  */
+async function phiaCargar(){
+  if(PHIA_UI.estado !== 'idle') return;
+  PHIA_UI.estado = 'cargando';
+  phiaPintar();
+
+  const res = await phiaSintetizar();
+  const w = $('phia-wrap');
+
+  // Carrera: si el portafolio cambió MIENTRAS se esperaba al LLM, sellar ese
+  // payload sería sellar algo que ya no es cierto. Se degrada a fallback.
+  const vigente = res && res.ok && JSON.stringify(phiaPayload()) === JSON.stringify(res.payload);
+
+  PHIA_UI.res = res;
+  if(vigente && phiaHayFrase()){
+    PHIA_UI.estado = 'listo';
+    PHIA_UI.sig    = JSON.stringify(res.payload);
+    if(w) w.classList.add('phia-on');
+  }else{
+    PHIA_UI.estado = 'fallback';
+    PHIA_UI.sig    = null;
+    if(w) w.classList.remove('phia-on');
+  }
+  phiaPintar();
+}
+
+function phiaToggle(){
+  if(!phiaHayFrase()) return;
+  PHIA_UI.abierto = !PHIA_UI.abierto;
+  phiaAplicarAbierto();
+  if(PHIA_UI.abierto && PHIA_UI.estado === 'idle') phiaCargar();
+  else phiaPintar();
+}
+
+/* ── Sincronizador de visibilidad ──────────────────────────────────────────
+   Lo llama el MutationObserver tras cada repintado de R5. Idempotente, y
+   escribe SÓLO en el wrapper / #phia-prosa / #phia-body — nunca en #phsyn,
+   así que no puede realimentar al observador.
+
+   Invalidación estricta: la prosa vale sólo para el payload exacto contra el
+   que se verificó. Si cambió, se quita el dorado y vuelve R5. NO se re-llama
+   al LLM: la caché es de una llamada por sesión, y R6 queda en S1.         */
+function phiaMontar(){
+  const w = $('phia-wrap'); if(!w) return;
+
+  if(!phiaHayFrase()){                       // S0
+    PHIA_UI.abierto = false;
+    w.classList.remove('phia-on');
+    w.classList.add('phia-vacio');
+    phiaAplicarAbierto();
+    return;
+  }
+  w.classList.remove('phia-vacio');
+
+  if(PHIA_UI.estado === 'listo' && PHIA_UI.sig != null){
+    if(JSON.stringify(phiaPayload()) !== PHIA_UI.sig){    // S2 → S1
+      PHIA_UI.estado = 'obsoleto';
+      PHIA_UI.sig    = null;
+      w.classList.remove('phia-on');
+      phiaPintar();
+    }
+  }
+}
+
+/* Arranque: el <script> corre al final del body, así que #phsyn ya existe. */
+(function phiaObservar(){
+  if(typeof document === 'undefined' || !document.getElementById) return;
+  const el = document.getElementById('phsyn');
+  if(!el || typeof MutationObserver === 'undefined') return;
+  PHIA_UI.obs = new MutationObserver(phiaMontar);
+  PHIA_UI.obs.observe(el, { attributes:true, attributeFilter:['style'], childList:true });
+  phiaMontar();
+})();
 </script>
 <!-- ══════════════════════════ /HOME · PORTAFOLIO ══════════════════════════ -->
 
