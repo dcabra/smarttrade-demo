@@ -11916,6 +11916,16 @@ function phiaPayload(){
     efectivo:      phiaRound(x.cash, 2),
     efectivo_pct:  phiaRound(x.cashPct, 1),
     invertido_pct: phiaRound(x.invPct, 1),
+    /* El MONTO invertido, no solo su porcentaje. Sin él, el modelo lo derivaba
+       (equity − efectivo) y esa cifra calculada no estaba en el payload → el
+       verificador numérico la rechazaba y R6 caía a R5. Era la causa de ~la
+       mitad de los fallbacks con Haiku.
+       Sale de x.inv —homeAggregates().mv, o sea Σ p.value— que es la MISMA
+       fuente de la que sale invertido_pct, así que monto y porcentaje no
+       pueden discrepar. A propósito NO se usa equity − efectivo: con órdenes
+       pendientes o margen esa resta no da lo mismo, y R2 ya decidió mostrar
+       ese residuo en vez de cuadrarlo a la fuerza.                         */
+    invertido_usd: phiaRound(x.inv, 2),
     concentracion: (conc && conc.top) ? {
       ticker: conc.top.symbol,
       pct:    phiaRound(conc.top.pct, 1),
@@ -11988,6 +11998,7 @@ function phiaNumSet(p){
   const s = new Set();
   const add = v => { if(v != null && !isNaN(v)) s.add(Number(v)); };
   add(p.equity); add(p.efectivo); add(p.efectivo_pct); add(p.invertido_pct);
+  add(p.invertido_usd);
   add(p.n_posiciones); add(p.umbral_concentracion_pct); add(p.umbral_drawdown_pct);
   if(p.concentracion){ add(p.concentracion.pct); add(p.concentracion.valor); }
   if(p.conflictos){ add(p.conflictos.n); }
@@ -12359,7 +12370,7 @@ function phiaFactores(texto, p){
   if(p.conflictos && kwConf && (hay([p.conflictos.n]) || (p.conflictos.tickers || []).some(hayTk))) claves.push('conflictos');
   if(p.concentracion && (hay([p.concentracion.pct, p.concentracion.valor]) || hayTk(p.concentracion.ticker))) claves.push('concentracion');
   if(p.drawdown_pct != null && hay([p.drawdown_pct, Math.abs(p.drawdown_pct)])) claves.push('drawdown');
-  if(hay([p.efectivo_pct, p.invertido_pct, p.efectivo])) claves.push('exposicion');
+  if(hay([p.efectivo_pct, p.invertido_pct, p.efectivo, p.invertido_usd])) claves.push('exposicion');
   if(p.pl_dia != null && hay([p.pl_dia, Math.abs(p.pl_dia)])) claves.push('pl_dia');
   return phiaLineas(claves, p);
 }
