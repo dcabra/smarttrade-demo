@@ -11662,7 +11662,10 @@ window.addEventListener('resize', ()=>{ if(CP_VIEW==='home') renderPortfolioValu
    EN TIEMPO DE EJECUCIÓN (phiaUmbrales), nunca en una const de nivel superior:
    es exactamente el patrón que costó el TDZ de `141d6dd`.                    */
 
-const PHIA_TIMEOUT_MS = 2500;   // hay fallback que mostrar: no se espera indefinido
+const PHIA_TIMEOUT_MS = 8000;   // hay fallback que mostrar: no se espera indefinido.
+                                // 2500 expiraba SIEMPRE: el backend responde sano
+                                // (200 en 1.7s con prompt mínimo), pero la síntesis
+                                // real con PHIA_SYSTEM completo tarda más.
 const PHIA_MAX_TOKENS = 200;    // 2-3 líneas
 const PHIA_MODEL      = 'claude-sonnet-4-6';   // el mismo que usa sendChat()
 
@@ -11676,6 +11679,11 @@ REGLAS DE CIFRAS (inviolables):
 - Menciona solo tickers que aparezcan en los datos. Ningún símbolo que no esté en el JSON.
 - Si un número no está en los datos, no existe. No lo inventes para completar una frase.
 
+QUÉ ES CADA CIFRA (no las confundas):
+- drawdown_pct es del VALOR DE LA CUENTA (equity total): incluye el efectivo, el P&L ya realizado y los movimientos de fondos (depósitos y retiros). NO es el riesgo ni la pérdida de las posiciones abiertas.
+- Al mencionarlo, di "el valor de tu cuenta está X% por debajo de su máximo". Prohibido: "tu cartera cae", "tus posiciones pierden", y cualquier variante que atribuya esa caída a las posiciones actuales.
+- Es rendimiento de la cuenta en el período, no riesgo de posiciones. Una cuenta que esté casi toda en efectivo puede tener un drawdown grande sin que ninguna posición abierta esté perdiendo.
+
 REGLAS DE REDACCIÓN (inviolables):
 - Indicativo, describiendo hechos. Cero imperativos: nada de "reduce", "vende", "considera", "compra", "mantén", "ajusta", "evita", "revisa" ni ningún verbo de acción dirigido al usuario. Describe, no aconseja.
 - Sin adjetivos de juicio: nada de "arriesgada", "sólida", "repartida", "concentrada", "saludable", "diversificada". Si algo se puede decir con un número, se dice con el número. En vez de "exposición repartida", di "ninguna posición supera el 20%".
@@ -11684,7 +11692,7 @@ REGLAS DE REDACCIÓN (inviolables):
 QUÉ PRIORIZAR (2-3 líneas, lo fuera de lo normal primero):
 1. Si hay posiciones en conflicto → encabeza con eso.
 2. Si la concentración supera 20% → menciónala con el ticker y el porcentaje.
-3. Si el drawdown supera 10% en magnitud → menciónalo con su período.
+3. Si el drawdown supera 10% en magnitud → menciónalo con su período, como valor de cuenta (ver QUÉ ES CADA CIFRA).
 4. Exposición (efectivo/invertido) como contexto de fondo.
 Si nada de 1-3 aplica: describe el estado con las cifras de exposición y la alineación con el modelo. No inventes una alerta que no existe.
 
@@ -11971,26 +11979,48 @@ function phiaClausulas(txt){
    —que existe justo para eso—; un falso negativo le muestra al usuario una
    afirmación falsa. Por eso el veto es por cláusula completa, sin ventana de
    distancia y sin exigir que el verbo preceda a la cifra.                   */
-function phiaVetoDireccion(texto, payload){
+/* Ancla compartida por los dos vetos del drawdown: las cláusulas donde está
+   SU cifra. Devuelve null si no hay ancla — sin ella no hay nada que vetar.
+   dd===0 se excluye a propósito: el ancla sería el número 0, que colisiona
+   con conflictos.n y dispararía en frases inocentes.                       */
+function phiaClausulasDD(texto, payload){
   const dd = payload ? payload.drawdown_pct : null;
-  // Sin ancla no hay nada que proteger. dd===0 se excluye a propósito: el
-  // ancla sería el número 0, que colisiona con conflictos.n y dispararía en
-  // frases inocentes.
-  if(dd == null || isNaN(dd) || Number(dd) === 0) return false;
+  if(dd == null || isNaN(dd) || Number(dd) === 0) return null;
   const objetivo = Math.abs(Number(dd));
 
   const cl = phiaClausulas(phiaNormTexto(texto));
+  const out = [];
   for(let i = 0; i < cl.length; i++){
     if(cl[i] == null) continue;                       // grupos vacíos del split
     const toks = (cl[i].match(/-?\d[\d.,]*/g) || []).map(s => s.replace(/[.,]+$/, ''));
-    let ancla = false;
-    for(let j = 0; j < toks.length && !ancla; j++){
-      ancla = phiaCandidatos(toks[j]).some(v => Math.abs(v) === objetivo);
+    for(let j = 0; j < toks.length; j++){
+      if(phiaCandidatos(toks[j]).some(v => Math.abs(v) === objetivo)){ out.push(cl[i]); break; }
     }
-    if(!ancla) continue;
-    if(phiaHallaAlguno(phiaSinAcentos(cl[i]).toLowerCase(), PHIA_ALZA)) return true;
   }
-  return false;
+  return out.length ? out : null;
+}
+
+function phiaVetoDireccion(texto, payload){
+  const cl = phiaClausulasDD(texto, payload);
+  if(!cl) return false;
+  return cl.some(c => phiaHallaAlguno(phiaSinAcentos(c).toLowerCase(), PHIA_ALZA));
+}
+
+/* Veto de ATRIBUCIÓN. La serie del drawdown es PH_DRAW.vals, o sea el equity
+   TOTAL de la cuenta (portfolio-history de Alpaca): posiciones + efectivo +
+   P&L realizado + depósitos y retiros. Atribuir esa caída a las posiciones
+   abiertas es falso, y con una cuenta casi toda en efectivo es falso de forma
+   grosera: el drawdown puede ser grande sin que ninguna posición pierda.
+
+   El prompt ya lo prohíbe, pero eso es una instrucción, no una barrera: nadie
+   comprueba la atribución. Ésta sí. Misma anatomía que el veto de dirección —
+   ancla en la cifra, alcance de una cláusula.                               */
+const PHIA_ATRIBUCION = ['cartera','carteras','posicion','posiciones','portafolio','portfolio'];
+
+function phiaVetoAtribucion(texto, payload){
+  const cl = phiaClausulasDD(texto, payload);
+  if(!cl) return false;
+  return cl.some(c => phiaHallaAlguno(phiaSinAcentos(c).toLowerCase(), PHIA_ATRIBUCION));
 }
 
 /* `payload` es OPCIONAL: sin él la barrera queda pura (imperativos, juicio y
@@ -12005,6 +12035,7 @@ function phiaVerifLing(texto, payload){
   if(phiaHallaAlguno(plano, PHIA_JUICIO))      return false;
   if(phiaHallaAlguno(conTilde, PHIA_VOSEO))    return false;
   if(phiaVetoDireccion(texto, payload))        return false;
+  if(phiaVetoAtribucion(texto, payload))       return false;
   return true;
 }
 
@@ -12088,7 +12119,11 @@ const PHIA_CAT = {
                   + ', umbral ' + p.umbral_concentracion_pct + '%'
   },
   drawdown: {
-    etiqueta: 'Drawdown',
+    /* "de cuenta", no a secas: la serie es el equity total (PH_DRAW.vals sale
+       del portfolio-history de Alpaca), o sea posiciones + efectivo + P&L
+       realizado + movimientos de fondos. Etiquetarlo "Drawdown" hacía leerlo
+       como riesgo de las posiciones abiertas, que es otra cosa.            */
+    etiqueta: 'Drawdown de cuenta',
     detalle: p => p.drawdown_pct + '% en ' + (p.drawdown_periodo || '—')
                   + ', umbral ' + p.umbral_drawdown_pct + '%'
   },
