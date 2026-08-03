@@ -1191,25 +1191,33 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .phia-wrap.phia-vacio{display:none}
 .phia-wrap.phia-on #phsyn{display:none!important}
 .phia-wrap #phsyn,.phia-prosa{padding-right:26px}
-/* Marco dorado fino, el mismo de las secciones IA del panel derecho (.rp-sec,
-   l.147: rgba(245,197,24,.18)). NO es permanente: R6 alterna entre IA
-   verificada y la plantilla determinista de R5, así que el marco es SEÑAL DE
-   ESTADO, no decoración. Va bajo .phia-on, la misma clase que ya gobierna el
-   borde izquierdo dorado y la etiqueta "Análisis IA": las cuatro señales
-   entran y salen juntas. Sin .phia-on no hay un solo pixel dorado sobre
-   contenido que no sea IA — que es el principio del roadmap.
-   #phsyn no necesita variante dorada: bajo .phia-on está en display:none, y
-   sin la clase manda .phsyn (l.1174) con su neutro, intacta.              */
-.phia-prosa{display:none;align-items:baseline;gap:8px;padding:7px 11px;border:1px solid rgba(245,197,24,.18);border-left:3px solid var(--gold);border-radius:8px;background:var(--bg3);font-size:11.5px;line-height:1.5;color:var(--text2)}
+/* La tarjeta en estado IA replica .rp-sec (l.153), el contenedor de "SEÑAL IA"
+   y "FORECAST IA": marco parejo de 1px en rgba(245,197,24,.18) y radio 8px, en
+   los CUATRO lados, sin acento izquierdo y sin glow —.rp-sec no tiene ninguno—.
+   Se REPLICA en vez de reutilizar la clase porque .rp-sec trae margin:4px 8px
+   y padding:12px 14px dimensionados para el panel de 300px; aplicarlos aquí
+   desalinearía la tarjeta de #phsyn y .phmv en el Home.
+   El fondo SÍ diverge a propósito: .rp-sec no declara ninguno y hereda el --bg
+   del panel derecho, pero en el Home todas las tarjetas (.ph-card, .phsyn,
+   .phmv) son --bg3. Copiar la ausencia de fondo copiaría la regla y no el
+   resultado, y dejaría a R6 como la única tarjeta oscura del Home.
+   Nada de esto es permanente: todo lo dorado vive bajo .phia-on, así que sin
+   IA verificada no hay un solo pixel dorado. #phsyn no necesita variante:
+   bajo .phia-on está en display:none y si no, manda .phsyn (l.1180), intacta. */
+.phia-prosa{display:none;flex-direction:column;gap:2px;padding:7px 11px;border:1px solid rgba(245,197,24,.18);border-radius:8px;background:var(--bg3);font-size:11.5px;line-height:1.5;color:var(--text2)}
+/* .rp-lbl trae margin-bottom:10px, demasiado para la tarjeta compacta del
+   Home; las propias tarjetas IA lo bajan inline a 4-5px. Mismo criterio. */
+.phia-prosa .rp-lbl{margin-bottom:4px}
 /* Fade del swap S1→S2. Va por `animation`, no por `transition`: un
    display:none→flex no es transicionable, pero una animación sí corre en
    cuanto el elemento pasa a mostrarse. Suaviza el cambio de contenido; el de
    ALTURA no —la prosa del LLM suele ser más larga que la frase de R5—. */
 .phia-wrap.phia-on .phia-prosa{display:flex;animation:phiaFade .25s ease}
 @keyframes phiaFade{from{opacity:0}to{opacity:1}}
-.phia-ico{color:var(--gold);font-size:10px;flex-shrink:0}
+/* .phia-ico (el ◆) y .phia-tag (la píldora inline) se retiran: el rótulo de
+   bloque .rp-lbl con su filete los sustituye, y las tarjetas IA del panel
+   derecho no llevan ninguno de los dos. */
 .phia-txt{min-width:0}
-.phia-tag{display:inline-block;margin-right:6px;padding:1px 5px;border-radius:3px;background:rgba(245,197,24,.12);color:var(--gold);font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:1px}
 .phia-caret{position:absolute;top:4px;right:4px;display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;cursor:pointer;color:var(--text2);font-size:14px;line-height:1;background:rgba(255,255,255,.06);border:1px solid var(--border);transition:transform .2s,background .15s,color .15s,border-color .15s;user-select:none}
 .phia-caret:hover{color:var(--text);background:rgba(255,255,255,.14);border-color:var(--text3)}
 .phia-wrap.phia-col .phia-caret{transform:rotate(180deg)}
@@ -12312,9 +12320,13 @@ function phiaPintar(){
   const prosa = $('phia-prosa');
   if(prosa){
     const res = PHIA_UI.res;
+    /* Rótulo de BLOQUE arriba, reusando .rp-lbl (l.160) — la misma clase de
+       "SEÑAL IA" / "FORECAST IA", con su filete dorado ::after. Reutilizada,
+       no replicada, para que R6 herede cambios futuros del patrón. Sin el ◆:
+       las tarjetas IA del panel derecho no lo llevan y el rótulo ya cumple. */
     prosa.innerHTML = (PHIA_UI.estado === 'listo' && res && res.ok)
-      ? '<span class="phia-ico">◆</span><span class="phia-txt">'
-        + '<span class="phia-tag">Análisis IA</span>' + phiaEscHtml(res.texto) + '</span>'
+      ? '<div class="rp-lbl">Análisis IA</div>'
+        + '<span class="phia-txt">' + phiaEscHtml(res.texto) + '</span>'
       : '';
   }
 }
