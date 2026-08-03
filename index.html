@@ -11803,6 +11803,9 @@ QUÉ ES CADA CIFRA (no las confundas):
 - Al mencionarlo, di "el valor de tu cuenta está X% por debajo de su máximo". Prohibido: "tu cartera cae", "tus posiciones pierden", y cualquier variante que atribuya esa caída a las posiciones actuales.
 - Es rendimiento de la cuenta en el período, no riesgo de posiciones. Una cuenta que esté casi toda en efectivo puede tener un drawdown grande sin que ninguna posición abierta esté perdiendo.
 - Al citar el período del drawdown, escríbelo como viene en drawdown_periodo ("3M") o en palabras equivalentes ("3 meses"). No lo conviertas a otra unidad ni a otro número.
+- stop_cruzado son las posiciones cuyo precio YA está por debajo de su stop: riesgo materializado, lo más grave del payload. Dilo como un hecho consumado ("ya está por debajo de su stop"), nunca como distancia que falta.
+- stop_mas_cercano es la posición más cerca de gatillar su stop SIN haberlo cruzado, con distancia_pct = cuánto falta desde el precio actual. Su distancia siempre es positiva.
+- Los dos son opcionales y solo vienen cuando aplican. Si NO viene ninguno, no menciones stops ni afirmes que están lejos: no lo sabes.
 
 REGLAS DE REDACCIÓN (inviolables):
 - Indicativo, describiendo hechos. Cero imperativos: nada de "reduce", "vende", "considera", "compra", "mantén", "ajusta", "evita", "revisa" ni ningún verbo de acción dirigido al usuario. Describe, no aconseja.
@@ -11810,11 +11813,13 @@ REGLAS DE REDACCIÓN (inviolables):
 - Español neutro de Colombia: "tienes", nunca "tenés". Sin voseo.
 
 QUÉ PRIORIZAR (2-3 líneas, lo fuera de lo normal primero):
-1. Si hay posiciones en conflicto → encabeza con eso.
-2. Si la concentración supera 20% → menciónala con el ticker y el porcentaje.
-3. Si el drawdown supera 10% en magnitud → menciónalo con su período, como valor de cuenta (ver QUÉ ES CADA CIFRA).
-4. Exposición (efectivo/invertido) como contexto de fondo.
-Si nada de 1-3 aplica: describe el estado con las cifras de exposición y la alineación con el modelo. No inventes una alerta que no existe.
+1. Si viene stop_cruzado → encabeza con eso, es lo más grave: "[ticker] ya está por debajo de su stop".
+2. Si no, pero viene stop_mas_cercano → "[ticker] está a [X]% de su stop".
+3. Si hay posiciones en conflicto → menciónalo; si coincide con 1 o 2, lidera con lo más urgente (un stop cruzado manda sobre un conflicto; un conflicto manda sobre un stop meramente cercano).
+4. Si la concentración supera 20% → menciónala con el ticker y el porcentaje.
+5. Si el drawdown supera 10% en magnitud → menciónalo con su período, como valor de cuenta (ver QUÉ ES CADA CIFRA).
+6. Exposición (efectivo/invertido) como contexto de fondo.
+Si nada de 1-5 aplica: describe el estado con las cifras de exposición y la alineación con el modelo. No inventes una alerta que no existe.
 
 Devuelve solo la frase, sin preámbulo, sin comillas, sin markdown.`;
 
@@ -11872,6 +11877,55 @@ function phiaRound(n, dec){
   if(n == null || isNaN(n)) return null;
   const f = Math.pow(10, dec);
   return Math.round(Number(n) * f) / f;
+}
+
+/* ── R6.1 Fase 1 · riesgo por distancia al stop ────────────────────────────
+   El primer dato de R6 que el trader NO ve de un vistazo: para verlo hay que
+   abrir cada ticker. No necesita red nueva — bootApp (l.6002) ya precalienta
+   CACHE[t].sig con /v1/signal para las N posiciones.
+
+   DOS CATEGORÍAS, no una escala: estar BAJO el stop es riesgo materializado;
+   estar CERCA es riesgo latente. Son alertas de gravedad distinta y no se
+   mezclan. Una posición cruzada sale del recorrido en su rama y NO compite por
+   `cercano`, así que la distancia del cercano es siempre positiva y el prompt
+   no tiene que frasear signos.
+
+   El stop sale de getEffectiveNiv (l.5546), que devuelve el nivel EDITADO POR
+   EL USUARIO si existe y cae al del modelo si no: para un aviso de riesgo, el
+   stop que el usuario vigila es el relevante.
+   El precio sale de p.current_price con sig.precio_actual de respaldo — el
+   resto del payload es todo del broker, así que el precio del broker mantiene
+   la coherencia; sig.precio_actual es de cuando corrió la señal.
+
+   Omitir, no romper: sin sl, sin precio o con precio <=0 la posición se salta.
+   Es el caso esperado si el camino B del auto-disparo (temporizador de 4s)
+   dispara antes de que termine el precalentamiento del arranque.           */
+const PHIA_STOP_PCT = 6;   // % por debajo del cual el stop se considera "cerca"
+
+function phiaStops(){
+  const cruzados = [];
+  let cercano = null;
+  ((typeof POSITIONS !== 'undefined' && POSITIONS) || []).forEach(p => {
+    if(!p || !p.symbol) return;
+    const sl = (typeof getEffectiveNiv === 'function') ? getEffectiveNiv(p.symbol).sl : null;
+    if(sl == null || isNaN(sl) || Number(sl) <= 0) return;
+    const d = (typeof CACHE !== 'undefined') ? CACHE[p.symbol] : null;
+    const precio = (p.current_price != null && !isNaN(p.current_price))
+      ? Number(p.current_price)
+      : ((d && d.sig && d.sig.precio_actual != null && !isNaN(d.sig.precio_actual))
+          ? Number(d.sig.precio_actual) : null);
+    if(precio == null || precio <= 0) return;
+    const dist = (precio - Number(sl)) / precio * 100;
+    if(!isFinite(dist)) return;
+    if(dist < 0){ cruzados.push(p.symbol); return; }   // materializado, aparte
+    if(dist < PHIA_STOP_PCT && (!cercano || dist < cercano.distancia_pct)){
+      cercano = { ticker:p.symbol, distancia_pct:dist };
+    }
+  });
+  return {
+    cruzado: cruzados.length ? { n:cruzados.length, tickers:cruzados } : null,
+    cercano: cercano ? { ticker:cercano.ticker, distancia_pct:phiaRound(cercano.distancia_pct, 1) } : null
+  };
 }
 
 /* ── 1 · Payload ───────────────────────────────────────────────────────────
@@ -11936,8 +11990,14 @@ function phiaPayload(){
     pl_dia:            phiaRound(plDia, 2),
     n_posiciones:      nPos,
     umbral_concentracion_pct: u.conc,
-    umbral_drawdown_pct:      u.dd
+    umbral_drawdown_pct:      u.dd,
+    umbral_stop_pct:          PHIA_STOP_PCT
   };
+  /* R6.1 · los dos se OMITEN cuando no aplican, como `conflictos`: el prompt
+     ya sabe que "si un número no está en los datos, no existe". */
+  const st = phiaStops();
+  if(st.cruzado) p.stop_cruzado     = st.cruzado;
+  if(st.cercano) p.stop_mas_cercano = st.cercano;
   if(X && X.disponible){
     p.conflictos  = { n: X.conflictos.length, tickers: X.conflictos.map(c => c.ticker) };
     p.confirmadas = X.confirmas.length;
@@ -12000,6 +12060,12 @@ function phiaNumSet(p){
   add(p.equity); add(p.efectivo); add(p.efectivo_pct); add(p.invertido_pct);
   add(p.invertido_usd);
   add(p.n_posiciones); add(p.umbral_concentracion_pct); add(p.umbral_drawdown_pct);
+  add(p.umbral_stop_pct);
+  if(p.stop_mas_cercano) add(p.stop_mas_cercano.distancia_pct);
+  /* stop_cruzado.n va al set aunque "solo aporte tickers": con dos posiciones
+     cruzadas el modelo escribe "2 posiciones ya cruzaron su stop", y ese 2
+     tumbaria la frase entera — el mismo fallo de invertido_usd. */
+  if(p.stop_cruzado)     add(p.stop_cruzado.n);
   if(p.concentracion){ add(p.concentracion.pct); add(p.concentracion.valor); }
   if(p.conflictos){ add(p.conflictos.n); }
   if(p.confirmadas != null) add(p.confirmadas);
@@ -12289,6 +12355,17 @@ function phiaHayFrase(){
    dos no pueden decir cifras distintas del mismo dato — misma disciplina que
    las fuentes compartidas R2↔R5.                                           */
 const PHIA_CAT = {
+  /* R6.1 · los dos stops van PRIMERO para que el desglose refleje la misma
+     jerarquía de urgencia que el prompt: cruzado > cercano > conflicto. */
+  stop_cruzado: {
+    etiqueta: 'Stop cruzado',
+    detalle: p => p.stop_cruzado.tickers.join(', ') + ' bajo su stop'
+  },
+  stop_cerca: {
+    etiqueta: 'Stop más cercano',
+    detalle: p => p.stop_mas_cercano.ticker + ' a ' + p.stop_mas_cercano.distancia_pct
+                  + '%, umbral ' + p.umbral_stop_pct + '%'
+  },
   conflictos: {
     etiqueta: 'Conflictos modelo↔cartera',
     detalle: p => p.conflictos.n + ' de ' + p.n_posiciones + ' posiciones'
@@ -12367,6 +12444,8 @@ function phiaFactores(texto, p){
   const kwConf = phiaHallaAlguno(phiaSinAcentos(phiaNormTexto(texto)).toLowerCase(), PHIA_KW_CONFLICTO);
 
   const claves = [];
+  if(p.stop_cruzado && (hay([p.stop_cruzado.n]) || (p.stop_cruzado.tickers || []).some(hayTk))) claves.push('stop_cruzado');
+  if(p.stop_mas_cercano && (hay([p.stop_mas_cercano.distancia_pct]) || hayTk(p.stop_mas_cercano.ticker))) claves.push('stop_cerca');
   if(p.conflictos && kwConf && (hay([p.conflictos.n]) || (p.conflictos.tickers || []).some(hayTk))) claves.push('conflictos');
   if(p.concentracion && (hay([p.concentracion.pct, p.concentracion.valor]) || hayTk(p.concentracion.ticker))) claves.push('concentracion');
   if(p.drawdown_pct != null && hay([p.drawdown_pct, Math.abs(p.drawdown_pct)])) claves.push('drawdown');
@@ -12380,6 +12459,8 @@ function phiaFactores(texto, p){
 function phiaFactoresR5(p){
   if(!p) return [];
   const claves = [];
+  if(p.stop_cruzado)     claves.push('stop_cruzado');
+  if(p.stop_mas_cercano) claves.push('stop_cerca');
   if(p.conflictos && p.conflictos.n > 0) claves.push('conflictos');
   if(p.concentracion && p.concentracion.pct > p.umbral_concentracion_pct) claves.push('concentracion');
   if(p.drawdown_pct != null && Math.abs(p.drawdown_pct) > p.umbral_drawdown_pct) claves.push('drawdown');
