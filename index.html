@@ -11681,6 +11681,20 @@ const PHIA_VOSEO = [
   'tenés','podés','querés','debés','sabés','hacés','tomás','sos','vos','vení','tené',
   'mirá','fijate','fijáte','andá','dejá','poné','llevá','ponés','llevás'
 ];
+/* Verbos de ALZA. No se vetan globalmente —"AAPL sube hoy" es una descripción
+   legítima—: sólo dentro de la cláusula donde aparece la cifra del drawdown,
+   que es ≤0 por construcción. Cierra el hueco semántico que los verificadores
+   de cifras no pueden ver: "sube 12,3%" usa un número correcto del payload
+   para afirmar lo contrario de lo que el número dice.
+   Vecinos legítimos que NO disparan, por match de palabra completa: "ganancia"
+   (tras `gana` viene `n`) y "recuperación" (tras `recupera` viene `c`).
+   `aumenta`/`disminuye` no van aquí: ya están vetados globalmente arriba.   */
+const PHIA_ALZA = [
+  'sube','suben','subio','subir','subiendo',
+  'gana','ganan','gano','ganar','ganando',
+  'avanza','avanzan','avanzo','avanzar','avanzando',
+  'recupera','recuperan','recupero','recuperar','recuperando'
+];
 
 /* Umbrales EN TIEMPO DE EJECUCIÓN (ver nota del TDZ en la cabecera). */
 function phiaUmbrales(){
@@ -11902,7 +11916,51 @@ function phiaHallaAlguno(txt, lista){
   return false;
 }
 
-function phiaVerifLing(texto){
+/* Corta en cláusulas. La guarda (?!\d) es lo que impide partir los propios
+   números: sin ella "12,3" y "4.123,77" se rompen por la mitad y el ancla del
+   drawdown desaparece. Los nexos separan porque un verbo nunca queda apartado
+   de su propio complemento numérico por una conjunción: más separadores dan
+   menos falsos positivos SIN abrir falsos negativos.                        */
+function phiaClausulas(txt){
+  return String(txt == null ? '' : txt).split(/[;:]|\.(?!\d)|,(?!\d)|\s+(?:y|o|pero|aunque|mientras)\s+/i);
+}
+
+/* Veto de DIRECCIÓN. El drawdown es ≤0 por construcción, así que un verbo de
+   alza aplicado a su cifra es falso aunque la cifra sea correcta. Anclado en
+   el NÚMERO (que viene del payload y es inequívoco) y no en palabras como
+   "máximo": el modelo puede escribir "sube 12,3% en el período" sin nombrar
+   el máximo y seguiría mintiendo.
+
+   Sesgo deliberado hacia rechazar: un falso positivo cuesta un fallback a R5
+   —que existe justo para eso—; un falso negativo le muestra al usuario una
+   afirmación falsa. Por eso el veto es por cláusula completa, sin ventana de
+   distancia y sin exigir que el verbo preceda a la cifra.                   */
+function phiaVetoDireccion(texto, payload){
+  const dd = payload ? payload.drawdown_pct : null;
+  // Sin ancla no hay nada que proteger. dd===0 se excluye a propósito: el
+  // ancla sería el número 0, que colisiona con conflictos.n y dispararía en
+  // frases inocentes.
+  if(dd == null || isNaN(dd) || Number(dd) === 0) return false;
+  const objetivo = Math.abs(Number(dd));
+
+  const cl = phiaClausulas(phiaNormTexto(texto));
+  for(let i = 0; i < cl.length; i++){
+    if(cl[i] == null) continue;                       // grupos vacíos del split
+    const toks = (cl[i].match(/-?\d[\d.,]*/g) || []).map(s => s.replace(/[.,]+$/, ''));
+    let ancla = false;
+    for(let j = 0; j < toks.length && !ancla; j++){
+      ancla = phiaCandidatos(toks[j]).some(v => Math.abs(v) === objetivo);
+    }
+    if(!ancla) continue;
+    if(phiaHallaAlguno(phiaSinAcentos(cl[i]).toLowerCase(), PHIA_ALZA)) return true;
+  }
+  return false;
+}
+
+/* `payload` es OPCIONAL: sin él la barrera queda pura (imperativos, juicio y
+   voseo) y el veto de dirección se salta, que es como la llaman las pruebas
+   de esas tres listas. Con payload se activa el ancla del drawdown.        */
+function phiaVerifLing(texto, payload){
   const crudo = phiaNormTexto(texto);
   if(!crudo.trim()) return false;
   const plano = phiaSinAcentos(crudo).toLowerCase();   // imperativos y juicio
@@ -11910,6 +11968,7 @@ function phiaVerifLing(texto){
   if(phiaHallaAlguno(plano, PHIA_IMPERATIVOS)) return false;
   if(phiaHallaAlguno(plano, PHIA_JUICIO))      return false;
   if(phiaHallaAlguno(conTilde, PHIA_VOSEO))    return false;
+  if(phiaVetoDireccion(texto, payload))        return false;
   return true;
 }
 
@@ -11928,7 +11987,7 @@ async function phiaSintetizar(){
   if(!r.ok) return { ok:false, motivo:r.motivo, payload };
 
   if(!phiaVerifNum(r.texto, payload))  return { ok:false, motivo:'num',  payload, texto:r.texto };
-  if(!phiaVerifLing(r.texto))          return { ok:false, motivo:'ling', payload, texto:r.texto };
+  if(!phiaVerifLing(r.texto, payload)) return { ok:false, motivo:'ling', payload, texto:r.texto };
   return { ok:true, texto:r.texto, payload };
 }
 </script>
