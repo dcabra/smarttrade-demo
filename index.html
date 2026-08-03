@@ -1185,18 +1185,32 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .phia-wrap.phia-vacio{display:none}
 .phia-wrap.phia-on #phsyn{display:none!important}
 .phia-wrap #phsyn,.phia-prosa{padding-right:26px}
-.phia-prosa{display:none;align-items:baseline;gap:8px;padding:7px 11px;border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:8px;background:var(--bg3);font-size:11.5px;line-height:1.5;color:var(--text2)}
+/* Marco dorado fino, el mismo de las secciones IA del panel derecho (.rp-sec,
+   l.147: rgba(245,197,24,.18)). NO es permanente: R6 alterna entre IA
+   verificada y la plantilla determinista de R5, así que el marco es SEÑAL DE
+   ESTADO, no decoración. Va bajo .phia-on, la misma clase que ya gobierna el
+   borde izquierdo dorado y la etiqueta "Análisis IA": las cuatro señales
+   entran y salen juntas. Sin .phia-on no hay un solo pixel dorado sobre
+   contenido que no sea IA — que es el principio del roadmap.
+   #phsyn no necesita variante dorada: bajo .phia-on está en display:none, y
+   sin la clase manda .phsyn (l.1174) con su neutro, intacta.              */
+.phia-prosa{display:none;align-items:baseline;gap:8px;padding:7px 11px;border:1px solid rgba(245,197,24,.18);border-left:3px solid var(--gold);border-radius:8px;background:var(--bg3);font-size:11.5px;line-height:1.5;color:var(--text2)}
 .phia-wrap.phia-on .phia-prosa{display:flex}
 .phia-ico{color:var(--gold);font-size:10px;flex-shrink:0}
 .phia-txt{min-width:0}
-.phia-tag{display:inline-block;margin-right:6px;padding:1px 5px;border-radius:3px;background:rgba(212,175,55,.12);color:var(--gold);font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:1px}
+.phia-tag{display:inline-block;margin-right:6px;padding:1px 5px;border-radius:3px;background:rgba(245,197,24,.12);color:var(--gold);font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:1px}
 .phia-caret{position:absolute;top:4px;right:4px;display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;cursor:pointer;color:var(--text2);font-size:14px;line-height:1;background:rgba(255,255,255,.06);border:1px solid var(--border);transition:transform .2s,background .15s,color .15s,border-color .15s;user-select:none}
 .phia-caret:hover{color:var(--text);background:rgba(255,255,255,.14);border-color:var(--text3)}
 .phia-wrap.phia-col .phia-caret{transform:rotate(180deg)}
-.phia-body{overflow:hidden;transition:max-height .2s ease;max-height:340px;margin-top:5px}
-.phia-wrap.phia-col .phia-body{max-height:0!important;margin-top:0}
+.phia-body{overflow:hidden;transition:max-height .2s ease;max-height:340px;margin-top:5px;border:1px solid var(--border);border-radius:8px}
+.phia-wrap.phia-on .phia-body{border-color:rgba(245,197,24,.18)}
+/* Colapsado: sin el border-width:0 el marco seguiría pintando 2px de línea
+   sobre una caja de altura 0, y se vería una raya dorada flotando. */
+.phia-wrap.phia-col .phia-body{max-height:0!important;margin-top:0;border-width:0}
 .phia-hdr{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:3px 11px 4px}
 .phia-fact{display:flex;justify-content:space-between;gap:10px;padding:3px 11px;font-size:10.5px;border-top:1px solid var(--border)}
+.phia-wrap.phia-on .phia-fact{border-top-color:rgba(245,197,24,.10)}
+.phia-fact:first-of-type{border-top:none}
 .phia-fact .k{color:var(--text3);flex-shrink:0}
 .phia-fact .v{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
 
