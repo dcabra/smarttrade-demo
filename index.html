@@ -1201,7 +1201,12 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
    #phsyn no necesita variante dorada: bajo .phia-on está en display:none, y
    sin la clase manda .phsyn (l.1174) con su neutro, intacta.              */
 .phia-prosa{display:none;align-items:baseline;gap:8px;padding:7px 11px;border:1px solid rgba(245,197,24,.18);border-left:3px solid var(--gold);border-radius:8px;background:var(--bg3);font-size:11.5px;line-height:1.5;color:var(--text2)}
-.phia-wrap.phia-on .phia-prosa{display:flex}
+/* Fade del swap S1→S2. Va por `animation`, no por `transition`: un
+   display:none→flex no es transicionable, pero una animación sí corre en
+   cuanto el elemento pasa a mostrarse. Suaviza el cambio de contenido; el de
+   ALTURA no —la prosa del LLM suele ser más larga que la frase de R5—. */
+.phia-wrap.phia-on .phia-prosa{display:flex;animation:phiaFade .25s ease}
+@keyframes phiaFade{from{opacity:0}to{opacity:1}}
 .phia-ico{color:var(--gold);font-size:10px;flex-shrink:0}
 .phia-txt{min-width:0}
 .phia-tag{display:inline-block;margin-right:6px;padding:1px 5px;border-radius:3px;background:rgba(245,197,24,.12);color:var(--gold);font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;vertical-align:1px}
@@ -12127,9 +12132,39 @@ async function phiaSintetizar(){
 
 const PHIA_MAXH = 340;   // px del cuerpo desplegado (5 factores caben de sobra)
 
+/* Espera de asentamiento del auto-disparo. El home carga en OLEADAS y dos de
+   ellas pueden no llegar NUNCA: renderPortfolioValueChart retorna temprano
+   (l.11536) si no hay histórico —sin fijar PH_DRAW, así que drawdown_pct se
+   queda en null para siempre— y phdLoad retorna en NO_TOKEN/UNAUTHORIZED sin
+   fijar PHD_STATE. Condicionar el disparo a "payload completo" a secas dejaría
+   a esos usuarios sin R6 jamás. Por eso hay dos caminos y gana el primero:
+   phiaListo() o este temporizador, que dispara con lo que haya. Es honesto: el
+   payload omite lo que falta y el prompt ya sabe que "si un número no está en
+   los datos, no existe".                                                    */
+const PHIA_SETTLE_MS = 4000;
+
 /* Caché POR SESIÓN DE HOME: una sola llamada al LLM. `sig` sella el payload
    contra el que se verificó la prosa — ver phiaMontar().                    */
-let PHIA_UI = { abierto:false, estado:'idle', res:null, sig:null, obs:null };
+let PHIA_UI = { abierto:false, estado:'idle', res:null, sig:null, obs:null, timer:null };
+
+/* ¿Terminaron las oleadas que llenan el payload? drawdown_pct llega con la
+   serie del chart; PHD_STATE, con el libro de señales (basta con que se haya
+   RESUELTO, aunque sea con error: ahí el payload omite conflictos a propósito). */
+function phiaListo(){
+  const p = phiaPayload();
+  if(!p) return false;
+  if(p.drawdown_pct == null) return false;
+  if(typeof PHD_STATE === 'undefined' || PHD_STATE == null) return false;
+  return true;
+}
+
+function phiaArmarEspera(){
+  if(PHIA_UI.timer != null) return;          // ya armado: una sola espera
+  PHIA_UI.timer = setTimeout(function(){
+    PHIA_UI.timer = null;
+    if(PHIA_UI.estado === 'idle' && phiaPayload()) phiaCargar();
+  }, PHIA_SETTLE_MS);
+}
 
 function phiaEscHtml(s){
   return String(s == null ? '' : s)
@@ -12293,8 +12328,11 @@ function phiaAplicarAbierto(){
 /* ── Disparo one-shot ──────────────────────────────────────────────────────
    Una sola llamada por sesión de home. El segundo despliegue lee la caché.  */
 async function phiaCargar(){
+  // Guard SÍNCRONO, antes de ceder el hilo en el await: cualquier segundo
+  // disparo —otra oleada, el temporizador, un repintado— entra y sale.
   if(PHIA_UI.estado !== 'idle') return;
   PHIA_UI.estado = 'cargando';
+  if(PHIA_UI.timer != null){ clearTimeout(PHIA_UI.timer); PHIA_UI.timer = null; }
   phiaPintar();
 
   const res = await phiaSintetizar();
@@ -12317,12 +12355,16 @@ async function phiaCargar(){
   phiaPintar();
 }
 
+/* Sólo expande/colapsa el desglose. YA NO dispara la IA: eso lo hace el
+   auto-disparo desde phiaMontar. El desglose nunca dependió del caret —
+   phiaDetalleHTML lo arma en cada phiaPintar desde PHIA_UI.res (camino IA) o
+   desde phiaPayload (camino determinista)—, así que está listo en los cuatro
+   estados antes de que el usuario toque nada.                               */
 function phiaToggle(){
   if(!phiaHayFrase()) return;
   PHIA_UI.abierto = !PHIA_UI.abierto;
   phiaAplicarAbierto();
-  if(PHIA_UI.abierto && PHIA_UI.estado === 'idle') phiaCargar();
-  else phiaPintar();
+  phiaPintar();
 }
 
 /* ── Sincronizador de visibilidad ──────────────────────────────────────────
@@ -12353,6 +12395,15 @@ function phiaMontar(){
       phiaPintar();
     }
   }
+
+  /* Auto-disparo. El ORDEN importa: la invalidación va arriba, así que si
+     acaba de pasar a 'obsoleto' este bloque ya no entra. La condición es
+     estado==='idle', la MISMA que impide re-llamar, de modo que ni 'obsoleto'
+     ni 'fallback' ni 'cargando' pueden reabrir el disparo. Sin bucle. */
+  if(PHIA_UI.estado !== 'idle') return;
+  if(!phiaPayload()) return;                 // sin posiciones o sin equity
+  if(phiaListo()){ phiaCargar(); return; }   // camino A · oleadas completas
+  phiaArmarEspera();                         // camino B · red de seguridad
 }
 
 /* Arranque: el <script> corre al final del body, así que #phsyn ya existe. */
