@@ -9640,6 +9640,29 @@ async function getPortfolioHistory(range){
   if(!d || !Array.isArray(d.series)){
     return { available:false, series:[], note:'Histórico de valor no disponible aún' };
   }
+  /* Artefacto de apertura: Alpaca devuelve como primer punto el instante en que
+     se abrió la cuenta, ANTES del fondeo — {v:0, pl:-100000}. Se quita AQUÍ,
+     en el único punto de entrada de la serie, para que salga limpia hacia
+     todos sus consumidores de un golpe.
+
+     Qué arregla, medido: el trazo del chart, que caía en vertical a $0 y
+     aplastaba la escala del eje; y `startVal = vals[0]`, que valía 0 y
+     envenenaba el rebasado del benchmark SPY y de las líneas de ticker
+     (phRebasedCloses multiplica por startValue: con 0, todas planas).
+     Qué NO arregla, para que nadie lo arregle dos veces: el drawdown NO estaba
+     corrupto. phriskDrawdown usa max y last, y un 0 al INICIO no es ninguno de
+     los dos — verificado, da −2.4038% con y sin el punto.
+
+     TRES criterios, y los tres a la vez: primer índice + valor ≤0 + pl de
+     fondeo (negativo). Se quita el OBJETO de punto completo, así que v y pl no
+     pueden desincronizarse. IDEMPOTENTE: si la serie ya viene limpia —cuenta
+     antigua, otro rango— no se cumple el predicado y no se toca nada.
+     Conocido y aceptado: al mirar sólo el índice 0, un v≤0 en MEDIO de la
+     serie no se retiraría. No se ha observado.                              */
+  const a0 = d.series[0];
+  if(a0 && Number(a0.v) <= 0 && a0.pl != null && !isNaN(a0.pl) && Number(a0.pl) < 0){
+    d.series = d.series.slice(1);
+  }
   return d;
 }
 
