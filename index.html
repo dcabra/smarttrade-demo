@@ -11812,14 +11812,14 @@ REGLAS DE REDACCIÓN (inviolables):
 - Sin adjetivos de juicio: nada de "arriesgada", "sólida", "repartida", "concentrada", "saludable", "diversificada". Si algo se puede decir con un número, se dice con el número. En vez de "exposición repartida", di "ninguna posición supera el 20%".
 - Español neutro de Colombia: "tienes", nunca "tenés". Sin voseo.
 
-QUÉ PRIORIZAR (2-3 líneas, lo fuera de lo normal primero):
-1. Si viene stop_cruzado → encabeza con eso, es lo más grave: "[ticker] ya está por debajo de su stop".
-2. Si no, pero viene stop_mas_cercano → "[ticker] está a [X]% de su stop".
-3. Si hay posiciones en conflicto → menciónalo; si coincide con 1 o 2, lidera con lo más urgente (un stop cruzado manda sobre un conflicto; un conflicto manda sobre un stop meramente cercano).
-4. Si la concentración supera 20% → menciónala con el ticker y el porcentaje.
-5. Si el drawdown supera 10% en magnitud → menciónalo con su período, como valor de cuenta (ver QUÉ ES CADA CIFRA).
-6. Exposición (efectivo/invertido) como contexto de fondo.
-Si nada de 1-5 aplica: describe el estado con las cifras de exposición y la alineación con el modelo. No inventes una alerta que no existe.
+PRIORIDAD (obligatoria, en este orden; 2-3 líneas en total). ABRE la síntesis con lo más urgente que exista en el payload y baja desde ahí. No entierres un punto alto entre los bajos.
+1. stop_cruzado — una posición YA está por debajo de su stop. Es riesgo materializado y va PRIMERO: "[ticker] ya cruzó su stop."
+2. stop_mas_cercano — la posición más cerca de gatillar el suyo, sin haberlo cruzado: "[ticker] es tu posición más cercana a su stop, a [X]%."
+3. conflictos — las posiciones que el modelo contradice.
+4. Concentración (si supera su umbral, con ticker y porcentaje), drawdown (si supera el suyo, con su período y como valor de cuenta) y exposición: SOLO como contexto, y siempre DESPUÉS de lo anterior.
+Si no hay stop_cruzado, ni stop_mas_cercano, ni conflictos: describe el estado general con exposición y drawdown, con normalidad. No inventes una alerta que no existe.
+
+La urgencia la marca el ORDEN y el hecho, no el adjetivo ni el consejo. Sigue prohibido calificar ("preocupante", "crítica", "arriesgada") y sigue prohibido decir qué hacer: "NVDA ya cruzó su stop" es un hecho y va; "deberías cerrar NVDA" no se escribe nunca.
 
 Devuelve solo la frase, sin preámbulo, sin comillas, sin markdown.`;
 
@@ -11844,7 +11844,11 @@ const PHIA_JUICIO = [
   'concentrada','concentrado','diversificada','diversificado','saludable','peligrosa',
   'peligroso','agresiva','agresivo','conservadora','conservador','prudente','excesiva',
   'excesivo','sana','sano','debil','fuerte','preocupante','comoda','comodo','robusta',
-  'robusto','fragil'
+  'robusto','fragil',
+  /* Añadidos al reestructurar la PRIORIDAD: el prompt los cita como ejemplos
+     prohibidos, así que la barrera tiene que enforcearlos o diría una cosa y
+     comprobaría otra. Medido: sin esto "situación crítica" pasaba. */
+  'critica','critico','alarmante','grave'
 ];
 const PHIA_VOSEO = [
   'tenés','podés','querés','debés','sabés','hacés','tomás','sos','vos','vení','tené',
