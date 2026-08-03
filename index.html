@@ -11683,6 +11683,7 @@ QUÉ ES CADA CIFRA (no las confundas):
 - drawdown_pct es del VALOR DE LA CUENTA (equity total): incluye el efectivo, el P&L ya realizado y los movimientos de fondos (depósitos y retiros). NO es el riesgo ni la pérdida de las posiciones abiertas.
 - Al mencionarlo, di "el valor de tu cuenta está X% por debajo de su máximo". Prohibido: "tu cartera cae", "tus posiciones pierden", y cualquier variante que atribuya esa caída a las posiciones actuales.
 - Es rendimiento de la cuenta en el período, no riesgo de posiciones. Una cuenta que esté casi toda en efectivo puede tener un drawdown grande sin que ninguna posición abierta esté perdiendo.
+- Al citar el período del drawdown, escríbelo como viene en drawdown_periodo ("3M") o en palabras equivalentes ("3 meses"). No lo conviertas a otra unidad ni a otro número.
 
 REGLAS DE REDACCIÓN (inviolables):
 - Indicativo, describiendo hechos. Cero imperativos: nada de "reduce", "vende", "considera", "compra", "mantén", "ajusta", "evita", "revisa" ni ningún verbo de acción dirigido al usuario. Describe, no aconseja.
@@ -11874,6 +11875,13 @@ function phiaNumSet(p){
   if(p.confirmadas != null) add(p.confirmadas);
   if(p.drawdown_pct != null){ add(p.drawdown_pct); add(Math.abs(p.drawdown_pct)); }
   if(p.pl_dia != null){ add(p.pl_dia); add(Math.abs(p.pl_dia)); }
+  /* El período del drawdown ES un dato del payload, y el modelo lo verbaliza
+     en palabras ("3 meses", "los últimos 3 meses"). Sin esto ese 3 se leía
+     como cifra inventada y tumbaba la frase ENTERA — falso positivo visto en
+     producción. Entra SÓLO el número de la etiqueta: parseInt('3M')=3, y add
+     ya descarta NaN si la etiqueta no empezara por dígito. Nada más se
+     relaja: los demás campos siguen exigiendo su valor exacto.             */
+  if(p.drawdown_periodo != null){ add(parseInt(p.drawdown_periodo, 10)); }
   return s;
 }
 
