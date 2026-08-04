@@ -11816,8 +11816,9 @@ PRIORIDAD (obligatoria, en este orden; 2-3 líneas en total). ABRE la síntesis 
 1. stop_cruzado — una posición YA está por debajo de su stop. Es riesgo materializado y va PRIMERO: "[ticker] ya cruzó su stop."
 2. stop_mas_cercano — la posición más cerca de gatillar el suyo, sin haberlo cruzado: "[ticker] es tu posición más cercana a su stop, a [X]%."
 3. conflictos — las posiciones que el modelo contradice.
-4. Concentración (si supera su umbral, con ticker y porcentaje), drawdown (si supera el suyo, con su período y como valor de cuenta) y exposición: SOLO como contexto, y siempre DESPUÉS de lo anterior.
-Si no hay stop_cruzado, ni stop_mas_cercano, ni conflictos: describe el estado general con exposición y drawdown, con normalidad. No inventes una alerta que no existe.
+4. evento_proximo — el riesgo que VIENE. Si es_posicion: "[ticker] reporta [tipo] en [N] días, es tu [ordinal]ª posición". Si no (macro): "hay [tipo] en [N] días". Describe el hecho: "reporta mañana", NUNCA "considera reducir antes del reporte".
+5. Concentración (si supera su umbral, con ticker y porcentaje), drawdown (si supera el suyo, con su período y como valor de cuenta) y exposición: SOLO como contexto, y siempre DESPUÉS de lo anterior.
+Si no hay stop_cruzado, ni stop_mas_cercano, ni conflictos, ni evento_proximo: describe el estado general con exposición y drawdown, con normalidad. No inventes una alerta que no existe.
 
 La urgencia la marca el ORDEN y el hecho, no el adjetivo ni el consejo. Sigue prohibido calificar ("preocupante", "crítica", "arriesgada") y sigue prohibido decir qué hacer: "NVDA ya cruzó su stop" es un hecho y va; "deberías cerrar NVDA" no se escribe nunca.
 
@@ -11953,6 +11954,56 @@ function phiaStops(){
    rellena renderPortfolioValueChart con el rango activo), así que un período
    fijo de verdad exigiría una segunda serie —red nueva, fuera de R6—. Si el
    usuario mueve el selector, este payload queda obsoleto y se reconstruye. */
+/* ── R6.1 Fase 3 · el riesgo que VIENE ─────────────────────────────────────
+   Cruza PHCAL_STATE (tarjeta Próximos eventos) con POSITIONS y devuelve UN
+   candidato, o null.
+
+   El filtro por cartera NO es opcional: phcalLoad pide los earnings con
+   tickers = TICKERS ∪ WATCHLIST (l.9831), así que PHCAL_STATE.eventos YA trae
+   earnings de la watchlist. Sin `enCartera.has(...)`, R6 diría "es tu Nª
+   posición" de algo que el usuario no tiene.
+
+   Macro (ticker null) tiene su propia vara: solo entra si es inminente (<=2d)
+   Y de impacto alto. Un CPI a nueve días no es noticia para una síntesis de
+   tres líneas.
+
+   PHCAL_STATE es fire-and-forget desde renderHome, no viene con el `await` del
+   arranque como los niveles: puede ser null o traer error cuando R6 dispare.
+   En ese caso el campo se omite entero, como `conflictos`.                 */
+function phiaEventoProximo(){
+  const st = (typeof PHCAL_STATE !== 'undefined') ? PHCAL_STATE : null;
+  if(!st || st.error || !Array.isArray(st.eventos) || !st.eventos.length) return null;
+
+  const nk  = (typeof phNormTk === 'function') ? phNormTk : (v => String(v || '').trim().toUpperCase());
+  const pos = ((typeof POSITIONS !== 'undefined' && POSITIONS) || []).filter(p => p && p.symbol);
+  const orden = pos.slice()
+    .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0))
+    .map(p => nk(p.symbol));
+  const enCartera = new Set(orden);
+  const peso = i => i === 'alto' ? 3 : i === 'medio' ? 2 : 1;
+
+  let mejor = null, mejorImp = 0;
+  st.eventos.forEach(e => {
+    if(!e || e.dias_restantes == null || isNaN(e.dias_restantes)) return;
+    const dr  = Number(e.dias_restantes);
+    const imp = String(e.impacto || '').toLowerCase();
+    let cand;
+    if(e.ticker){
+      const tk = nk(e.ticker);
+      if(!enCartera.has(tk)) return;                  // watchlist-no-posición: fuera
+      cand = { ticker:tk, tipo:String(e.tipo || ''), dias_restantes:dr,
+               es_posicion:true, ordinal: orden.indexOf(tk) + 1 };
+    }else{
+      if(!(dr <= 2 && imp === 'alto')) return;         // macro: inminente Y grave
+      cand = { tipo:String(e.tipo || ''), dias_restantes:dr, es_posicion:false };
+    }
+    if(!mejor || dr < mejor.dias_restantes || (dr === mejor.dias_restantes && peso(imp) > mejorImp)){
+      mejor = cand; mejorImp = peso(imp);
+    }
+  });
+  return mejor;
+}
+
 function phiaPayload(){
   const nPos = (typeof POSITIONS !== 'undefined' && POSITIONS) ? POSITIONS.length : 0;
   if(!nPos) return null;
@@ -12002,6 +12053,8 @@ function phiaPayload(){
   const st = phiaStops();
   if(st.cruzado) p.stop_cruzado     = st.cruzado;
   if(st.cercano) p.stop_mas_cercano = st.cercano;
+  const ev = phiaEventoProximo();
+  if(ev) p.evento_proximo = ev;
   if(X && X.disponible){
     p.conflictos  = { n: X.conflictos.length, tickers: X.conflictos.map(c => c.ticker) };
     p.confirmadas = X.confirmas.length;
@@ -12070,6 +12123,9 @@ function phiaNumSet(p){
      cruzadas el modelo escribe "2 posiciones ya cruzaron su stop", y ese 2
      tumbaria la frase entera — el mismo fallo de invertido_usd. */
   if(p.stop_cruzado)     add(p.stop_cruzado.n);
+  /* Las dos cifras que el modelo dirá del evento: "en 3 días" y "tu 2ª
+     posición". Misma lección que invertido_usd y stop_cruzado.n. */
+  if(p.evento_proximo){ add(p.evento_proximo.dias_restantes); add(p.evento_proximo.ordinal); }
   if(p.concentracion){ add(p.concentracion.pct); add(p.concentracion.valor); }
   if(p.conflictos){ add(p.conflictos.n); }
   if(p.confirmadas != null) add(p.confirmadas);
@@ -12370,6 +12426,15 @@ const PHIA_CAT = {
     detalle: p => p.stop_mas_cercano.ticker + ' a ' + p.stop_mas_cercano.distancia_pct
                   + '%, umbral ' + p.umbral_stop_pct + '%'
   },
+  evento: {
+    etiqueta: 'Evento próximo',
+    detalle: p => {
+      const e = p.evento_proximo;
+      const cuando = e.dias_restantes <= 0 ? 'hoy' : (e.dias_restantes === 1 ? 'mañana' : 'en ' + e.dias_restantes + 'd');
+      return (e.es_posicion ? e.ticker + ' · ' + e.tipo : e.tipo + ' (macro)') + ' ' + cuando
+             + (e.ordinal ? ' · ' + e.ordinal + 'ª posición' : '');
+    }
+  },
   conflictos: {
     etiqueta: 'Conflictos modelo↔cartera',
     detalle: p => p.conflictos.n + ' de ' + p.n_posiciones + ' posiciones'
@@ -12451,6 +12516,7 @@ function phiaFactores(texto, p){
   if(p.stop_cruzado && (hay([p.stop_cruzado.n]) || (p.stop_cruzado.tickers || []).some(hayTk))) claves.push('stop_cruzado');
   if(p.stop_mas_cercano && (hay([p.stop_mas_cercano.distancia_pct]) || hayTk(p.stop_mas_cercano.ticker))) claves.push('stop_cerca');
   if(p.conflictos && kwConf && (hay([p.conflictos.n]) || (p.conflictos.tickers || []).some(hayTk))) claves.push('conflictos');
+  if(p.evento_proximo && (hay([p.evento_proximo.dias_restantes, p.evento_proximo.ordinal]) || hayTk(p.evento_proximo.ticker))) claves.push('evento');
   if(p.concentracion && (hay([p.concentracion.pct, p.concentracion.valor]) || hayTk(p.concentracion.ticker))) claves.push('concentracion');
   if(p.drawdown_pct != null && hay([p.drawdown_pct, Math.abs(p.drawdown_pct)])) claves.push('drawdown');
   if(hay([p.efectivo_pct, p.invertido_pct, p.efectivo, p.invertido_usd])) claves.push('exposicion');
@@ -12466,6 +12532,7 @@ function phiaFactoresR5(p){
   if(p.stop_cruzado)     claves.push('stop_cruzado');
   if(p.stop_mas_cercano) claves.push('stop_cerca');
   if(p.conflictos && p.conflictos.n > 0) claves.push('conflictos');
+  if(p.evento_proximo) claves.push('evento');
   if(p.concentracion && p.concentracion.pct > p.umbral_concentracion_pct) claves.push('concentracion');
   if(p.drawdown_pct != null && Math.abs(p.drawdown_pct) > p.umbral_drawdown_pct) claves.push('drawdown');
   if(p.efectivo_pct != null && p.invertido_pct != null) claves.push('exposicion');
