@@ -11817,8 +11817,9 @@ PRIORIDAD (obligatoria, en este orden; 2-3 líneas en total). ABRE la síntesis 
 2. stop_mas_cercano — la posición más cerca de gatillar el suyo, sin haberlo cruzado: "[ticker] es tu posición más cercana a su stop, a [X]%."
 3. conflictos — las posiciones que el modelo contradice.
 4. evento_proximo — el riesgo que VIENE. Si es_posicion: "[ticker] reporta [tipo] en [N] días, es tu [ordinal]ª posición". Si no (macro): "hay [tipo] en [N] días". Describe el hecho: "reporta mañana", NUNCA "considera reducir antes del reporte".
-5. Concentración (si supera su umbral, con ticker y porcentaje), drawdown (si supera el suyo, con su período y como valor de cuenta) y exposición: SOLO como contexto, y siempre DESPUÉS de lo anterior.
-Si no hay stop_cruzado, ni stop_mas_cercano, ni conflictos, ni evento_proximo: describe el estado general con exposición y drawdown, con normalidad. No inventes una alerta que no existe.
+5. peor_posicion — contexto de desempeño, retrospectivo y menos urgente que todo lo anterior: "[ticker] es tu posición con mayor pérdida, [X]% ([$Y])". Es un hecho, no un diagnóstico ni una sugerencia.
+6. Concentración (si supera su umbral, con ticker y porcentaje), drawdown (si supera el suyo, con su período y como valor de cuenta) y exposición: SOLO como contexto, y siempre DESPUÉS de lo anterior.
+Si no hay stop_cruzado, ni stop_mas_cercano, ni conflictos, ni evento_proximo, ni peor_posicion: describe el estado general con exposición y drawdown, con normalidad. No inventes una alerta que no existe.
 
 La urgencia la marca el ORDEN y el hecho, no el adjetivo ni el consejo. Sigue prohibido calificar ("preocupante", "crítica", "arriesgada") y sigue prohibido decir qué hacer: "NVDA ya cruzó su stop" es un hecho y va; "deberías cerrar NVDA" no se escribe nunca.
 
@@ -12010,6 +12011,40 @@ function phiaEventoProximo(){
   return mejor;
 }
 
+/* ── R6.1 Fase 2 · la posición que más pierde ──────────────────────────────
+   Retrospectivo, no urgente: va DESPUÉS del riesgo latente y del evento en la
+   jerarquía. Sin red nueva, el P&L ya viaja en POSITIONS.
+
+   DOBLE filtro de materialidad, y los dos hacen falta porque filtran cosas
+   distintas: el porcentual descarta el ruido (-1% no es noticia) y el de
+   magnitud descarta la posición diminuta que pierde mucho en % pero nada en
+   dinero. Con uno solo, R6 encabezaría con una pérdida de doce dólares.
+
+   OJO: unrealized_plpc viene como FRACCIÓN desde fetchBrokerPositions
+   (l.3535), no como porcentaje — de ahí el -0.05 y el x100 al construir.    */
+const PHIA_PEOR_PCT = -0.05;    // pierde >=5% (fracción, como llega del broker)
+const PHIA_PEOR_EQ  = 0.005;    // y esa pérdida es >=0.5% del equity
+
+function phiaPeorPosicion(eq){
+  if(!(eq > 0)) return null;
+  let peor = null;
+  ((typeof POSITIONS !== 'undefined' && POSITIONS) || []).forEach(p => {
+    if(!p || !p.symbol) return;
+    const plpc = Number(p.unrealized_plpc), pl = Number(p.unrealized_pl);
+    if(p.unrealized_plpc == null || isNaN(plpc)) return;
+    if(p.unrealized_pl   == null || isNaN(pl))   return;
+    if(plpc > PHIA_PEOR_PCT) return;                       // severidad
+    if(Math.abs(pl) / eq < PHIA_PEOR_EQ) return;           // magnitud
+    if(!peor || plpc < peor.plpc) peor = { symbol:p.symbol, plpc, pl };
+  });
+  if(!peor) return null;
+  return {
+    ticker:      peor.symbol,
+    perdida_pct: phiaRound(Math.abs(peor.plpc) * 100, 1),
+    perdida_usd: phiaRound(Math.abs(peor.pl), 2)
+  };
+}
+
 function phiaPayload(){
   const nPos = (typeof POSITIONS !== 'undefined' && POSITIONS) ? POSITIONS.length : 0;
   if(!nPos) return null;
@@ -12061,6 +12096,8 @@ function phiaPayload(){
   if(st.cercano) p.stop_mas_cercano = st.cercano;
   const ev = phiaEventoProximo();
   if(ev) p.evento_proximo = ev;
+  const peor = phiaPeorPosicion(x.eq);
+  if(peor) p.peor_posicion = peor;
   if(X && X.disponible){
     p.conflictos  = { n: X.conflictos.length, tickers: X.conflictos.map(c => c.ticker) };
     p.confirmadas = X.confirmas.length;
@@ -12132,6 +12169,12 @@ function phiaNumSet(p){
   /* Las dos cifras que el modelo dirá del evento: "en 3 días" y "tu 2ª
      posición". Misma lección que invertido_usd y stop_cruzado.n. */
   if(p.evento_proximo){ add(p.evento_proximo.dias_restantes); add(p.evento_proximo.ordinal); }
+  /* Se guardan como magnitud positiva pero el modelo puede escribir "-6.2%" o
+     "6.2%": ambos signos al set, como ya se hace con drawdown_pct y pl_dia. */
+  if(p.peor_posicion){
+    add(p.peor_posicion.perdida_pct); add(-p.peor_posicion.perdida_pct);
+    add(p.peor_posicion.perdida_usd); add(-p.peor_posicion.perdida_usd);
+  }
   if(p.concentracion){ add(p.concentracion.pct); add(p.concentracion.valor); }
   if(p.conflictos){ add(p.conflictos.n); }
   if(p.confirmadas != null) add(p.confirmadas);
@@ -12446,6 +12489,11 @@ const PHIA_CAT = {
     detalle: p => p.conflictos.n + ' de ' + p.n_posiciones + ' posiciones'
                   + (p.conflictos.tickers.length ? ' — ' + p.conflictos.tickers.join(', ') : '')
   },
+  peor_posicion: {
+    etiqueta: 'Mayor pérdida',
+    detalle: p => p.peor_posicion.ticker + ' −' + p.peor_posicion.perdida_pct
+                  + '% (' + fPS(-p.peor_posicion.perdida_usd) + ')'
+  },
   concentracion: {
     etiqueta: 'Concentración',
     detalle: p => p.concentracion.ticker + ' ' + p.concentracion.pct + '%'
@@ -12523,6 +12571,7 @@ function phiaFactores(texto, p){
   if(p.stop_mas_cercano && (hay([p.stop_mas_cercano.distancia_pct]) || hayTk(p.stop_mas_cercano.ticker))) claves.push('stop_cerca');
   if(p.conflictos && kwConf && (hay([p.conflictos.n]) || (p.conflictos.tickers || []).some(hayTk))) claves.push('conflictos');
   if(p.evento_proximo && (hay([p.evento_proximo.dias_restantes, p.evento_proximo.ordinal]) || hayTk(p.evento_proximo.ticker))) claves.push('evento');
+  if(p.peor_posicion && (hay([p.peor_posicion.perdida_pct, p.peor_posicion.perdida_usd]) || hayTk(p.peor_posicion.ticker))) claves.push('peor_posicion');
   if(p.concentracion && (hay([p.concentracion.pct, p.concentracion.valor]) || hayTk(p.concentracion.ticker))) claves.push('concentracion');
   if(p.drawdown_pct != null && hay([p.drawdown_pct, Math.abs(p.drawdown_pct)])) claves.push('drawdown');
   if(hay([p.efectivo_pct, p.invertido_pct, p.efectivo, p.invertido_usd])) claves.push('exposicion');
@@ -12539,6 +12588,7 @@ function phiaFactoresR5(p){
   if(p.stop_mas_cercano) claves.push('stop_cerca');
   if(p.conflictos && p.conflictos.n > 0) claves.push('conflictos');
   if(p.evento_proximo) claves.push('evento');
+  if(p.peor_posicion)  claves.push('peor_posicion');
   if(p.concentracion && p.concentracion.pct > p.umbral_concentracion_pct) claves.push('concentracion');
   if(p.drawdown_pct != null && Math.abs(p.drawdown_pct) > p.umbral_drawdown_pct) claves.push('drawdown');
   if(p.efectivo_pct != null && p.invertido_pct != null) claves.push('exposicion');
