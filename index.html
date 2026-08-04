@@ -11969,7 +11969,12 @@ function phiaStops(){
 
    PHCAL_STATE es fire-and-forget desde renderHome, no viene con el `await` del
    arranque como los niveles: puede ser null o traer error cuando R6 dispare.
-   En ese caso el campo se omite entero, como `conflictos`.                 */
+   En ese caso el campo se omite entero, como `conflictos`.
+
+   Los earnings de posición llevan además tope de horizonte: la ventana del
+   calendario es de 14 días (PHCAL_DIAS) y uno a 13 no es accionable — solo
+   quitaría espacio a lo urgente en una síntesis de tres líneas.            */
+const PHIA_EV_DIAS = 7;   // horizonte máximo de un earnings de posición
 function phiaEventoProximo(){
   const st = (typeof PHCAL_STATE !== 'undefined') ? PHCAL_STATE : null;
   if(!st || st.error || !Array.isArray(st.eventos) || !st.eventos.length) return null;
@@ -11991,6 +11996,7 @@ function phiaEventoProximo(){
     if(e.ticker){
       const tk = nk(e.ticker);
       if(!enCartera.has(tk)) return;                  // watchlist-no-posición: fuera
+      if(dr > PHIA_EV_DIAS) return;                   // demasiado lejos para accionar
       cand = { ticker:tk, tipo:String(e.tipo || ''), dias_restantes:dr,
                es_posicion:true, ordinal: orden.indexOf(tk) + 1 };
     }else{
