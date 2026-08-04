@@ -12035,7 +12035,12 @@ function phiaPeorPosicion(eq){
     if(p.unrealized_pl   == null || isNaN(pl))   return;
     if(plpc > PHIA_PEOR_PCT) return;                       // severidad
     if(Math.abs(pl) / eq < PHIA_PEOR_EQ) return;           // magnitud
-    if(!peor || plpc < peor.plpc) peor = { symbol:p.symbol, plpc, pl };
+    /* Empate exacto en %: gana la de MAYOR pérdida en dólares. Sin esto ganaba
+       la primera del array, que es orden de llegada del broker — arbitrario y
+       no reproducible entre refrescos. */
+    if(!peor || plpc < peor.plpc || (plpc === peor.plpc && Math.abs(pl) > Math.abs(peor.pl))){
+      peor = { symbol:p.symbol, plpc, pl };
+    }
   });
   if(!peor) return null;
   return {
