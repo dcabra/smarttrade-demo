@@ -5490,6 +5490,34 @@ function confMotor(sig){
   return (sig && sig.trazabilidad && sig.trazabilidad.motor_version) || 'v2';
 }
 
+/* ── P3 · Umbrales de decisión por motor — ESPEJO del backend ────────────────
+   v3: app/modules/m3v3/combiner.py:31-33 (UMBRAL_BUY / UMBRAL_BUY_RISK_OFF /
+   UMBRAL_SELL, PRE-REGISTRADOS). v2: app/modules/m3_signal/scorer.py (±1.2).
+   ⚠ El payload NO trae los umbrales resueltos, así que el frontend los DECLARA:
+   si cambian en el backend, hay que actualizarlos AQUÍ.
+   Las dos escalas NO son homólogas —v2 ≈ −3..+3 con corte/rango 0.40, simétrico
+   y fijo; v3 −1..+1 con corte/rango 0.30, asimétrico y dependiente del régimen—,
+   así que cada score se rotula con SU motor y SU umbral y NUNCA se funden en un
+   número común: eso daría una equivalencia falsa. */
+const UMBRAL_V3_BUY          = 0.30;
+const UMBRAL_V3_BUY_RISK_OFF = 0.40;   // en risk-off, comprar exige más
+const UMBRAL_V3_SELL         = -0.40;  // SELL no cambia con el régimen
+const UMBRAL_V2_BUY          = 1.2;
+const UMBRAL_V2_SELL         = -1.2;
+
+/* Rótulo sobrio "motor · umbral vigente" para el desglose de scores.
+   `regimen` null/undefined/'risk-on' → BUY 0.30 (el combiner trata None como
+   risk-on; hay un caso documentado en que llega None para TODOS los tickers,
+   y ese caso NO debe romper el render ni dejarlo vacío). */
+function scoreEscalaLbl(motor, regimen){
+  if(motor === 'v3'){
+    const ro = regimen === 'risk-off';
+    const buy = ro ? UMBRAL_V3_BUY_RISK_OFF : UMBRAL_V3_BUY;
+    return `v3 · BUY ≥ ${buy.toFixed(2)} · SELL ≤ ${UMBRAL_V3_SELL.toFixed(2)}${ro?' · risk-off':''}`;
+  }
+  return `v2 · BUY ≥ ${UMBRAL_V2_BUY.toFixed(2)} · SELL ≤ ${UMBRAL_V2_SELL.toFixed(2)}`;
+}
+
 /* Confianza en PUNTOS [0,100]; null si la respuesta no trae el campo. */
 function confPct(sig){
   const v = sig && sig.confianza;
@@ -7153,6 +7181,9 @@ function alertSnapshot(sig, fc){
     conf: confPct(sig), niveles: (sig&&sig.niveles)||{},   // §5.B.2: snapshot en puntos
     pos: traz.factores_positivos||[], neg: traz.factores_negativos||[], alts: traz.alertas||[],
     score_tec: traz.score_tecnico, score_ctx: traz.score_contexto, score_fin: traz.score_final,
+    /* P3: sin estos dos, una alerta releída no puede saber en qué escala están
+       sus scores ni cuál era su umbral vigente. Se congelan con el disparo. */
+    motor: confMotor(sig), regimen_mkt: traz.regimen_mercado ?? null,
     fc: fcSnap, sintesis: (sig&&sig.sintesis)||''
   };
 }
@@ -7331,7 +7362,7 @@ function openAlertExplain(id){
     const col=d.chg==null?'var(--text3)':d.chg>=0?'var(--green)':'var(--red)';
     return `<div class="alx-fc-col ${h===a.hz?'ref':''}"><div class="alx-fc-h">${h}${h===a.hz?' ★':''}</div><div class="alx-fc-p">${fP(d.p50)}</div>${d.chg!=null?`<div style="color:${col};font-size:9px;font-weight:700">${d.chg>=0?'+':''}${d.chg.toFixed(2)}%</div>`:''}</div>`;
   }).join('');
-  const scoreLine=(s.score_tec!=null||s.score_fin!=null)?`<div class="alx-scores">Score técnico <b>${s.score_tec??'—'}</b> · contexto <b>${s.score_ctx??'—'}</b> · final <b>${s.score_fin??'—'}</b></div>`:'';
+  const scoreLine=(s.score_tec!=null||s.score_fin!=null)?`<div class="alx-scores">Score técnico <b>${s.score_tec??'—'}</b> · contexto <b>${s.score_ctx??'—'}</b> · final <b>${s.score_fin??'—'}</b><span style="display:block;font-size:9px;color:var(--text3);margin-top:2px">${scoreEscalaLbl(s.motor||'v2', s.regimen_mkt)}</span></div>`:'';
   const sintH = s.sintesis?`<div class="alx-sec"><div class="alx-sec-t">Síntesis del modelo</div><div class="alx-sint">${(''+s.sintesis).replace(/[#*]/g,'').replace(/[\n\r]+/g,' ').replace(/</g,'&lt;').trim().slice(0,360)}</div></div>`:'';
   const nivH=(niv.sl!=null||niv.tp1!=null)?`<div class="alx-niv"><span>SL <b style="color:var(--red)">${niv.sl!=null?fP(niv.sl):'—'}</b></span><span>TP1 <b style="color:var(--green)">${niv.tp1!=null?fP(niv.tp1):'—'}</b></span>${niv.tp2!=null?`<span>TP2 <b>${fP(niv.tp2)}</b></span>`:''}</div>`:'';
   const buy = alertSide(a)==='buy';
@@ -8032,7 +8063,8 @@ NO digas que SmartTrade solo hace análisis técnico — eso es incorrecto.
 Ticker activo: ${t}
 Precio actual: ${fP(sig.precio_actual)}
 Señal del modelo: ${sig['señal']||'—'} (confianza ${fmtConfPct(confPct(sig))}% · motor ${confMotor(sig)})
-Score técnico: ${traz.score_tecnico||0} | Score contexto: ${traz.score_contexto||0} | Override evento: ${traz.override_evento_critico||0} | Score final: ${traz.score_final||0}
+Score técnico: ${traz.score_tecnico||0} | Score contexto: ${traz.score_contexto||0} | Override evento: ${confMotor(sig)==='v3'?'n/a (v3 no tiene ese concepto)':(traz.override_evento_critico||0)} | Score final: ${traz.score_final||0}
+Escala de los scores: ${scoreEscalaLbl(confMotor(sig), traz.regimen_mercado)}
 Stop Loss: ${fP(getEffectiveNiv(t).sl)} | TP1: ${fP(getEffectiveNiv(t).tp1)} | TP2: ${fP(getEffectiveNiv(t).tp2)} | TP3: ${fP(getEffectiveNiv(t).tp3)}
 Forecast 1D: ${fP(Hz['1D']?.p50)} | 3D: ${fP(Hz['3D']?.p50)} | 7D: ${fP(Hz['7D']?.p50)}
 Factores positivos: ${(traz.factores_positivos||[]).join('; ')||'ninguno'}
