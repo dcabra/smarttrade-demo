@@ -9302,7 +9302,10 @@ function stratModalForm(d){
   const mec=p.riesgo.max_exposicion_clase||{equity:70,crypto:30};
   const trail=(p.salida.trailing_pct??0), dd=(p.riesgo.drawdown_max_pct??0), cd=(p.riesgo.cooldown_ciclos??0), rf=(p.riesgo.ring_fence_pct??100);
   const rpt=(p.riesgo.riesgo_por_trade_pct??0), cinv=!!p.salida.cerrar_si_senal_invierte;
-  const trailOn=trail>0, ddOn=dd>0, cdOn=cd>0, rfOn=rf<100, rptOn=rpt>0;
+  /* P2 · circuit breaker por pérdida DIARIA. Se lee del params guardado, así que
+     una estrategia con el breaker fijado por API muestra su valor al abrir. */
+  const cb=(p.riesgo.circuit_breaker_dia_pct??0);
+  const trailOn=trail>0, ddOn=dd>0, cdOn=cd>0, rfOn=rf<100, rptOn=rpt>0, cbOn=cb>0;
   STRAT.modalBlackout = JSON.parse(JSON.stringify(p.temporalidad.ventanas_bloqueo||[]));
   const warn = running?`<div class="smf-warn">⚠️ Esta estrategia está corriendo. Al guardar cambios se pausará automáticamente (no se cambian reglas a mitad de marcha).</div>`:'';
   $('sm-form').innerHTML=`<div id="smf-msg-host"></div>${warn}
@@ -9402,6 +9405,7 @@ function stratModalForm(d){
        <div class="smf-risk-sub">Redes de seguridad. Todas vienen desactivadas; enciéndelas solo si las necesitas.</div>
        <div class="smf-sec-grid">${stratRiskRowHTML({id:'smf-trail', name:'Trailing stop', unit:'%', min:1, max:50, on:trailOn, val:trail, offText:'Desactivado', tip:'Cierra la posición si el precio cae este % desde el máximo que alcanzó tras la entrada. Se evalúa en el ciclo diario, no al minuto.', hintHTML:'0 = desactivado · banda útil 8–15%'})}
        ${stratRiskRowHTML({id:'smf-dd', name:'Auto-pausa por drawdown', unit:'%', min:1, max:90, on:ddOn, val:dd, offText:'Desactivado', warn:true, tip:'Si el equity de la estrategia cae este % desde su pico, la estrategia se pausa sola. Es la condición de muerte.', hintHTML:'0 = desactivado · al dispararse pasa a <b>pausada</b> · banda útil 10–25%'})}
+       ${stratRiskRowHTML({id:'smf-cb', name:'Circuit breaker diario', unit:'% del día', min:0.5, max:50, step:0.5, on:cbOn, val:cb, offText:'Desactivado', warn:true, tip:'% de pérdida del DÍA (desde la equity de apertura) que dispara la pausa. Distinto del drawdown, que mide desde el pico histórico. Apagado = 0; encendido = 0.5–50 (el backend rechaza valores intermedios entre 0 y 0.5).', hintHTML:'0 = desactivado · encendido <b>0.5–50</b> · al dispararse pasa a <b>pausada</b>'})}
        ${stratRiskRowHTML({id:'smf-cd', name:'Cooldown tras SL', unit:'ciclos', min:1, max:30, on:cdOn, val:cd, offText:'Desactivado', tip:'Tras salir por stop-loss, no vuelve a abrir ese mismo ticker durante N ciclos diarios.', hintHTML:'0 = desactivado · banda útil 1–10'})}
        ${stratRiskRowHTML({id:'smf-rf', name:'Ring-fence de capital', unit:'% del capital', min:1, max:100, on:rfOn, val:rf, offText:'Sin límite', tip:'Cupo máximo de capital que la estrategia puede tener desplegado a la vez, como % del capital inicial.', hintHTML:'100 = sin tope · límite de capital desplegado'})}
        ${stratRiskRowHTML({id:'smf-rpt', name:'Riesgo por trade', unit:'%', min:0.1, max:10, step:0.1, on:rptOn, val:rpt, offText:'Desactivado', tip:'Dimensiona la posición por el riesgo al SL: arriesga este % del equity si toca el stop. Si lo activas, SUSTITUYE al "% capital/señal" como método de sizing (requiere SL válido).', hintHTML:'0 = desactivado · reemplaza el % capital/señal · banda útil 0.5–2%'})}</div>
@@ -9454,7 +9458,7 @@ function stratModalForm(d){
 }
 function stratUpdateSecCount(){
   const el=$('smf-sec-count'); if(!el) return;
-  const n=['smf-trail','smf-dd','smf-cd','smf-rf','smf-rpt'].filter(id=>{const sw=$(id+'-sw');return sw&&sw.checked;}).length;
+  const n=['smf-trail','smf-dd','smf-cb','smf-cd','smf-rf','smf-rpt'].filter(id=>{const sw=$(id+'-sw');return sw&&sw.checked;}).length;
   if(n>0){ el.textContent=n+(n===1?' activo':' activos'); el.classList.add('on'); }
   else{ el.textContent=''; el.classList.remove('on'); }
 }
@@ -9478,7 +9482,7 @@ function stratRiskRowHTML(o){
 }
 function stratRiskToggle(id){
   const sw=$(id+'-sw'), inp=$(id); if(!sw||!inp) return;
-  const defs={'smf-trail':10,'smf-dd':15,'smf-cd':3,'smf-rf':50,'smf-rpt':1};
+  const defs={'smf-trail':10,'smf-dd':15,'smf-cb':2,'smf-cd':3,'smf-rf':50,'smf-rpt':1};
   if(sw.checked){ inp.disabled=false; if(inp.value===''||parseFloat(inp.value)<=0) inp.value=defs[id]||1; inp.focus(); }
   else{ inp.disabled=true; inp.value=''; }
   stratUpdateSecCount();
@@ -9560,7 +9564,7 @@ function stratModalRead(){
       universo:{modo, tickers:stratResolveUniverse(modo,explic)},
       entrada:{confianza_min:parseFloat($('smf-conf').value), concordancia_forecast:$('smf-conc').checked, evitar_alta_correlacion:$('smf-corr').checked, regimen_permitido:stratReadRegimen(), horizonte_ref:$('smf-hz').value, direccion:prevDir, rr_min:stratReadRR(), min_ratio_tp_peaje:stratReadPeaje()},
       salida:{obedecer_sl:true, obedecer_tp:$('smf-tpchk').checked, tp_nivel:$('smf-tp').value, salida_por_vencimiento:$('smf-venc').checked, trailing_pct:stratRiskVal('smf-trail',1,50,0), cerrar_si_senal_invierte:$('smf-cinv').checked},
-      riesgo:{perfil:$('smf-perfil').value, pct_capital_por_senal:parseFloat($('smf-pct').value), max_posiciones:parseInt($('smf-maxp').value), max_exposicion_clase:{equity:stratClamp($('smf-exp-eq').value,0,100,70), crypto:crVal}, drawdown_max_pct:stratRiskVal('smf-dd',1,90,0), cooldown_ciclos:stratRiskVal('smf-cd',1,30,0), ring_fence_pct:stratRiskVal('smf-rf',1,100,100), riesgo_por_trade_pct:stratRiskValFloat('smf-rpt',0.1,10,0)},
+      riesgo:{perfil:$('smf-perfil').value, pct_capital_por_senal:parseFloat($('smf-pct').value), max_posiciones:parseInt($('smf-maxp').value), max_exposicion_clase:{equity:stratClamp($('smf-exp-eq').value,0,100,70), crypto:crVal}, drawdown_max_pct:stratRiskVal('smf-dd',1,90,0), circuit_breaker_dia_pct:stratRiskValFloat('smf-cb',0.5,50,0), cooldown_ciclos:stratRiskVal('smf-cd',1,30,0), ring_fence_pct:stratRiskVal('smf-rf',1,100,100), riesgo_por_trade_pct:stratRiskValFloat('smf-rpt',0.1,10,0)},
       temporalidad:{vigencia_fin:null, solo_market_hours:$('smf-mh').checked, evitar_eventos:stratReadEvitar(), ventana_evento_horas:parseInt($('smf-ev-win').value)||48, ventanas_bloqueo:(STRAT.modalBlackout||[])},
       sim_config:{fee_bps:parseFloat($('smf-fee').value)||0, slippage_bps:parseFloat($('smf-slip').value)||0, benchmark:$('smf-bm').value}
     }
@@ -9608,6 +9612,7 @@ const SMF_DIFF_MAP = [
   ['riesgo.pct_capital_por_senal',       'smf-pct',    '% capital/señal'],
   ['riesgo.max_posiciones',              'smf-maxp',   'Máx posiciones'],
   ['riesgo.drawdown_max_pct',            'smf-dd',     'Auto-pausa drawdown'],
+  ['riesgo.circuit_breaker_dia_pct',     'smf-cb',     'Circuit breaker diario'],
   ['riesgo.cooldown_ciclos',             'smf-cd',     'Cooldown tras SL'],
   ['riesgo.ring_fence_pct',              'smf-rf',     'Ring-fence'],
   ['riesgo.riesgo_por_trade_pct',        'smf-rpt',    'Riesgo por trade'],
