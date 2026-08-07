@@ -1573,6 +1573,17 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
         </div>
       </div>
 
+      <div class="set-row">
+        <div class="set-row-main">
+          <div class="set-lbl">Default de tope por orden (USD)</div>
+          <div class="set-help">Con qué valor aparece ya puesto el campo "tope por orden" cada vez que abres una orden. Dentro del modal puedes cambiarlo para esa orden concreta sin que eso toque este default. La autoridad real del tope sigue siendo el backend. Vacío o 0 = sin default (se conserva el último tope que usaste).</div>
+          <div class="set-help" id="set-default-cap-lock" style="display:none;color:var(--orange)">🔒 Cuenta real: este default es un freno de seguridad. Para cambiarlo, desbloquea antes los topes desde el modal de orden ("🔒 editar topes").</div>
+        </div>
+        <div class="set-ctrl">
+          <input type="number" id="set-default-cap-order" min="0" step="any" placeholder="sin default"> <span class="set-unit">USD</span>
+        </div>
+      </div>
+
       <div class="set-msg" id="set-msg"></div>
     </div>
     <div class="om-foot">
@@ -3101,6 +3112,15 @@ function renderOrderAction(){
     badge.classList.toggle('real', !paper);
     // Cargar tope por orden (el único editable aquí) + presupuesto del día
     // (100% servidor), y resetear cualquier confirmación pendiente.
+    // Precedencia del tope por orden (#2): si Configuración define un default,
+    // manda al ABRIR la orden; si no hay default (0/vacío), se conserva el
+    // último valor per-orden de st_broker_caps, como antes. El usuario puede
+    // sobreescribir el campo para ESTA orden (onchange → saveCapsFromUI, que
+    // solo toca st_broker_caps) sin que cambie el default de Configuración.
+    // Cuando el default manda, sincronizamos st_broker_caps para que el chequeo
+    // previo al envío (getCaps, ~3350) mire el mismo número que se ve en pantalla.
+    const defPO = getDefaultCapPerOrder();
+    if(defPO>0 && getCaps().perOrder!==defPO) saveCaps({ perOrder: defPO });
     const caps=getCaps();
     $('om-cap-order').value = caps.perOrder || '';
     CAPS_UNLOCKED=false;        // cada render vuelve a bloquear la edición en real
@@ -3129,6 +3149,15 @@ function getCaps(){
 }
 function saveCaps(c){ try{ localStorage.setItem(CAPS_KEY, JSON.stringify(c)); }catch{} }
 
+/* ── Default de tope por orden (#2, configurable en ⚙ Configuración) ──
+   Clave SEPARADA de st_broker_caps a propósito: lo que el usuario escriba en el
+   campo del modal de orden vale para esa orden y NO pisa este default. Espejo
+   de getPersonalDailyLimit(). Sigue siendo cortesía de UI: la autoridad del
+   tope es BROKER_CAP_PER_ORDER en el backend. */
+function getDefaultCapPerOrder(){
+  try{ const v=parseFloat(localStorage.getItem('st_default_cap_per_order')); return (v>0) ? v : 0; }catch{ return 0; }
+}
+
 /* ── Fricción en cuenta REAL: el tope por orden queda bloqueado en el modal ──
    Editarlo exige escribir TOPES en un prompt. En paper se edita libre.
    Nota: la AUTORIDAD del tope es el backend (BROKER_CAP_PER_ORDER en
@@ -3143,6 +3172,16 @@ function setCapsLock(lockWanted){
     btn.textContent = locked ? '🔒 editar topes' : '🔓 topes editables';
     btn.disabled = !locked;
   }
+}
+/* Mismo candado, aplicado al default de tope por orden en ⚙ Configuración: en
+   cuenta real no debe haber una puerta de atrás para aflojar el tope sin pasar
+   por la fricción de unlockCaps(). Reusa CAPS_UNLOCKED, así que si ya escribiste
+   TOPES en esta sesión, ambos campos quedan editables. */
+function setSettingsCapLock(){
+  const el=$('set-default-cap-order'), hint=$('set-default-cap-lock');
+  const locked = (BROKER_INFO?.paper===false) && !CAPS_UNLOCKED;
+  if(el){ el.readOnly=locked; el.style.opacity=locked?'.55':''; }
+  if(hint) hint.style.display = locked ? 'block' : 'none';
 }
 function unlockCaps(){
   const t=prompt('⚠ CUENTA REAL: el tope por orden es tu freno de seguridad.\nPara editarlo en esta sesión escribe: TOPES');
@@ -5196,6 +5235,8 @@ function openSettings(){
   const ce=$('set-costo-eq'); if(ce) ce.value = getCostoEqPref();
   const cc=$('set-costo-cr'); if(cc) cc.value = getCostoCrPref();
   const lp=$('set-limite-personal'); if(lp) lp.value = getPersonalDailyLimit() || '';
+  const dc=$('set-default-cap-order'); if(dc) dc.value = getDefaultCapPerOrder() || '';
+  setSettingsCapLock();
   const msg=$('set-msg'); if(msg) msg.textContent='';
   $('settings-overlay')?.classList.add('show');
 }
@@ -5212,6 +5253,15 @@ function saveSettings(){
     localStorage.removeItem('st_perf_costo');   // limpiar clave vieja unificada
     if(lp>0) localStorage.setItem('st_personal_daily_limit', String(lp));
     else localStorage.removeItem('st_personal_daily_limit');
+    // Default de tope por orden: si el candado de cuenta real está puesto, se
+    // ignora el campo (espejo de saveCapsFromUI) — el candado no puede ser solo
+    // visual, o dejaría de ser un freno.
+    const dc=$('set-default-cap-order');
+    if(dc && !dc.readOnly){
+      const dcv=Math.max(0, parseFloat(dc.value||'0')||0);
+      if(dcv>0) localStorage.setItem('st_default_cap_per_order', String(dcv));
+      else localStorage.removeItem('st_default_cap_per_order');
+    }
   }catch(e){}
   const msg=$('set-msg'); if(msg) msg.textContent='✓ Guardado. Aplica a todos los tickers.';
   // Refrescar el termómetro del ticker activo SI está mostrando un timeframe
