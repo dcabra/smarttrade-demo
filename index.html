@@ -5221,6 +5221,11 @@ function saveSettings(){
   if(ACTIVE && typeof MODEL_PERF_TF!=='undefined' && MODEL_PERF_TF!=='1D'){
     setTimeout(()=>{ try{ reloadModelPerfIntradia(ACTIVE); }catch(e){} }, 0);
   }
+  // Repintar el hint del límite personal en el modal de orden: si está abierto
+  // (Configuración se abre encima sin cerrarlo), su texto quedaría con el valor
+  // viejo hasta reabrir la orden. Repinta solo ese <div>, no reconstruye el
+  // modal; ya lleva su propia guarda si el elemento no existe.
+  renderPersonalLimitHint();
   setTimeout(closeSettings, 1000);
 }
 function resetSettings(){
