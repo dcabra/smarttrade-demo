@@ -8107,8 +8107,8 @@ function buildChatContext(){
   let ctx=`Eres el asistente IA de SmartTrade, una plataforma de análisis técnico + contextual para traders retail en LatAm.
 Fecha actual: ${now}.
 Tickers en el panel: ${[...TICKERS,...WATCHLIST].join(', ')}.
-IMPORTANTE: SmartTrade SÍ incorpora noticias (Alpha Vantage), datos macro (FRED) y fundamentales en su análisis.
-NO digas que SmartTrade solo hace análisis técnico — eso es incorrecto.
+IMPORTANTE: SmartTrade SÍ incorpora noticias (Alpha Vantage), datos macro (FRED) y fundamentales en su análisis. Puedes decir que la plataforma USA esas fuentes; NO digas que solo hace análisis técnico.
+REGLA CRÍTICA — cíñete a los datos: responde ÚNICAMENTE con la información de ESTE contexto. NO uses tu conocimiento propio sobre las empresas, sus productos, arquitecturas, chips, ejecutivos, resultados o noticias — aunque creas saberlo. Distingue "qué fuentes usa la plataforma" (puedes mencionarlo) de "qué dijeron esas fuentes" (solo lo que aparezca literalmente aquí). Si te preguntan algo que este contexto no cubre, di con claridad que no tienes ese dato en el análisis, en vez de completarlo de memoria. Inventar un dato con apariencia de fuente es el peor error posible aquí.
 `;
   if(t && sig){
     const niv=sig.niveles||{};
@@ -8139,7 +8139,7 @@ Indicadores técnicos activos en pantalla: ${Object.entries(IND).filter(([k,v])=
     ctx+=`
 CONTEXTO M2 (noticias + macro + fundamentales):
 Noticias: ${not.total_noticias||0} titulares — sentimiento ${not.sentimiento_label||'N/D'} (score ${not.sentimiento_score||0})
-Resumen noticias: ${not.resumen||'Sin datos'}
+Resumen noticias (SOLO sentimiento agregado, NO son los titulares — no tienes las noticias individuales, no las describas ni inventes titulares): ${not.resumen||'Sin datos'}
 Eventos macro próximos: ${eventos}
 Fed Funds Rate: ${mac.macro_actual?.fed_funds_rate||'N/D'}% | CPI: ${mac.macro_actual?.cpi||'N/D'} | GDP: ${mac.macro_actual?.gdp||'N/D'}
 Alerta evento crítico: ${mac.alerta_evento_critico?'SÍ':'No'}
@@ -8187,7 +8187,7 @@ Estrategias automáticas (siempre simuladas en paper, NO ejecutan en la cuenta r
 Instrucciones: Responde en español neutro latinoamericano. Máximo 4-5 oraciones salvo que pidan detalle.
 Integra técnico + noticias + macro en tu respuesta cuando estén disponibles.
 No des consejos directos de inversión. Usa "el modelo sugiere", "el análisis indica".
-SmartTrade incorpora noticias de Alpha Vantage y datos macro del FRED — menciónalos cuando sean relevantes.${BROKER_INFO?.paper===false?'\n⚠ IMPORTANTE: la cuenta conectada es REAL con DINERO REAL. Sé especialmente prudente al hablar de riesgo; recuerda que las pérdidas son reales.':''}`;
+El bloque de noticias es un resumen de sentimiento agregado de Alpha Vantage: puedes referirte al conteo y al sentimiento general, pero NO tienes los titulares individuales, así que NO describas ni cites noticias específicas. Los datos macro del FRED (si aparecen arriba) sí puedes citarlos con su valor.${BROKER_INFO?.paper===false?'\n⚠ IMPORTANTE: la cuenta conectada es REAL con DINERO REAL. Sé especialmente prudente al hablar de riesgo; recuerda que las pérdidas son reales.':''}`;
   return ctx;
 }
 
