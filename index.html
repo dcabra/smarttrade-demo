@@ -1420,6 +1420,11 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .al-tk-sel{font-size:8.5px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text3);padding:2px 4px;max-width:120px}
 .al-unread{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--orange);margin-right:4px;flex-shrink:0;box-shadow:0 0 5px rgba(243,156,18,.7)}
 .alert-tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:14px;height:14px;border-radius:8px;background:var(--red);color:#fff;font-size:8px;font-weight:800;padding:0 4px;margin-left:5px}
+/* Pulso de la pestaña ⚡ Alertas al llegar una alerta nueva (molde de
+   halt-pulse): 3 pulsos y para. El badge solo aparece; sin esto, una alerta
+   nueva no llama la atención de quien no mira el panel izquierdo. */
+@keyframes tabpulse{0%,100%{box-shadow:0 0 0 0 rgba(231,76,60,0)}50%{box-shadow:0 0 0 5px rgba(231,76,60,.35)}}
+.bp-tab.tab-pulsing{animation:tabpulse .6s ease 3}
 .al-refresh-note{font-size:9.5px;color:var(--orange);background:rgba(243,156,18,.06);border-bottom:1px solid rgba(243,156,18,.2);padding:6px 12px;line-height:1.4;flex-shrink:0}
 /* Calendario: botón de pausa por evento */
 .cal-pause-btn{flex-shrink:0;align-self:center;font-size:8.5px;font-weight:700;color:#a855f7;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.3);border-radius:4px;padding:3px 8px;cursor:pointer;margin-left:8px;white-space:nowrap}
@@ -6028,9 +6033,14 @@ async function init(){
   setInterval(renderMktChip, 30*1000);
   setInterval(refreshPauseChip, 5*60*1000);
 
-  // 1c. Preferencias persistentes: intervalo de refresco (default 2min — con
-  //     "Manual" las alertas de cambio de señal nunca se detectarían), pestaña
-  //     activa del panel inferior, altura del panel y capas de la gráfica.
+  // 1c. Preferencias persistentes: intervalo de refresco (default 2min si no hay
+  //     preferencia guardada), pestaña activa del panel inferior, altura del
+  //     panel y capas de la gráfica.
+  //     Se respeta el valor guardado sea cual sea, INCLUIDO 0 (Manual): es una
+  //     elección legítima y no se resetea. Ojo a su consecuencia — con Manual el
+  //     detector de cambio de señal no corre, porque no hay segunda fetch que
+  //     comparar. Si un 0 guardado viene de la línea DEV retirada de bootUI(),
+  //     se corrige re-eligiendo el intervalo una vez a mano.
   const savedRefresh = localStorage.getItem('st_refresh');
   setRefresh(savedRefresh!=null ? savedRefresh : '120');
   const savedTab = localStorage.getItem('st_tab');
@@ -6074,12 +6084,17 @@ async function init(){
         get('/v1/forecast/'+t)
       ]);
       if(!CACHE[t]) CACHE[t]={};
+      // ANTES de pisar CACHE[t].sig: aquí es donde se cazan los cambios de señal
+      // ocurridos con la app cerrada (el store es la única fuente del previo).
+      // deferSave → una sola escritura al final, no N concurrentes.
+      detectarCambioSenal(t, sig, fc, {deferSave:true});
       CACHE[t].sig = sig;
       CACHE[t].fc  = fc;
       fillRow(t, sig, fc);
       return t;
     });
     await Promise.allSettled(sigPromises);
+    consolidarSignalSaves();   // una escritura para toda la tanda del portafolio
   }
 
   // 4. Cargar contexto de posiciones + watchlist + proxies de mercado en background
@@ -6426,10 +6441,14 @@ async function initWatchlist(){
       get(buildOhlcvUrl(t))
     ]);
     if(!CACHE[t]) CACHE[t]={};
+    // Igual que en init(): ANTES de escribir CACHE[t].sig, y con la escritura
+    // del store diferida a la consolidación de abajo.
+    detectarCambioSenal(t, sig, fc, {deferSave:true});
     if(sig) CACHE[t].sig=sig; if(fc) CACHE[t].fc=fc; if(ohlcv) CACHE[t].ohlcv=ohlcv;
     renderWatchlist();
   });
   await Promise.allSettled(proms);
+  consolidarSignalSaves();   // una escritura para toda la tanda de la watchlist
 }
 
 
@@ -6902,18 +6921,12 @@ async function refreshTicker(t){
   if(!CACHE[t]) CACHE[t]={};
   if(sig) CACHE[t].sigAt = Date.now();
 
-  // Detectar cambio de señal
-  const signalChanged = prev && sig && prev['señal'] !== sig['señal'];
-  if(signalChanged){
-    addAlert({
-      type:'signal', ticker:t,
-      from: prev['señal'], to: sig['señal'],
-      price: sig.precio_actual, conf: confPct(sig),   // §5.B.2: se PERSISTE en puntos — las alertas viven en localStorage y sobreviven al flip
-      niveles: sig.niveles||{},          // SL/TP para la orden contextual
-      hz: bestHorizon(sig, fc),          // horizonte de referencia (forecast más fuerte a favor)
-      snap: alertSnapshot(sig, fc)       // trazabilidad CONGELADA al instante del disparo
-    });
-  }
+  // Cambio de señal: lógica ÚNICA en detectarCambioSenal. Va aquí, ANTES de que
+  // más abajo se escriba CACHE[t].sig — la función lee el previo de CACHE, así
+  // que invocarla después no detectaría nunca nada.
+  // `prev` sigue vivo para los bloques de SL/TP y del flash: esos necesitan la
+  // señal ENTERA de esta sesión, no solo su dirección.
+  const signalChanged = detectarCambioSenal(t, sig, fc, {deferSave:false});
   // Detectar precio fuera de rango SL/TP — con dedup: una sola alerta del mismo
   // tipo por ticker cada 6h (antes, un precio oscilando alrededor del nivel
   // generaba una alerta por cada refresco).
@@ -7203,6 +7216,105 @@ function loadAlerts(){
 function saveAlerts(){ try{ localStorage.setItem(AL_KEY, JSON.stringify(ALERTS)); }catch{} }
 let ALERTS = loadAlerts();
 
+/* ── Última señal vista por ticker (persistida) ────────────────────────────
+   El detector de cambio de señal comparaba contra CACHE, que es memoria pura:
+   tras cada recarga la primera fetch de cada ticker era ciega (`prev`
+   undefined). Como las señales solo cambian en la captura nocturna (~23:05
+   UTC), había que tener la pestaña abierta en ese instante o el cambio se
+   perdía para siempre. Persistir la última señal cierra ese hueco.
+   Forma: { TICKER: {sig: 'BUY'|'SELL'|'HOLD', ts: epoch} }. Sin fecha del
+   payload: /v1/signal no devuelve job_date, y su `timestamp` es la hora en que
+   se sirvió (posiblemente de caché), no la del ciclo — el ts local es más
+   fiable para lo único que se decide con él, la caducidad. */
+const LAST_SIG_KEY = 'st_last_signals';
+const LAST_SIG_TTL_MS = 72 * 3600 * 1000;   // 72h: más viejo compara contra un mundo que ya no existe
+
+function loadLastSignals(){
+  try { return JSON.parse(localStorage.getItem(LAST_SIG_KEY) || '{}'); }
+  catch { return {}; }
+}
+function saveLastSignal(ticker, sig){
+  try {
+    const store = loadLastSignals();
+    store[ticker] = { sig: sig, ts: Date.now() };
+    localStorage.setItem(LAST_SIG_KEY, JSON.stringify(store));
+  } catch(e){ /* localStorage lleno o bloqueado: no romper el refresco */ }
+}
+
+/* ── Detección de cambio de señal · ÚNICA ──────────────────────────────────
+   Factorizada de refreshTicker porque las cargas MASIVAS del arranque
+   (init, initWatchlist) poblaban CACHE[t].sig a pelo, sin comparar: para
+   cuando el primer auto-refresco corría, `prev` ya era la señal NUEVA y el
+   store no se consultaba nunca. La persistencia quedaba inerte y el caso que
+   motivó la Pieza 1 —cerrar el navegador, la señal cambia de noche, abrir al
+   día siguiente— no se cubría.
+
+   ⚠ ORDEN OBLIGATORIO: llamarla ANTES de escribir CACHE[t].sig. Si se llama
+   después, `prev` sale de CACHE con el valor ya actualizado y no detecta nada
+   jamás — es exactamente el fallo diagnosticado el 7-ago.
+
+   opts.deferSave — false: escribe el store ya (refresco individual, sin
+   concurrencia). true: acumula en `_pendingSignalSaves` y NO toca localStorage;
+   el llamador consolida en UNA escritura tras su Promise.allSettled, en vez de
+   N read-modify-write concurrentes sobre la misma clave.
+   Las ALERTAS nunca se difieren: addAlert opera sobre ALERTS en memoria.
+   Devuelve true si hubo cambio (refreshTicker lo reusa para el flash). */
+let _pendingSignalSaves = {};
+
+function detectarCambioSenal(t, sig, fc, opts){
+  if(!sig || !sig['señal']) return false;
+  const nueva = sig['señal'];
+  //   1º CACHE — hubo otra fetch de este ticker en esta sesión de página.
+  //   2º store — primera vez tras recargar: se compara contra lo persistido.
+  let prevSenal = CACHE[t]?.sig?.['señal'] ?? null;
+  if(prevSenal == null){
+    const guardado = loadLastSignals()[t];
+    if(guardado && (Date.now() - (guardado.ts || 0)) <= LAST_SIG_TTL_MS){
+      prevSenal = guardado.sig;
+    }
+    // Caducado o inexistente → NO se alerta: solo se siembra abajo.
+  }
+  const cambio = !!(prevSenal && prevSenal !== nueva);
+  if(cambio){
+    addAlert({
+      type:'signal', ticker:t,
+      from: prevSenal, to: nueva,
+      price: sig.precio_actual, conf: confPct(sig),   // §5.B.2: se PERSISTE en puntos — las alertas viven en localStorage y sobreviven al flip
+      niveles: sig.niveles||{},          // SL/TP para la orden contextual
+      hz: bestHorizon(sig, fc),          // horizonte de referencia (forecast más fuerte a favor)
+      snap: alertSnapshot(sig, fc)       // trazabilidad CONGELADA al instante del disparo
+    });
+  }
+  // Guardar SIEMPRE, con o sin alerta: tras alertar es el anti-spam del F5 (un
+  // reload compara contra el valor ya actualizado y no re-dispara); sin alerta
+  // mantiene el `ts` fresco para que no caduque estando al día.
+  if(opts && opts.deferSave) _pendingSignalSaves[t] = { sig: nueva, ts: Date.now() };
+  else saveLastSignal(t, nueva);
+  return cambio;
+}
+
+/* Consolida el acumulador en UNA sola escritura. Fusiona ENCIMA del store para
+   no perder los tickers que no entraron en esta tanda. Idempotente: sin nada
+   pendiente no escribe.
+
+   ⛔ CRÍTICO: esta función debe permanecer 100% SÍNCRONA — sin ningún `await`
+   entre el read (loadLastSignals) y el write (setItem). init() e initWatchlist()
+   SE SOLAPAN: bootApp() llama a bootUI() sin await, y bootUI() lanza
+   initWatchlist() sin await, así que las dos tandas terminan en orden
+   impredecible y ambas llaman aquí. La seguridad ante esas escrituras
+   concurrentes depende de que este bloque corra entero sin intercalarse (JS es
+   single-thread) y de que el acumulador se cambie por un {} nuevo ANTES de leer.
+   Añadir un `await` aquí reintroduciría la condición de carrera. */
+function consolidarSignalSaves(){
+  const pend = _pendingSignalSaves;
+  _pendingSignalSaves = {};
+  if(!Object.keys(pend).length) return;
+  try{
+    const store = loadLastSignals();
+    localStorage.setItem(LAST_SIG_KEY, JSON.stringify({ ...store, ...pend }));
+  }catch(e){ /* localStorage lleno o bloqueado: no romper el arranque */ }
+}
+
 function alertId(){ return 'al_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6); }
 
 const AL_MESES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -7259,7 +7371,20 @@ function addAlert(a){
   saveAlerts();
   renderAlerts();
   updateAlertBadge();
+  pulseAlertTab();
   if(a.ticker) ringBell(a.ticker);
+}
+
+/* Pulso de la pestaña ⚡ Alertas. Solo si NO está abierta: si el usuario ya la
+   está viendo, el pulso sería ruido. El estado se lee del DOM (clase .on), no
+   de localStorage['st_tab'] — esa es la última preferencia guardada, que el
+   arranque restaura SIN llamar a switchTab, así que puede no ser el estado real. */
+function pulseAlertTab(){
+  const tb=$('tab-alerts'); if(!tb) return;
+  if(tb.classList.contains('on')) return;
+  tb.classList.remove('tab-pulsing');
+  void tb.offsetWidth;                  // reflow: re-dispara si ya venía pulsando
+  tb.classList.add('tab-pulsing');
 }
 
 /* Badge de no-leídas en la pestaña ⚡ Alertas */
@@ -7273,6 +7398,7 @@ function markAlertsRead(){
   ALERTS.forEach(a=>{ if(a.read===false){ a.read=true; changed=true; } });
   if(changed) saveAlerts();
   updateAlertBadge();
+  const tb=$('tab-alerts'); if(tb) tb.classList.remove('tab-pulsing');   // abrirla apaga el pulso
 }
 
 /* Filtros de la pestaña de alertas */
@@ -8285,7 +8411,10 @@ function bootUI(){
   // Restaurar el modo de operación guardado (drop-down del topbar)
   try{ const s=$('tmode-sel'); if(s) s.value = TRADING_MODE; }catch(e){}
   renderAlerts();   // pinta las alertas persistidas (localStorage) al iniciar
-  setTimeout(()=>setRefresh(0), 2000); /* DEV: refresco manual */
+  // RETIRADO: `setTimeout(()=>setRefresh(0), 2000); /* DEV: refresco manual */`
+  // Resto de desarrollo que forzaba Manual en CADA arranque, pisando la
+  // preferencia que init() acaba de restaurar. La preferencia manda; si alguien
+  // quiere Manual, lo elige en el desplegable.
   initWatchlist();
   // Pre-cargar contexto de proxies de mercado en background (no bloquea UI)
   setTimeout(()=>{
