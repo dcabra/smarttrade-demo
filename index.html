@@ -3129,7 +3129,7 @@ function renderOrderAction(){
     const caps=getCaps();
     $('om-cap-order').value = caps.perOrder || '';
     CAPS_UNLOCKED=false;        // cada render vuelve a bloquear la edición en real
-    setCapsLock(!paper);
+    setCapsLock(BROKER_INFO?.paper !== true);   // desconocido → tratar como REAL (fail-closed)
     renderDayBudget();
     renderPersonalLimitHint();
     cancelConfirm();
@@ -3184,7 +3184,7 @@ function setCapsLock(lockWanted){
    TOPES en esta sesión, ambos campos quedan editables. */
 function setSettingsCapLock(){
   const el=$('set-default-cap-order'), hint=$('set-default-cap-lock');
-  const locked = (BROKER_INFO?.paper===false) && !CAPS_UNLOCKED;
+  const locked = (BROKER_INFO?.paper!==true) && !CAPS_UNLOCKED;   // desconocido → tratar como REAL (fail-closed)
   if(el){ el.readOnly=locked; el.style.opacity=locked?'.55':''; }
   if(hint) hint.style.display = locked ? 'block' : 'none';
 }
