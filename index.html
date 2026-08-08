@@ -7282,6 +7282,7 @@ function detectarCambioSenal(t, sig, fc, opts){
       price: sig.precio_actual, conf: confPct(sig),   // §5.B.2: se PERSISTE en puntos — las alertas viven en localStorage y sobreviven al flip
       niveles: sig.niveles||{},          // SL/TP para la orden contextual
       hz: bestHorizon(sig, fc),          // horizonte de referencia (forecast más fuerte a favor)
+      trazabilidad: sig['trazabilidad'] || null,
       snap: alertSnapshot(sig, fc)       // trazabilidad CONGELADA al instante del disparo
     });
   }
