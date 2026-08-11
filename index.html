@@ -10280,7 +10280,16 @@ function pheRender(){
   let sigHtml;
   const ph = rc && rc.por_horizonte && rc.por_horizonte[hz];
   const tot = ph && ph.total;
-  if(!tot || tot.n === 0 || tot.win_rate == null){
+  if(rc && rc.edge_en_reserva){
+    /* §5 · hay muestra, pero el edge está tapado hasta el checkpoint. Decirlo así
+       y NO "sin señales en el tramo", que sería falso. El n sí se muestra: es un
+       conteo operativo, no un resultado. */
+    const nTxt = (tot && tot.n) ? ' Muestra evaluada: n=' + tot.n + '.' : '';
+    sigHtml = '<div class="phe-half"><div class="phe-lbl">Acierto de se&ntilde;al</div>'
+      + '<div class="phe-empty"><div class="phe-empty-msg">En reserva hasta el checkpoint</div>'
+      + '<div class="phe-empty-note">' + pheEsc((rc.edge_reserva_motivo || '') + nTxt) + '</div>'
+      + '</div></div>';
+  }else if(!tot || tot.n === 0 || tot.win_rate == null){
     sigHtml = '<div class="phe-half"><div class="phe-lbl">Acierto de se&ntilde;al</div><div class="phe-empty"><div class="phe-empty-msg">Sin se&ntilde;ales en el tramo</div><div class="phe-empty-note">El libro no registr&oacute; operaciones evaluables a ' + hz + 'D.</div></div></div>';
   }else{
     const exp = tot.retorno_promedio;
@@ -10348,6 +10357,8 @@ function pheSetCompact(){
   const el = $('phe-compact'); if(!el) return;
   const st = PHE_STATE;
   if(!st || st.error || !st.rc){ el.innerHTML = '<span class="phz-mini-dim">' + (st && st.error ? 'no disponible' : '—') + '</span>'; return; }
+  /* §5 · el número compacto es justamente el win-rate: en reserva no se pinta. */
+  if(st.rc.edge_en_reserva){ el.innerHTML = '<span class="phz-mini-dim">en reserva (&sect;5)</span>'; return; }
   const ph = st.rc.por_horizonte && st.rc.por_horizonte[PHE_HZ];
   const tot = ph && ph.total;
   if(!tot || tot.win_rate == null){ el.innerHTML = '<span class="phz-mini-dim">sin señales a ' + PHE_HZ + 'D</span>'; return; }
@@ -10459,6 +10470,10 @@ function phdDriftEval(st){
   if(motor !== 'v2' && motor !== 'v3')
     return { estado:'na', motivo:'Muestra de motor mixto (' + motor + '): drift no comparable todavía.' };
   if(st.rcError) return { estado:'na', motivo:'Backtest no disponible: ' + st.rcError };
+  /* §5 · sin esto el drift diría "sin señales BUY en el backtest", que es falso:
+     las hay, y lo que falta es el win-rate que está en reserva. */
+  if(st.rc && st.rc.edge_en_reserva)
+    return { estado:'na', motivo: st.rc.edge_reserva_motivo || 'Edge en reserva hasta el checkpoint (§5).' };
   if(!st.rc || !st.rc.por_horizonte) return { estado:'na', motivo:'Backtest sin datos en el tramo.' };
   const hz = phdHzKey(st.strat.params && st.strat.params.entrada && st.strat.params.entrada.horizonte_ref);
   const bt = st.rc.por_horizonte[hz] && st.rc.por_horizonte[hz].buy;

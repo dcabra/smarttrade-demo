@@ -519,7 +519,11 @@ function buildBody(){
   const scorer = $('f-scorer').value || 'v2';
   const confianza_min = parseFloat($('f-conf').value || '0') || 0;
   const lado = $('f-lado').value || 'ambos';
-  return { desde, hasta, tickers, horizontes, scorer, confianza_min, lado, solo_tramo_limpio };
+  // §5 · el laboratorio pide el edge A PROPÓSITO (la tarjeta del home no lo pide
+  // y por eso lo recibe en null hasta el checkpoint). Esto es lo que mantiene
+  // intacta la re-medición de F8. El modo Forecast ya retornó arriba: /forecast
+  // no declara este campo y nunca sirvió win-rate.
+  return { desde, hasta, tickers, horizontes, scorer, confianza_min, lado, solo_tramo_limpio, ver_edge: true };
 }
 
 async function run(){
