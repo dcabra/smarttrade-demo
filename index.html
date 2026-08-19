@@ -10221,6 +10221,27 @@ function pheMotorVivo(){
   return 'v2';
 }
 
+/* Motor vivo con TERCER estado: null = indeterminado (CACHE todavía sin señales).
+   `pheMotorVivo` devuelve 'v2' tanto cuando el libro ES v2 como cuando no hay con
+   qué saberlo, y esa ambigüedad aquí falla ABIERTO: en entrada directa al Home el
+   CACHE arranca vacío (mismo caso que ensureSpyOhlcv documenta), así que la card
+   pintaría el win-rate de v3-lab como si fuera el modelo justo en la ventana de
+   arranque. Distinguir "no sé" de "es v2" permite degradar por defecto y sólo
+   mostrar el número cuando el tramo v2 está CONFIRMADO. */
+function pheMotorVivoSeguro(){
+  try{
+    const ts = (typeof TICKERS !== 'undefined' && TICKERS) ? TICKERS : [];
+    let vistas = 0;
+    for(const t of ts){
+      const s = (typeof CACHE !== 'undefined' && CACHE[t]) ? CACHE[t].sig : null;
+      if(!s) continue;
+      vistas++;
+      if(typeof confMotor === 'function' && confMotor(s) === 'v3') return 'v3';
+    }
+    return vistas ? 'v2' : null;
+  }catch(e){ return null; }
+}
+
 /* Sparkline de la curva de equity (mismo patrón SVG que el resto del front). */
 function pheSpark(curva, positive){
   if(!curva || curva.length < 2) return '<div class="phe-foot" style="text-align:center;padding:14px 0">sin curva en el tramo</div>';
@@ -10280,7 +10301,17 @@ function pheRender(){
   let sigHtml;
   const ph = rc && rc.por_horizonte && rc.por_horizonte[hz];
   const tot = ph && ph.total;
-  if(rc && rc.edge_en_reserva){
+  if(st.motorVivo !== 'v2'){
+    /* Mismo criterio que backtest.html:215 y que el drift de S3: el número que
+       este panel puede calcular es de v3-lab, no del motor v3. Se dice, no se
+       pinta. Antes que `edge_en_reserva` a propósito: con rc null ese check no
+       aplicaría y caeríamos en "Sin señales en el tramo", que sería falso. */
+    sigHtml = '<div class="phe-half"><div class="phe-lbl">Acierto de se&ntilde;al</div>'
+      + '<div class="phe-empty"><div class="phe-empty-msg">No evaluable en este panel</div>'
+      + '<div class="phe-empty-note">El motor v3 (F5/F6) se eval&uacute;a en la sombra/forward, no en este panel; '
+      + 'el backtest de este panel usa &laquo;v3-lab&raquo; (scorer de auditor&iacute;a del 10-jul), que es otro motor.</div>'
+      + '</div></div>';
+  }else if(rc && rc.edge_en_reserva){
     /* §5 · hay muestra, pero el edge está tapado hasta el checkpoint. Decirlo así
        y NO "sin señales en el tramo", que sería falso. El n sí se muestra: es un
        conteo operativo, no un resultado. */
@@ -10314,7 +10345,7 @@ function pheRender(){
     var _v3 = (st.motor === 'v3');
     var _msg = _v3 ? 'Calibraci&oacute;n de v3 &mdash; en desarrollo' : 'Forecast no disponible';
     var _note = _v3
-      ? 'Los cuantiles por bucket (F4) a&uacute;n no se persisten para backtestear el forecast v3 desde el libro. Se activa al cerrar ese punto del roadmap. La mitad de se&ntilde;al (v3) s&iacute; est&aacute; viva.'
+      ? 'Los cuantiles por bucket (F4) a&uacute;n no se persisten para backtestear el forecast v3 desde el libro. Se activa al cerrar ese punto del roadmap. La calibraci&oacute;n honesta de v3 es la vigilancia forward (coverage_watch), no un recompute.'
       : pheEsc(st.fcError);
     fcHtml = '<div class="phe-half" title="' + pheEsc(st.fcError) + '"><div class="phe-lbl">Calibraci&oacute;n del forecast</div><div class="phe-empty"><span class="phe-empty-msg">' + _msg + '</span><div class="phe-empty-note">' + _note + '</div></div></div>';
   }else{
@@ -10356,6 +10387,9 @@ function pheRender(){
 function pheSetCompact(){
   const el = $('phe-compact'); if(!el) return;
   const st = PHE_STATE;
+  /* Sin esto el chip mostraría '—', que se lee como "no hay datos" cuando la
+     verdad es "no es evaluable aquí". Mismo criterio que el cuerpo. */
+  if(st && !st.error && st.motorVivo !== 'v2'){ el.innerHTML = '<span class="phz-mini-dim">no evaluable aqu&iacute;</span>'; return; }
   if(!st || st.error || !st.rc){ el.innerHTML = '<span class="phz-mini-dim">' + (st && st.error ? 'no disponible' : '—') + '</span>'; return; }
   /* §5 · el número compacto es justamente el win-rate: en reserva no se pinta. */
   if(st.rc.edge_en_reserva){ el.innerHTML = '<span class="phz-mini-dim">en reserva (&sect;5)</span>'; return; }
@@ -10383,7 +10417,14 @@ async function pheLoad(){
   const card = $('phe-card'); if(!card) return;
   card.style.display = '';
   const motor = PHE_MOTOR_PREF || pheMotorVivo();   // fijado a v3; si algún día se quiere el vivo, PHE_MOTOR_PREF=null
-  const fresh = PHE_STATE && !PHE_STATE.error && PHE_STATE.motor === motor && (Date.now() - PHE_STATE.at) < PHE_TTL_MS;
+  // Motor VIVO del libro, independiente de `motor` (que es el scorer que se PIDE,
+  // clavado en 'v3' por PHE_MOTOR_PREF). Son cosas distintas y hay que no
+  // confundirlas: `motor` decide qué se pide, `motorVivo` decide si el resultado
+  // es presentable como "el modelo". Entra en la clave de frescura porque si no,
+  // un estado cacheado de antes del flip seguiría pintando v3-lab 5 min más.
+  const motorVivo = pheMotorVivoSeguro();
+  const fresh = PHE_STATE && !PHE_STATE.error && PHE_STATE.motor === motor
+    && PHE_STATE.motorVivo === motorVivo && (Date.now() - PHE_STATE.at) < PHE_TTL_MS;
   if(fresh){ pheRender(); return; }
   if(PHE_LOADING) return;
   PHE_LOADING = true;
@@ -10391,13 +10432,18 @@ async function pheLoad(){
 
   const desde = new Date(Date.now() - PHE_VENTANA_DIAS * 86400000).toISOString().slice(0, 10);
   const base = { horizontes: [1, 3, 7], solo_tramo_limpio: true, desde: desde };
-  const next = { motor: motor, at: Date.now(), rc: null, fc: null, fcError: null, error: null };
+  const next = { motor: motor, motorVivo: motorVivo, at: Date.now(), rc: null, fc: null, fcError: null, error: null };
 
-  try{
-    next.rc = await pheFetch('/v1/backtest/recompute', Object.assign({}, base, { scorer: motor, lado: 'ambos' }));
-  }catch(e){
-    if(e.code === 'NO_TOKEN' || e.code === 'UNAUTHORIZED'){ card.style.display = 'none'; PHE_LOADING = false; return; }
-    next.error = e.message || 'No se pudo recomputar el modelo.';
+  // Sólo con el tramo v2 CONFIRMADO se pide el recompute: ahí v3-lab es un scorer
+  // de auditoría legítimo. Con el libro en v3 (o indeterminado) no se pide — el
+  // número no sería del motor v3 y no hay forma honesta de presentarlo.
+  if(motorVivo === 'v2'){
+    try{
+      next.rc = await pheFetch('/v1/backtest/recompute', Object.assign({}, base, { scorer: motor, lado: 'ambos' }));
+    }catch(e){
+      if(e.code === 'NO_TOKEN' || e.code === 'UNAUTHORIZED'){ card.style.display = 'none'; PHE_LOADING = false; return; }
+      next.error = e.message || 'No se pudo recomputar el modelo.';
+    }
   }
 
   if(!next.error){
@@ -10469,6 +10515,17 @@ function phdDriftEval(st){
   const motor = ef.motor_version || 'v2';
   if(motor !== 'v2' && motor !== 'v3')
     return { estado:'na', motivo:'Muestra de motor mixto (' + motor + '): drift no comparable todavía.' };
+  /* El drift resta `ef.win_rate` (muestra viva) menos el win-rate del recompute.
+     Con la muestra viva en v3 los dos lados salen de motores DISTINTOS —
+     v3-lab no comparte escala, umbral ni insumos con m3v3 (sin sección cruzada,
+     sin régimen SPY, sin judge, sin calibración) — así que la resta no mide
+     deriva: mide la diferencia entre dos modelos. Se degrada en vez de pintar
+     un número que finge coherencia, igual que el resto de los caminos 'na'.
+     `motor` viaja para que el chip 'motor v3' del encabezado siga declarándose. */
+  if(motor === 'v3')
+    return { estado:'na', motor:motor,
+             motivo:'El motor v3 (F5/F6) se evalúa en la sombra/forward, no en este panel; '
+                  + 'el backtest de este panel usa «v3-lab» (scorer de auditoría del 10-jul), que es otro motor.' };
   if(st.rcError) return { estado:'na', motivo:'Backtest no disponible: ' + st.rcError };
   /* §5 · sin esto el drift diría "sin señales BUY en el backtest", que es falso:
      las hay, y lo que falta es el win-rate que está en reserva. */
@@ -10743,8 +10800,14 @@ async function phdLoad(){
 
   // (d) recompute EMPAREJADO — sólo si la muestra viva es de un motor limpio (v2 o v3)
   const efMotor = next.ef && next.ef.motor_version;
-  const motorLimpio = (efMotor === 'v2' || efMotor === 'v3');
-  if(next.ef && next.ef.disponible && motorLimpio){
+  // v3 NO entra: `scorer:'v3'` en /backtest/recompute es «v3-lab» (scorer de
+  // auditoría del 10-jul, sobre backtest_snapshots, escala ±3.5, umbral BUY 1.2),
+  // NO el motor v3 de F5/F6 (m3v3, sobre signals_v3_shadow, escala [0,1], umbral
+  // 0.30). Mismo nombre, motores distintos: emparejarlos compara peras con
+  // manzanas y rotula el resultado como drift. backtest.html:215 ya lo etiqueta
+  // así; aquí se degrada en vez de re-etiquetar (el número no es rescatable).
+  const motorBacktesteable = (efMotor === 'v2');
+  if(next.ef && next.ef.disponible && motorBacktesteable){
     const body = { horizontes: [1, 3, 7], solo_tramo_limpio: true, scorer: efMotor, lado: 'buy' };
     const uni = next.strat.params && next.strat.params.universo;
     if(uni && uni.modo === 'explicito' && Array.isArray(uni.tickers) && uni.tickers.length) body.tickers = uni.tickers;
