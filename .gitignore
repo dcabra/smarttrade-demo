@@ -1,0 +1,39 @@
+# smarttrade-demo · frontend puro (arquitectura.html · backtest.html · index.html)
+#
+# Portado del blindaje de smarttrade-backend/.gitignore (768f6fa). Sólo se
+# traen los patrones que APLICAN a un repo de HTML: los de Python del backend
+# (__pycache__, .venv, *.db, checkpoints del backfill) se dejan fuera a
+# propósito — un ignore lleno de reglas muertas miente sobre qué es el repo.
+#
+# Verificado al crearlo: NINGÚN archivo trackeado cae bajo estos patrones.
+
+# ── Secretos y trabajo local — NUNCA se versionan ───────────────────────────
+#   _local/   : cajón de trabajo local (secretos, borradores, sueltos).
+#   .env      : variables con credenciales.
+#   *.zip     : respaldos comprimidos, que suelen arrastrar .env/claves.
+#   *.key/*.pem : material criptográfico suelto. No hay ninguno hoy; la regla
+#               existe para que el primero que aparezca nazca ignorado, no para
+#               tapar algo que ya esté aquí.
+_local/
+.env
+*.zip
+*.key
+*.pem
+
+# ── Respaldos manuales pre-git ──────────────────────────────────────────────
+# El motivo concreto: index.html.bak-01ago-e4 vivió semanas como untracked SIN
+# ignorar, o sea visible en `git status` y a un `git add .` de entrar al repo.
+# El backend ya tenía este blindaje; el front no.
+*.bak
+*.bak-*
+
+# ── Ruido de herramientas ───────────────────────────────────────────────────
+# .pytest_cache/ existe aquí (12-jul) por una corrida de pytest desde el
+# directorio equivocado. Hoy se auto-ignora porque pytest escribe su propio
+# .gitignore dentro; declararlo aquí lo hace independiente de ese detalle.
+# .claude/ lo tapaba sólo el ignore GLOBAL de la máquina de Daniel
+# (~/.config/git/ignore), así que en un clon en otro equipo reaparecería.
+# Declararlo en el repo lo vuelve independiente de la máquina.
+*.log
+.pytest_cache/
+.claude/
