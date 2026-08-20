@@ -9080,9 +9080,15 @@ function stratRenderItems(){
     const retHtml = (ret!=null)
       ? `<span class="stratp-item-ret ${ret>0?'g':ret<0?'r':''}" title="Retorno acumulado del equity paper (${s.equity_actual!=null?fP(s.equity_actual):'—'} vs capital inicial)">${ret>=0?'+':''}${ret}%</span>`
       : `<span class="stratp-item-ret na" title="Aún sin curva de equity">—%</span>`;
-    const metric=ef.disponible&&ef.win_rate!=null
+    /* §5 · mismo criterio que stratEffMini: por defecto el copy viejo; "en
+       reserva" SÓLO con evidencia positiva. Sin número: ni win-rate ni n. */
+    const efReserva = ef.edge_en_reserva === true
+                      || (ef.disponible === false && (ef.muestra||0) > 0);
+    const metric = ef.disponible && ef.win_rate != null
       ? `<span class="stratp-item-metric" title="Efectividad histórica: señales acertadas / evaluadas">✦ ${ef.win_rate}% · ${ef.muestra}</span>`
-      : `<span class="stratp-item-metric na" title="Aún sin muestra histórica">—</span>`;
+      : efReserva
+        ? `<span class="stratp-item-metric na" title="${(ef.mensaje||'Edge en reserva hasta el checkpoint (§5).').replace(/"/g,'&quot;')}">en reserva (§5)</span>`
+        : `<span class="stratp-item-metric na" title="Aún sin muestra histórica">—</span>`;
     const acts=`<div class="stratp-row-actions">
       <button class="stratp-act a-play"  title="Activar" ${running?'disabled':''} onclick="event.stopPropagation();stratPlay(${s.id})">▶</button>
       <button class="stratp-act a-pause" title="Pausar"  ${running?'':'disabled'} onclick="event.stopPropagation();stratPause(${s.id})">⏸</button>
@@ -9393,7 +9399,18 @@ async function stratPrefetchPrices(d){
   if(STRAT.sel&&STRAT.sel.id===d.id) stratRenderDetail(STRAT.sel);
 }
 function stratEffMini(ef){
-  if(!ef||!ef.disponible) return `<div style="font-size:10px;color:#7a869a;margin-bottom:8px">Sin muestra histórica aún — déjala correr en paper.</div>`;
+  if(!ef||!ef.disponible){
+    /* §5 · tras bbdddf9 (backend) "no disponible" dejó de ser un solo caso: con
+       el edge en reserva el payload trae disponible=false PERO con muestra. Sin
+       distinguirlos, la tarjeta dice "sin muestra" sobre una muestra que existe.
+       FAIL-SAFE: el copy por defecto NO cambia; sólo se sustituye con evidencia
+       POSITIVA de redacción — la bandera, o (backend viejo) disponible=false con
+       conteo>0. NO se pinta ningún número: eso es justo lo que §5 tapa. */
+    const enReserva = !!ef && (ef.edge_en_reserva === true
+                               || (ef.disponible === false && (ef.muestra||0) > 0));
+    if(enReserva) return `<div style="font-size:10px;color:#7a869a;margin-bottom:8px">Edge en reserva (§5) — se destapa en el checkpoint.</div>`;
+    return `<div style="font-size:10px;color:#7a869a;margin-bottom:8px">Sin muestra histórica aún — déjala correr en paper.</div>`;
+  }
   return `<div class="stratp-eff-mini">
     <div><div class="k">Win rate</div><div class="v">${ef.win_rate}%</div></div>
     <div><div class="k">Ret. medio</div><div class="v ${ef.retorno_medio_pct>=0?'g':'r'}">${ef.retorno_medio_pct>=0?'+':''}${ef.retorno_medio_pct}%</div></div>
@@ -10284,7 +10301,14 @@ function pheRender(){
   const st = PHE_STATE;
   const motorEl = $('phe-motor'), subEl = $('phe-sub');
 
-  if(motorEl) motorEl.style.display = (st && st.motor === 'v3') ? '' : 'none';
+  /* El chip declara el motor del LIBRO VIVO. `st.motor` no sirve: es
+     PHE_MOTOR_PREF, una constante clavada en 'v3', así que la condición vieja
+     era siempre verdadera y el chip rotulaba "motor v3" también con el libro en
+     v2 — el cabo que 5c87934 dejó anotado. `st.motorVivo` (pheMotorVivoSeguro)
+     sí lee el libro, y tiene tercer estado: null = CACHE frío. FAIL-CLOSED:
+     sólo rotula con 'v3' CONFIRMADO; v2 e indeterminado ocultan. Mismo criterio
+     que el chip gemelo de S3 (phdRender). */
+  if(motorEl) motorEl.style.display = (st && st.motorVivo === 'v3') ? '' : 'none';
 
   if(!st){ body.innerHTML = '<div class="phe-skel">Cargando eficiencia del modelo&hellip;</div>'; if(subEl) subEl.textContent=''; return; }
 
