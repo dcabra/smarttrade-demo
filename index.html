@@ -5631,11 +5631,26 @@ function scoreEscalaLbl(motor, regimen, umbrales){
   return `v2 · BUY ≥ ${UMBRAL_V2_BUY.toFixed(2)} · SELL ≤ ${UMBRAL_V2_SELL.toFixed(2)}`;
 }
 
+/* F2 paso 2 · La escala de confianza la DECLARA el contrato; el cliente ya no la
+   deduce del motor. sig.contrato.confianza.escala nombra en qué vive el valor y
+   este mapa lo traduce a puntos [0,100]. "×100 si v3" (confMotor) baja a RED:
+   pre-contrato (payload viejo, get()→null, pestaña previa al deploy) o escala
+   presente pero NO reconocida. El valor NO se toca: contrato.confianza.valor ES
+   sig.confianza (misma ref, contrato_motor.py:156), así que el guard sigue sobre
+   el escalar y confPct devuelve el MISMO número — sólo cambia de dónde sale la
+   escala. Espeja umbralesDelContrato del paso 1: el contrato manda, la constante
+   es la red. */
+const CONF_ESCALA_PCT_MULT = { prob_0_1: 100, puntos_0_100: 1 };
+
 /* Confianza en PUNTOS [0,100]; null si la respuesta no trae el campo. */
 function confPct(sig){
   const v = sig && sig.confianza;
   if(v === null || v === undefined || v === '' || isNaN(v)) return null;
-  return confMotor(sig) === 'v3' ? Number(v) * 100 : Number(v);
+  const esc = sig && sig.contrato && sig.contrato.confianza && sig.contrato.confianza.escala;
+  const mult = (esc && Object.prototype.hasOwnProperty.call(CONF_ESCALA_PCT_MULT, esc))
+    ? CONF_ESCALA_PCT_MULT[esc]
+    : (confMotor(sig) === 'v3' ? 100 : 1);
+  return Number(v) * mult;
 }
 
 /* Texto. v2 ya son enteros → sale idéntico a antes del flip. */
