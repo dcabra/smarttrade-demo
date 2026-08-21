@@ -5550,11 +5550,23 @@ function confMotor(sig){
   return (sig && sig.trazabilidad && sig.trazabilidad.motor_version) || 'v2';
 }
 
-/* ── P3 · Umbrales de decisión por motor — ESPEJO del backend ────────────────
-   v3: app/modules/m3v3/combiner.py:31-33 (UMBRAL_BUY / UMBRAL_BUY_RISK_OFF /
-   UMBRAL_SELL, PRE-REGISTRADOS). v2: app/modules/m3_signal/scorer.py (±1.2).
-   ⚠ El payload NO trae los umbrales resueltos, así que el frontend los DECLARA:
-   si cambian en el backend, hay que actualizarlos AQUÍ.
+/* ── F2 · Umbrales de decisión — el contrato manda; esto es la RED ───────────
+   Desde F1 el backend PUBLICA los umbrales YA RESUELTOS en
+   `sig.contrato.umbrales` {buy, sell, risk_off, fuente}, así que el camino VIVO
+   deja de declararlos: los lee. Estas constantes ya NO son el espejo del backend.
+
+   POR QUÉ NO SE BORRAN. `scoreEscalaLbl` tiene dos llamadores y sólo uno tiene
+   una señal viva:
+     · :8249 (contexto del chat) — tiene `sig` → lee el contrato.
+     · :7547 (modal de alerta)   — NO tiene `sig`: renderiza desde `a.snap`, un
+       snapshot CONGELADO en localStorage que sólo guarda `motor` y `regimen_mkt`
+       (ver alertSnapshot). Las alertas ya guardadas no traen contrato y nunca lo
+       traerán. Y hacer que esa rama leyera el contrato VIVO sería un BUG:
+       pintaría los umbrales de HOY sobre una alerta de anteayer — justo lo que
+       congelar `motor`/`regimen_mkt` existe para evitar.
+   O sea: esto es el fallback de las alertas congeladas, no un espejo que
+   mantener sincronizado a mano.
+
    Las dos escalas NO son homólogas —v2 ≈ −3..+3 con corte/rango 0.40, simétrico
    y fijo; v3 −1..+1 con corte/rango 0.30, asimétrico y dependiente del régimen—,
    así que cada score se rotula con SU motor y SU umbral y NUNCA se funden en un
@@ -5565,11 +5577,52 @@ const UMBRAL_V3_SELL         = -0.40;  // SELL no cambia con el régimen
 const UMBRAL_V2_BUY          = 1.2;
 const UMBRAL_V2_SELL         = -1.2;
 
+/* Umbrales UTILIZABLES del contrato, o null si no los hay.
+
+   `fuente` es el permiso: sólo valen "motor_v3" (resueltos por el combiner para
+   ESTA señal) y "literales_v2" (los del adaptador). "no_disponible_payload_anterior"
+   significa "este payload es anterior al contrato" → red.
+
+   ⚠ SIN `Number()`: `Number(null)` es 0, y 0 es finito. Un `buy: null` con
+   fuente válida se colaría y pintaría "BUY ≥ 0.00" — un umbral inventado con
+   pinta de real. `Number.isFinite` NO coacciona, así que exige un number de
+   verdad, que es lo que el backend emite.
+
+   Y se exigen los DOS a la vez: si uno solo falla se devuelve null y el rótulo
+   cae al par de constantes COMPLETO. Nunca se mezcla un buy del contrato con un
+   sell hardcodeado: serían dos fuentes distintas en la misma frase. */
+const UMBRAL_FUENTES_VALIDAS = new Set(['motor_v3', 'literales_v2']);
+
+function umbralesDelContrato(u){
+  if(!u || !UMBRAL_FUENTES_VALIDAS.has(u.fuente)) return null;
+  if(!Number.isFinite(u.buy) || !Number.isFinite(u.sell)) return null;
+  return { buy: u.buy, sell: u.sell, ro: u.risk_off === true };
+}
+
 /* Rótulo sobrio "motor · umbral vigente" para el desglose de scores.
+   `umbrales` (OPCIONAL) = `sig.contrato.umbrales`. Cuando llega utilizable, el
+   backend YA resolvió el `buy` según el régimen: el front no vuelve a decidir
+   risk-off, sólo declara el `risk_off` que el contrato trae. Omitirlo (llamada
+   de dos argumentos, :7547) cae a la red de abajo — que es el comportamiento
+   correcto para una alerta congelada, no una degradación.
+
    `regimen` null/undefined/'risk-on' → BUY 0.30 (el combiner trata None como
    risk-on; hay un caso documentado en que llega None para TODOS los tickers,
    y ese caso NO debe romper el render ni dejarlo vacío). */
-function scoreEscalaLbl(motor, regimen){
+function scoreEscalaLbl(motor, regimen, umbrales){
+  const c = umbralesDelContrato(umbrales);
+  if(c){
+    /* El sufijo se condiciona a v3 A PROPÓSITO. `umbrales.risk_off` describe el
+       régimen de MERCADO, y el rótulo v2 nunca lo ha mostrado: v2 tiene umbral
+       fijo y simétrico, así que anunciar "risk-off" ahí insinuaría un umbral
+       condicionado que no existe. Hoy el backend ya manda `risk_off: null` en v2
+       (contrato_motor._umbrales), o sea que esto es cinturón sobre tirantes; se
+       deja explícito para que un cambio de ese null a un booleano no estrene un
+       sufijo en v2 sin que nadie lo decida. */
+    const ro = (motor === 'v3' && c.ro);
+    return `${motor === 'v3' ? 'v3' : 'v2'} · BUY ≥ ${c.buy.toFixed(2)} · SELL ≤ ${c.sell.toFixed(2)}${ro?' · risk-off':''}`;
+  }
+  /* ── Red: alerta congelada (:7547), caché frío, o contrato ausente ── */
   if(motor === 'v3'){
     const ro = regimen === 'risk-off';
     const buy = ro ? UMBRAL_V3_BUY_RISK_OFF : UMBRAL_V3_BUY;
@@ -8246,7 +8299,7 @@ Ticker activo: ${t}
 Precio actual: ${fP(sig.precio_actual)}
 Señal del modelo: ${sig['señal']||'—'} (confianza ${fmtConfPct(confPct(sig))}% · motor ${confMotor(sig)})
 Score técnico: ${traz.score_tecnico||0} | Score contexto: ${traz.score_contexto||0} | Override evento: ${confMotor(sig)==='v3'?'n/a (v3 no tiene ese concepto)':(traz.override_evento_critico||0)} | Score final: ${traz.score_final||0}
-Escala de los scores: ${scoreEscalaLbl(confMotor(sig), traz.regimen_mercado)}
+Escala de los scores: ${scoreEscalaLbl(confMotor(sig), traz.regimen_mercado, sig.contrato?.umbrales)}
 Stop Loss: ${fP(getEffectiveNiv(t).sl)} | TP1: ${fP(getEffectiveNiv(t).tp1)} | TP2: ${fP(getEffectiveNiv(t).tp2)} | TP3: ${fP(getEffectiveNiv(t).tp3)}
 Forecast 1D: ${fP(Hz['1D']?.p50)} | 3D: ${fP(Hz['3D']?.p50)} | 7D: ${fP(Hz['7D']?.p50)}
 Factores positivos: ${(traz.factores_positivos||[]).join('; ')||'ninguno'}
