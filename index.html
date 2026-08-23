@@ -7454,7 +7454,7 @@ function alertSnapshot(sig, fc){
   const fcSnap={};
   ['1D','3D','7D'].forEach(h=>{ const d=Hz[h]; if(d&&d.p50!=null) fcSnap[h]={p50:d.p50, chg:px?(d.p50-px)/px*100:null}; });
   return {
-    conf: confPct(sig), niveles: (sig&&sig.niveles)||{},   // §5.B.2: snapshot en puntos
+    niveles: (sig&&sig.niveles)||{},   // la confianza NO se duplica aquí: la congela `a.conf` (l.7390)
     pos: traz.factores_positivos||[], neg: traz.factores_negativos||[], alts: traz.alertas||[],
     score_tec: traz.score_tecnico, score_ctx: traz.score_contexto, score_fin: traz.score_final,
     /* P3: sin estos dos, una alerta releída no puede saber en qué escala están
