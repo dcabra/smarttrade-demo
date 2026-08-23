@@ -10474,7 +10474,19 @@ function pheRender(){
   /* ── Mitad B · Calibración del forecast ─────────────────────────────────── */
   let fcHtml;
   if(st.fcError){
-    var _v3 = (st.motor === 'v3');
+    /* El copy de abajo AFIRMA una causa concreta (los cuantiles F4 no se
+       persisten), así que sólo puede salir cuando esa es de verdad la causa:
+       pedimos v3 Y el servidor lo rechazó como no procesable (422 de
+       routers/backtest.py:365-367). Con `st.motor` a secas —constante 'v3' por
+       PHE_MOTOR_PREF— un HTTP 500, un timeout de 25s o un fallo de red se
+       rotulaban «en desarrollo»: una explicación de roadmap encima de una caída.
+       El error real ya no queda sólo en el `title`; baja a la nota por la rama
+       false, que existía y era inalcanzable.
+
+       `=== 422` y no `!== 500`: un PHE_STATE de antes del deploy trae
+       fcErrorStatus undefined y así cae al lado honesto. El TTL (l.10571) lo
+       renueva solo; PHE_STATE vive en RAM, no hay nada que migrar. */
+    var _v3 = (st.motor === 'v3' && st.fcErrorStatus === 422);
     var _msg = _v3 ? 'Calibraci&oacute;n de v3 &mdash; en desarrollo' : 'Forecast no disponible';
     var _note = _v3
       ? 'Los cuantiles por bucket (F4) a&uacute;n no se persisten para backtestear el forecast v3 desde el libro. Se activa al cerrar ese punto del roadmap. La calibraci&oacute;n honesta de v3 es la vigilancia forward (coverage_watch), no un recompute.'
@@ -10564,7 +10576,7 @@ async function pheLoad(){
 
   const desde = new Date(Date.now() - PHE_VENTANA_DIAS * 86400000).toISOString().slice(0, 10);
   const base = { horizontes: [1, 3, 7], solo_tramo_limpio: true, desde: desde };
-  const next = { motor: motor, motorVivo: motorVivo, at: Date.now(), rc: null, fc: null, fcError: null, error: null };
+  const next = { motor: motor, motorVivo: motorVivo, at: Date.now(), rc: null, fc: null, fcError: null, fcErrorStatus: null, error: null };
 
   // Sólo con el tramo v2 CONFIRMADO se pide el recompute: ahí v3-lab es un scorer
   // de auditoría legítimo. Con el libro en v3 (o indeterminado) no se pide — el
@@ -10584,6 +10596,10 @@ async function pheLoad(){
     }catch(e){
       if(e.code === 'NO_TOKEN' || e.code === 'UNAUTHORIZED'){ card.style.display = 'none'; PHE_LOADING = false; return; }
       next.fcError = e.message || 'Forecast no disponible.';   // 422 (v3) u otro → degrada solo esta mitad
+      // `pheFetch` YA adjunta el status (l.10326) y hasta ahora se tiraba aquí:
+      // sin él, el render no puede distinguir el 422 esperado de una caída.
+      // TIMEOUT y NETWORK no traen `.status` ⇒ null, que es la respuesta honesta.
+      next.fcErrorStatus = (typeof e.status === 'number') ? e.status : null;
     }
   }
 
