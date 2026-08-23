@@ -6163,6 +6163,23 @@ async function init(){
     });
     await Promise.allSettled(sigPromises);
     consolidarSignalSaves();   // una escritura para toda la tanda del portafolio
+    /* F2 paso 3 · CIERRE DEL CABO DE FRESCURA (arranque).
+       `showHome()` (l.6144) corre ARRIBA, antes de esta tanda: pheLoad ya se
+       ejecutó con el CACHE VACÍO, así que `pheMotorVivoSeguro` devolvió null
+       (indeterminado) y PHE_STATE.motorVivo quedó clavado ahí. `motorVivo` SÓLO
+       se recomputa dentro de pheLoad (l.10557), y a pheLoad sólo se llega por
+       renderHome (l.10060) — cuyos únicos llamadores son showHome (l.9997) y
+       refreshBroker (l.3616). Sin esta línea la tarjeta se queda en «no evaluable»
+       con un libro v2 CONFIRMADO hasta que el usuario reabra el Home.
+
+       Va DESPUÉS del await a propósito: antes, el CACHE aún no tiene las señales
+       y volveríamos a leer null. Y sólo en Home: en vista de ticker la tarjeta no
+       está a la vista y el próximo showHome ya la carga.
+
+       NO recomputa `motorVivo` por su cuenta ni toca la clave de frescura
+       (l.10558-10559, que ya incluye motorVivo): re-invoca pheLoad y deja que ESA
+       clave decida. Si nada cambió, `fresh` corta en l.10560 y sólo re-pinta. */
+    if(CP_VIEW === 'home') pheLoad();
   }
 
   // 4. Cargar contexto de posiciones + watchlist + proxies de mercado en background
@@ -7033,6 +7050,29 @@ async function refreshTicker(t){
     buildRP(t,sig,fc);
     if(ohlcv?.candles) redraw();
   }
+
+  /* F2 paso 3 · CIERRE DEL CABO DE FRESCURA (auto-refresco).
+     Esta cadena escribe CACHE[t].sig (arriba) y muere en fillRow: NADA en ella
+     llega a renderHome, así que un flip de motor a mitad de sesión dejaría
+     PHE_STATE.motorVivo declarando el motor de ANTES. Esa rancidez falla
+     ABIERTO —al revés que la del arranque—: con motorVivo='v2' pegado y el libro
+     ya en v3, la mitad A seguiría pintando el win-rate de «v3-lab» como si fuera
+     el modelo. Ese es el caso que obliga al segundo sitio.
+
+     SE COMPARA ANTES DE LLAMAR, y esto no es duplicar la clave de frescura de
+     l.10558-10559: es la condición de DISPARO. refreshTicker corre por ticker
+     cada REFRESH_SEC (30s por defecto), y un pheLoad() incondicional aquí
+     convertiría el reintento de los estados de error —que hoy espera al próximo
+     renderHome (l.10546-10547)— en un POST /backtest/recompute cada 30s contra
+     el gateway. Disparando SÓLO cuando el motor del libro cambió de verdad, la
+     cadencia de TTL y de reintento queda EXACTAMENTE como está.
+
+     `PHE_STATE &&` es deliberado: null = la tarjeta nunca cargó (sin sesión, o
+     load en vuelo) y ahí no hay nada que refrescar.
+
+     Al FINAL de la función, no junto a fillRow: así una excepción aquí no puede
+     saltarse el repintado del ticker activo. */
+  if(CP_VIEW === 'home' && PHE_STATE && PHE_STATE.motorVivo !== pheMotorVivoSeguro()) pheLoad();
 }
 
 /* ── Flash de color en fila del ticker — desvanece gradualmente en 3s ── */
@@ -10550,6 +10590,20 @@ async function pheLoad(){
   PHE_STATE = next;
   PHE_LOADING = false;
   pheRender();
+
+  /* F2 paso 3 · RE-CHEQUEO DE COLA — sin esto los dos sitios de arriba son una
+     carrera, no un arreglo. En el arranque `showHome()` dispara este load y las
+     señales del portafolio se piden EN PARALELO (l.6149-6164): si aterrizan
+     mientras el POST de forecast sigue en vuelo, la llamada de l.6182 se topa con
+     `if(PHE_LOADING) return` (l.10561) y se pierde — y este PHE_STATE, que acaba
+     de nacer, nace ya rancio con el motorVivo de hace 25s. Los tres sitios cubren
+     tiempos distintos: llenado ANTES (nada que hacer), DURANTE (aquí) y DESPUÉS
+     (l.6182 / refreshTicker).
+
+     NO hace bucle: la segunda pasada ve un motorVivo ya estable, así que o corta
+     en `fresh` (l.10560) o vuelve a caer aquí con `pheMotorVivoSeguro() ===
+     motorVivo` y para. Una recarga extra por cambio real, nunca más. */
+  if(pheMotorVivoSeguro() !== motorVivo) pheLoad();
 }
 
 /* ═══ S3 · Pulso del modelo hoy + drift ═══════════════════════════════════════
