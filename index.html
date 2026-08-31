@@ -13086,6 +13086,45 @@ function phiaPintar(){
   }
 }
 
+/* ── Vigencia de la prosa verificada ───────────────────────────────────────
+   Reemplaza la igualdad estricta de payloads, que no sobrevivía un solo ciclo
+   de refresco: `equity`, `invertido_usd`, `pl_dia` y `concentracion.valor`
+   entran al payload con 2 decimales (phiaPayload, l.12515-12536), así que
+   JSON.stringify cambiaba en cada refreshBroker (REFRESH_SEC=30s) y el dorado
+   se apagaba aunque la frase siguiera siendo cierta.
+
+   Dos condiciones, y la segunda es la que conserva la garantía:
+     · COMPOSICIÓN idéntica — lo que no puede cambiar sin que la frase hable de
+       otra cartera: nº de posiciones, conflictos, confirmadas, ticker líder,
+       período del drawdown y evento próximo.
+     · phiaVerifNum(texto, payload ACTUAL) — toda cifra del texto tiene que
+       seguir existiendo en el payload de AHORA. Si la prosa citó una cifra de
+       ruido (equity, invertido_usd…) y esa cifra se movió, esto da false y el
+       dorado se retira: nunca se tolera una afirmación que dejó de ser cierta.
+       Es la MISMA barrera del camino de ida, reusada — no una copia relajada.
+
+   Fail-safe: cualquier excepción → false (ante duda, no dorar). */
+function phiaVigente(res){
+  try{
+    if(!res || !res.ok || !res.texto || !res.payload) return false;
+    const actual = phiaPayload();
+    if(!actual) return false;
+    const comp = p => JSON.stringify({
+      n:    p.n_posiciones,
+      conf: p.conflictos,
+      cfmd: p.confirmadas,
+      lider:p.concentracion ? p.concentracion.ticker : null,
+      ddp:  p.drawdown_periodo,
+      ev:   p.evento_proximo ? { d:p.evento_proximo.dias_restantes, o:p.evento_proximo.ordinal } : null
+    });
+    if(comp(actual) !== comp(res.payload)) return false;
+    if(!phiaVerifNum(res.texto, actual)) return false;
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
 /* ── Disparo one-shot ──────────────────────────────────────────────────────
    Una sola llamada por sesión de home.                                      */
 async function phiaCargar(){
@@ -13101,7 +13140,7 @@ async function phiaCargar(){
 
   // Carrera: si el portafolio cambió MIENTRAS se esperaba al LLM, sellar ese
   // payload sería sellar algo que ya no es cierto. Se degrada a fallback.
-  const vigente = res && res.ok && JSON.stringify(phiaPayload()) === JSON.stringify(res.payload);
+  const vigente = phiaVigente(res);
 
   PHIA_UI.res = res;
   if(vigente && phiaHayFrase()){
@@ -13121,9 +13160,13 @@ async function phiaCargar(){
    escribe SÓLO en el wrapper / #phia-prosa / #phia-body — nunca en #phsyn,
    así que no puede realimentar al observador.
 
-   Invalidación estricta: la prosa vale sólo para el payload exacto contra el
-   que se verificó. Si cambió, se quita el dorado y vuelve R5. NO se re-llama
-   al LLM: la caché es de una llamada por sesión, y R6 queda en S1.         */
+   Invalidación por VIGENCIA (phiaVigente, l.13107): la prosa vale mientras la
+   composición no cambie —posiciones, conflictos, ticker líder, período,
+   evento— Y toda cifra que el texto cita siga existiendo en el payload actual
+   (phiaVerifNum re-corrido contra él). El ruido de precios que la frase NO
+   menciona ya no la tumba; el que SÍ menciona, sí. Cuando deja de estar
+   vigente se quita el dorado y vuelve R5. NO se re-llama al LLM: la caché es
+   de una llamada por sesión, y R6 queda en S1. */
 function phiaMontar(){
   const w = $('phia-wrap'); if(!w) return;
 
@@ -13135,7 +13178,7 @@ function phiaMontar(){
   w.classList.remove('phia-vacio');
 
   if(PHIA_UI.estado === 'listo' && PHIA_UI.sig != null){
-    if(JSON.stringify(phiaPayload()) !== PHIA_UI.sig){    // S2 → S1
+    if(!phiaVigente(PHIA_UI.res)){                       // S2 → S1
       PHIA_UI.estado = 'obsoleto';
       PHIA_UI.sig    = null;
       w.classList.remove('phia-on');
