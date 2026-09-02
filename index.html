@@ -9187,7 +9187,9 @@ function stratRenderItems(){
     const ret = s.retorno_pct;
     const retHtml = (ret!=null)
       ? `<span class="stratp-item-ret ${ret>0?'g':ret<0?'r':''}" title="Retorno acumulado del equity paper (${s.equity_actual!=null?fP(s.equity_actual):'—'} vs capital inicial)">${ret>=0?'+':''}${ret}%</span>`
-      : `<span class="stratp-item-ret na" title="Aún sin curva de equity">—%</span>`;
+      : (s.edge_en_reserva === true
+          ? `<span class="stratp-item-ret na" title="Edge en reserva hasta el checkpoint (§5).">en reserva (§5)</span>`
+          : `<span class="stratp-item-ret na" title="Aún sin curva de equity">—%</span>`);
     /* §5 · mismo criterio que stratEffMini: por defecto el copy viejo; "en
        reserva" SÓLO con evidencia positiva. Sin número: ni win-rate ni n. */
     const efReserva = ef.edge_en_reserva === true
@@ -9399,7 +9401,7 @@ function stratLogHTML(id){
     ciclosH = ciclos.slice(0,15).map((c,i)=>{
       const det = [
         ...(c.abiertos||[]).map(a=>`<div class="smon-line"><span class="smon-bullet" style="color:var(--green)">▲</span><span class="tk" style="color:var(--green)">${a.ticker}</span><span class="mot">abrió ${a.qty} @ ${fP(a.precio)}</span></div>`),
-        ...(c.cerrados||[]).map(x=>{const rp=Number(x.retorno_pct||0);const col=rp>=0?'var(--green)':'var(--red)';return `<div class="smon-line"><span class="smon-bullet" style="color:var(--red)">▼</span><span class="tk">${x.ticker}</span><span class="mot">cerró · ${x.motivo} <span style="color:${col}">(${rp>=0?'+':''}${rp.toFixed(2)}%)</span></span></div>`;}),
+        ...(c.cerrados||[]).map(x=>{const _r=x.retorno_pct;const _res=(_r==null);const rp=Number(_r||0);const col=_res?'var(--text3)':(rp>=0?'var(--green)':'var(--red)');const rtxt=_res?'(en reserva §5)':`(${rp>=0?'+':''}${rp.toFixed(2)}%)`;return `<div class="smon-line"><span class="smon-bullet" style="color:var(--red)">▼</span><span class="tk">${x.ticker}</span><span class="mot">cerró · ${x.motivo} <span style="color:${col}">${rtxt}</span></span></div>`;}),
         ...(c.omitidos||[]).map(o=>`<div class="smon-line"><span class="smon-bullet" style="color:#8893a5">·</span><span class="tk" style="color:#8893a5">${o.ticker}</span><span class="mot">omitido · ${o.motivo}</span></div>`),
       ].join('') || `<div class="smon-empty">Sin movimientos.</div>`;
       const ap = c.auto_pausa ? `<div class="smon-autopause">⏸ ${c.auto_pausa.motivo}</div>` : '';
@@ -9464,8 +9466,8 @@ function stratCycleResultHTML(id){
   const when=new Date(lc.ts).toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   let h=`<div class="smon-res"><div class="smon-sec-t">Último ciclo procesado · ${r.job_date||''} · ${when}</div>`;
   A.forEach(a=>{ h+=`<div class="smon-line"><span class="smon-bullet" style="color:var(--green)">▲</span><span class="tk" style="color:var(--green)">${a.ticker}</span><span class="mot">abrió ${a.qty} @ ${fP(a.precio)}</span></div>`; });
-  C.forEach(c=>{ const rp=Number(c.retorno_pct||0); const col=rp>=0?'var(--green)':'var(--red)';
-    h+=`<div class="smon-line"><span class="smon-bullet" style="color:var(--red)">▼</span><span class="tk">${c.ticker}</span><span class="mot">cerró · ${c.motivo} <span style="color:${col}">(${rp>=0?'+':''}${rp.toFixed(2)}%)</span></span></div>`; });
+  C.forEach(c=>{ const _r=c.retorno_pct; const _res=(_r==null); const rp=Number(_r||0); const col=_res?'var(--text3)':(rp>=0?'var(--green)':'var(--red)'); const rtxt=_res?'(en reserva §5)':`(${rp>=0?'+':''}${rp.toFixed(2)}%)`;
+    h+=`<div class="smon-line"><span class="smon-bullet" style="color:var(--red)">▼</span><span class="tk">${c.ticker}</span><span class="mot">cerró · ${c.motivo} <span style="color:${col}">${rtxt}</span></span></div>`; });
   O.forEach(o=>{ h+=`<div class="smon-line"><span class="smon-bullet" style="color:#8893a5">·</span><span class="tk" style="color:#8893a5">${o.ticker}</span><span class="mot">omitido · ${o.motivo}</span></div>`; });
   if(!A.length&&!C.length&&!O.length) h+=`<div class="smon-empty">El ciclo no produjo movimientos (ninguna señal cumplió las reglas).</div>`;
   if(r.auto_pausa) h+=`<div class="smon-autopause">⏸ ${r.auto_pausa.motivo}</div>`;
@@ -10862,13 +10864,15 @@ function phdRender(){
     const s = st.strat;
     const rp = s.retorno_pct;
     const has = (rp != null && !isNaN(rp));
+    const enReserva = (s.edge_en_reserva === true);   // §5 · backend manda null + flag
+    const vacio = enReserva ? 'en reserva (§5)' : '—';
     const col = !has ? 'var(--text)' : (rp > 0 ? 'var(--green)' : (rp < 0 ? 'var(--red)' : 'var(--text)'));
     const sign = has && rp > 0 ? '+' : '';
-    _phdPnl = has ? (sign + rp.toFixed(2) + '%') : '—'; _phdPnlCol = col;
+    _phdPnl = has ? (sign + rp.toFixed(2) + '%') : vacio; _phdPnlCol = col;
     const eq = (s.equity_actual != null && !isNaN(s.equity_actual)) ? Number(s.equity_actual) : null;
     const cap = (s.capital_inicial_paper != null && !isNaN(s.capital_inicial_paper)) ? Number(s.capital_inicial_paper) : null;
     pnlHtml = '<div class="phd-hero"><span class="phd-num" style="color:' + col + '">'
-      + (has ? (sign + rp.toFixed(2) + '%') : '—') + '</span></div>'
+      + (has ? (sign + rp.toFixed(2) + '%') : vacio) + '</span></div>'
       + '<div class="phd-foot">' + pheEsc(s.nombre || ('#' + s.id)) + ' · ' + pheEsc(s.estado || '—') + '</div>'
       + (eq != null && cap != null
           ? '<div class="phd-foot">equity ' + eq.toLocaleString('en-US', {maximumFractionDigits:0})
