@@ -3807,10 +3807,27 @@ function phrAgoTxt(d){ return d<=0 ? 'hoy' : d===1 ? 'ayer' : 'hace '+d+'d'; }
       Filtra ANTES del corte (todos los sueltos en ventana entran, aunque
       superen un top-N previo) y NUNCA ensancha la ventana para completar N.
    4) orden desc por fecha de cierre   5) corte en RECIENTES_N_MAX             */
+/* Largo máximo de un símbolo, sufijo de bolsa incluido. Medido contra el
+   universo activo (117 tickers): 18 llevan sufijo y el más largo es de 13
+   —CORFICOLCF.CL, GRUPOARGOS.CL, PFCEMARGOS.CL, PFGRUPSURA.CL—, así que 16 los
+   cubre con margen y se alinea con el escaneo de phia ({1,15} + inicial). Con
+   el tope viejo de 10, esos 18 no se podían agregar a la watchlist ni eran
+   clicables en operaciones recientes.
+
+   ESTO VALIDA LARGO, NO CHARSET. La barrera de inyección es la clase
+   [A-Z0-9.\-]: el ticker se interpola SIN escapar en tres onclick de
+   renderWatchlist y en tres URLs (`get()` no hace encodeURIComponent), y lo
+   que mantiene eso seguro es que el charset no admite comilla, ángulo, barra
+   ni espacio. Ampliar el tope no toca esa propiedad; cambiar el charset sí.
+   Por eso el charset se repite literal en cada sitio y sólo se comparte el
+   número. */
+const TICKER_MAX = 16;
+
 function phrBuild(trips, nowMs){
   const now    = Number.isFinite(nowMs) ? nowMs : Date.now();
   const cutoff = now - RECIENTES_DIAS * 86400000;
-  const SYM_OK = /^[A-Z0-9.\-]{1,10}$/;   // saneo antes de interpolar en el onclick
+  // saneo antes de interpolar en el onclick (charset intacto; tope compartido)
+  const SYM_OK = new RegExp('^[A-Z0-9.\\-]{1,' + TICKER_MAX + '}$');
 
   const cierres = {};
   (Array.isArray(trips) ? trips : []).forEach(t => {
@@ -6307,7 +6324,8 @@ function renderWatchlist(){
    'added' | 'dup' | 'invalid' | 'notfound'. */
 async function addTickerToWatchlist(rawSym){
   const t = (rawSym||'').trim().toUpperCase();
-  if(!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(t)) return 'invalid';
+  // Inicial [A-Z] + hasta TICKER_MAX-1 → TICKER_MAX en total. Charset idéntico.
+  if(!new RegExp('^[A-Z][A-Z0-9.\\-]{0,' + (TICKER_MAX - 1) + '}$').test(t)) return 'invalid';
   if(WATCHLIST.includes(t) || TICKERS.includes(t)) return 'dup';
 
   const sig = await get('/v1/signal/'+t);
@@ -6470,6 +6488,11 @@ async function wlsAdd(sym, btn){
     btn.disabled = false;
     btn.textContent = res==='notfound' ? 'Sin datos' : prev;
     if(res==='notfound') setTimeout(()=>{ btn.textContent=prev; }, 1600);
+    /* 'invalid' caía en este else y sólo restauraba el botón: el usuario veía
+       el parpadeo y nada más, indistinguible de un clic perdido. `showWLError`
+       ya existía sin usarse en este camino. Se avisa explícitamente; las otras
+       tres ramas no cambian. */
+    if(res==='invalid') showWLError('Símbolo no válido');
   }
 }
 
