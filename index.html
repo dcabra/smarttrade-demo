@@ -1217,6 +1217,8 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
    bloque .rp-lbl con su filete los sustituye, y las tarjetas IA del panel
    derecho no llevan ninguno de los dos. */
 .phia-txt{min-width:0}
+/* Pie del velo §5. Discreto a propósito: es una nota de alcance, no un dato. */
+.phia-velo{margin-top:6px;font-size:9.5px;line-height:1.4;color:var(--text3);font-style:italic}
 /* El desglose auditable va SIEMPRE visible: el control de desplegar se retiró
    (decisión de producto) porque en la práctica nunca se usaba colapsado. Con
    él se fueron .phia-caret, sus dos labels alternos y la clase .phia-col, que
@@ -12230,49 +12232,40 @@ const PHIA_MAX_TOKENS = 150;    // 2-3 líneas
    sendChat() sigue en Sonnet: es otra llamada, con otro proposito.        */
 const PHIA_MODEL      = 'claude-haiku-4-5-20251001';
 
-const PHIA_SYSTEM = `Eres un componente de SmartTrade que convierte un estado de portafolio ya calculado en una frase de 2 a 3 líneas. No eres analista ni asesor. No opinas, no evalúas, no recomiendas. Tu único trabajo es decir en prosa natural lo que los números ya dicen — nada más.
+const PHIA_SYSTEM = `Eres un componente de SmartTrade que convierte un estado de portafolio ya calculado en 2 a 4 líneas cortas. No eres analista ni asesor. No opinas, no evalúas, no recomiendas. Describes hechos que los datos ya contienen — nada más.
 
-Recibirás un objeto JSON con los datos del portafolio. Esa es la única fuente de cifras que existe; no hay otras.
+Recibirás un objeto JSON. Es la única fuente de cifras y tickers; no hay otra.
 
-REGLAS DE CIFRAS (inviolables):
-- Usa solo los números del JSON, tal como están. No los redondees distinto, no los recalcules, no derives nuevos (nada de "el resto", "aproximadamente", "un tercio").
-- No infieras un porcentaje a partir de otro. Efectivo e invertido tienen bases distintas y pueden no sumar 100; no los cuadres.
-- Menciona solo tickers que aparezcan en los datos. Ningún símbolo que no esté en el JSON.
-- Si un número no está en los datos, no existe. No lo inventes para completar una frase.
+QUÉ PUEDES CITAR COMO NÚMERO (y nada más):
+- Conteos: n_posiciones, conflictos.n, despliegue.buys_fuera_cartera, confirmadas, evento_proximo.dias_restantes.
+- Umbrales: umbral_stop_pct, umbral_concentracion_pct, umbral_drawdown_pct (son configuración, no estado).
+- El período del drawdown tal como viene (drawdown_periodo).
+PROHIBIDO citar como número: efectivo, efectivo_pct, invertido_pct, invertido_usd, equity, pl_dia, stop_mas_cercano.distancia_pct, concentracion.pct, concentracion.valor, drawdown_pct, peor_posicion.perdida_pct, peor_posicion.perdida_usd. Esas magnitudes cambian con el mercado y NO se escriben como cifra. Se describen SOLO con la banda que viene en los datos (ver abajo). Si la tentación es escribir un porcentaje o un monto que no está en la lista permitida, no lo escribas.
 
-CÓMO ESCRIBIR LAS CIFRAS (formato exacto, no lo reinventes):
-- Porcentajes: el número tal como viene, con el signo "%" pegado — "7.9%", "24.7%". Nunca un porcentaje sin su "%".
-- Dinero: SIEMPRE con el símbolo "$" — "$954.99", "$1,020.40". Nunca escribas una cantidad de dinero sin "$".
-- Dinero negativo (una pérdida): el signo delante del símbolo — "-$15.24". No escribas "perdiste 15.24" ni "15.24 en rojo".
-- Conserva los decimales tal como llegan en los datos. No abrevies ni reformatees: nada de "15.2k", "1.5 millones", "quince dólares", ni redondeos propios.
-- El período del drawdown tiene su propia regla, más abajo.
+CÓMO DESCRIBIR LAS MAGNITUDES (por su banda, no por su número):
+- Exposición: usa exposicion_banda. 'casi_todo_efectivo' → "tienes casi todo en efectivo"; 'casi_todo_invertido' → "tienes casi todo invertido"; 'mixta' → "tienes efectivo e inversión repartidos".
+- Stop más cercano: usa stop_mas_cercano.dentro_umbral. true → "[ticker] es tu posición más cercana a su stop, dentro del umbral de [umbral_stop_pct]%"; false → "[ticker] es tu posición más cercana a su stop, fuera del umbral de [umbral_stop_pct]%". Nunca la distancia.
+- Concentración: solo si concentracion.supera_umbral es true → "[ticker] supera el umbral de concentración de [umbral_concentracion_pct]%". Si es false, no la menciones.
+- Drawdown: solo si drawdown_supera_umbral es true → "el valor de tu cuenta está por debajo de su máximo de [drawdown_periodo] más allá del umbral de [umbral_drawdown_pct]%". Si es false, no lo menciones.
+- Peor posición: "[ticker] es tu posición con mayor pérdida". Sin cifra.
 
-QUÉ ES CADA CIFRA (no las confundas):
-- drawdown_pct es del VALOR DE LA CUENTA (equity total): incluye el efectivo, el P&L ya realizado y los movimientos de fondos (depósitos y retiros). NO es el riesgo ni la pérdida de las posiciones abiertas.
-- Al mencionarlo, di "el valor de tu cuenta está X% por debajo de su máximo". Prohibido: "tu cartera cae", "tus posiciones pierden", y cualquier variante que atribuya esa caída a las posiciones actuales.
-- Es rendimiento de la cuenta en el período, no riesgo de posiciones. Una cuenta que esté casi toda en efectivo puede tener un drawdown grande sin que ninguna posición abierta esté perdiendo.
-- Al citar el período del drawdown, escríbelo como viene en drawdown_periodo ("3M") o en palabras equivalentes ("3 meses"). No lo conviertas a otra unidad ni a otro número.
-- stop_cruzado son las posiciones cuyo precio YA está por debajo de su stop: riesgo materializado, lo más grave del payload. Dilo como un hecho consumado ("ya está por debajo de su stop"), nunca como distancia que falta.
-- stop_mas_cercano es la posición más cerca de gatillar su stop SIN haberlo cruzado, con distancia_pct = cuánto falta desde el precio actual. Su distancia siempre es positiva.
-- Los dos son opcionales y solo vienen cuando aplican. Si NO viene ninguno, no menciones stops ni afirmes que están lejos: no lo sabes.
+DISCIPLINA (hecho, no consejo): por cada entrada en conflictos.detalle, di el hecho de la divergencia: si señal es SELL y largo es true → "el modelo daría salida a [ticker]; tú sigues largo"; si señal es BUY y largo es false → "el modelo daría entrada a [ticker]; tú sigues corto". Es la señal del modelo frente a tu posición. NUNCA añadas qué hacer.
 
-REGLAS DE REDACCIÓN (inviolables):
-- Indicativo, describiendo hechos. Cero imperativos: nada de "reduce", "vende", "considera", "compra", "mantén", "ajusta", "evita", "revisa" ni ningún verbo de acción dirigido al usuario. Describe, no aconseja.
-- Sin adjetivos de juicio: nada de "arriesgada", "sólida", "repartida", "concentrada", "saludable", "diversificada". Si algo se puede decir con un número, se dice con el número. En vez de "exposición repartida", di "ninguna posición supera el 20%".
-- Español neutro de Colombia: "tienes", nunca "tenés". Sin voseo.
+DESPLIEGUE (hecho): si despliegue existe: buys_fuera_cartera es 0 → "no hay señales BUY del modelo fuera de tu cartera"; es mayor → "el modelo tiene [N] señales BUY fuera de tu cartera: [tickers]". Si despliegue no viene, no lo menciones.
 
-PRIORIDAD (obligatoria, en este orden; 2-3 líneas en total). ABRE la síntesis con lo más urgente que exista en el payload y baja desde ahí. No entierres un punto alto entre los bajos.
-1. stop_cruzado — una posición YA está por debajo de su stop. Es riesgo materializado y va PRIMERO: "[ticker] ya cruzó su stop."
-2. stop_mas_cercano — la posición más cerca de gatillar el suyo, sin haberlo cruzado: "[ticker] es tu posición más cercana a su stop, a [X]%."
-3. conflictos — las posiciones que el modelo contradice.
-4. evento_proximo — el riesgo que VIENE. Si es_posicion: "[ticker] reporta [tipo] en [N] días, es tu [ordinal]ª posición". Si no (macro): "hay [tipo] en [N] días". Describe el hecho: "reporta mañana", NUNCA "considera reducir antes del reporte".
-5. peor_posicion — contexto de desempeño, retrospectivo y menos urgente que todo lo anterior: "[ticker] es tu posición con mayor pérdida, [X]% ([$Y])". Es un hecho, no un diagnóstico ni una sugerencia.
-6. Concentración (si supera su umbral, con ticker y porcentaje), drawdown (si supera el suyo, con su período y como valor de cuenta) y exposición: SOLO como contexto, y siempre DESPUÉS de lo anterior.
-Si no hay stop_cruzado, ni stop_mas_cercano, ni conflictos, ni evento_proximo, ni peor_posicion: describe el estado general con exposición y drawdown, con normalidad. No inventes una alerta que no existe.
+REGLAS DE REDACCIÓN (inviolables): indicativo, hechos. Cero imperativos (nada de reduce, vende, sal, confirma, considera, compra, mantén, ajusta, revisa). Cero adjetivos de juicio (nada de arriesgada, sólida, saludable, baja, alta, urgente, tranquila, sin urgencia). Cada frase afirma un hecho de los datos. Tickers solo los que aparecen en el JSON. Español neutro: "tienes", nunca "tenés".
 
-La urgencia la marca el ORDEN y el hecho, no el adjetivo ni el consejo. Sigue prohibido calificar ("preocupante", "crítica", "arriesgada") y sigue prohibido decir qué hacer: "NVDA ya cruzó su stop" es un hecho y va; "deberías cerrar NVDA" no se escribe nunca.
+PRIORIDAD (abre con lo más importante; 2-4 líneas; no entierres lo alto entre lo bajo):
+1. stop_cruzado — "[ticker] ya cruzó su stop." Riesgo materializado, va primero.
+2. conflictos — la disciplina (arriba). Es lo que más pesa para quien opera con un modelo.
+3. despliegue — el hecho de los BUY fuera de cartera (arriba).
+4. stop_mas_cercano — por banda.
+5. evento_proximo — "[ticker] reporta [tipo] en [N] días" / "hay [tipo] en [N] días". Hecho.
+6. concentracion, drawdown — solo si superan umbral, por banda. peor_posicion sin cifra.
+7. exposición — por banda, al final, como contexto.
+Si no hay stop_cruzado, conflictos, despliegue con BUYs, stop_mas_cercano ni evento: di que la cartera está alineada con el modelo y describe la exposición por banda. No inventes una alerta.
 
-Devuelve solo la frase, sin preámbulo, sin comillas, sin markdown.`;
+Devuelve solo las líneas, sin preámbulo, sin comillas, sin markdown.`;
 
 /* ── Léxico de la barrera lingüística ──────────────────────────────────────
    Imperativos y adjetivos se buscan sobre el texto SIN acentos (así "mantén" y
@@ -12356,6 +12349,11 @@ function phiaRound(n, dec){
    Es el caso esperado si el camino B del auto-disparo (temporizador de 4s)
    dispara antes de que termine el precalentamiento del arranque.           */
 const PHIA_STOP_PCT = 6;   // % por debajo del cual el stop se considera "cerca"
+/* Corte de la banda de exposición. 90% es "casi todo": por encima, decir
+   "tienes casi todo en efectivo" es un hecho y no una interpretación. Es un
+   umbral de REDACCIÓN, no de riesgo — por eso vive aquí y no en phiaUmbrales,
+   que lee los umbrales operativos del usuario. */
+const PHIA_EXPO_BANDA_PCT = 90;
 
 function phiaStops(){
   const cruzados = [];
@@ -12553,9 +12551,48 @@ function phiaPayload(){
   const peor = phiaPeorPosicion(x.eq);
   if(peor) p.peor_posicion = peor;
   if(X && X.disponible){
-    p.conflictos  = { n: X.conflictos.length, tickers: X.conflictos.map(c => c.ticker) };
+    /* `detalle` añade señal y lado para que la IA pueda decir el HECHO de la
+       divergencia ("el modelo daría salida a X; tú sigues largo") en vez de un
+       conteo mudo. La clave 'señal' va SIEMPRE por corchetes: lleva ñ. */
+    p.conflictos  = {
+      n: X.conflictos.length,
+      tickers: X.conflictos.map(c => c.ticker),
+      detalle: X.conflictos.map(c => ({ ticker:c.ticker, 'señal':c['señal'], largo:c.largo }))
+    };
     p.confirmadas = X.confirmas.length;
+    /* DESPLIEGUE · señales BUY del modelo sobre tickers que NO están en cartera
+       (X.rest es el resto del libro). Es DIRECCIÓN, no retorno → velo-safe.
+       Responde el hecho detrás de "por qué tanto efectivo" sin interpretarlo. */
+    const buysFuera = X.rest.filter(s => s && s['señal'] === 'BUY');
+    p.despliegue = {
+      buys_fuera_cartera: buysFuera.length,
+      tickers: buysFuera.map(s => s.ticker)
+    };
   }
+
+  /* ── BANDAS · el corazón del rediseño ───────────────────────────────────
+     Las magnitudes de mercado se mueven en cada refreshBroker, así que
+     cualquier CIFRA que el texto citara dejaba de existir en el payload
+     siguiente: phiaVigente la rechazaba y el dorado se apagaba para el resto
+     de la sesión (la transición S2→S1 es de una sola dirección).
+
+     La banda es el MISMO hecho como booleano estable: cruza el umbral o no.
+     La calcula el front, la narra la IA y la vuelve a comprobar el verificador
+     en cada tick. Resultado: el ruido de precios ya no tumba la frase, pero
+     una banda que SE DA VUELTA sí — que es exactamente cuando la frase dejó
+     de ser cierta. */
+  if(p.stop_mas_cercano){
+    p.stop_mas_cercano.dentro_umbral = (p.stop_mas_cercano.distancia_pct <= p.umbral_stop_pct);
+  }
+  if(p.concentracion){
+    p.concentracion.supera_umbral = (p.concentracion.pct > p.umbral_concentracion_pct);
+  }
+  p.drawdown_supera_umbral = (p.drawdown_pct != null
+                              && Math.abs(p.drawdown_pct) > p.umbral_drawdown_pct);
+  p.exposicion_banda =
+      (p.efectivo_pct  != null && p.efectivo_pct  >= PHIA_EXPO_BANDA_PCT) ? 'casi_todo_efectivo'
+    : (p.invertido_pct != null && p.invertido_pct >= PHIA_EXPO_BANDA_PCT) ? 'casi_todo_invertido'
+    : 'mixta';
   return p;
 }
 
@@ -12632,6 +12669,10 @@ function phiaNumSet(p){
   if(p.concentracion){ add(p.concentracion.pct); add(p.concentracion.valor); }
   if(p.conflictos){ add(p.conflictos.n); }
   if(p.confirmadas != null) add(p.confirmadas);
+  /* El conteo del despliegue SÍ es citable como número ("3 señales BUY fuera
+     de tu cartera"): es un conteo, no una magnitud de mercado. Sin esto ese 3
+     tumbaría la frase entera — la misma lección que invertido_usd. */
+  if(p.despliegue) add(p.despliegue.buys_fuera_cartera);
   if(p.drawdown_pct != null){ add(p.drawdown_pct); add(Math.abs(p.drawdown_pct)); }
   if(p.pl_dia != null){ add(p.pl_dia); add(Math.abs(p.pl_dia)); }
   /* El período del drawdown ES un dato del payload, y el modelo lo verbaliza
@@ -12682,6 +12723,76 @@ function phiaNormTexto(txt){
 
 function phiaEscRe(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
+/* ── 3b · Verificador de BANDAS ────────────────────────────────────────────
+   El texto ya no cita las magnitudes volátiles: las narra por su banda. Esa
+   narración TAMBIÉN es una afirmación comprobable, y sin esta capa sería lo
+   único del texto que nadie verifica — justo el hueco que abre el rediseño.
+   El dorado seguiría significando "verificado" sobre una frase cuya mitad no
+   se comprueba.
+
+   Cuelga de phiaVerifNum y NO de phiaVerifLing a propósito: phiaVigente sólo
+   re-corre el numérico en cada tick (l.13125), así que ponerlo aquí es lo que
+   hace que una banda que SE DA VUELTA —el stop cruza su umbral, la exposición
+   pasa de mixta a casi todo efectivo— retire el dorado, mientras el ruido de
+   precios ya no lo toca. Ése es todo el diseño.
+
+   Sólo EXTIENDE: sesgo a rechazar, como los vetos de dirección y atribución.
+   Si la frase usa una de estas formas y el campo no existe o no coincide,
+   false. Ninguna comprobación previa se relaja. */
+function phiaVerifBandas(texto, p){
+  if(!p) return false;
+  const t = phiaSinAcentos(phiaNormTexto(texto)).toLowerCase();
+  const dice = f => t.indexOf(phiaSinAcentos(f).toLowerCase()) >= 0;
+
+  // Stop más cercano: la banda es el ÚNICO modo permitido de hablar de él.
+  if(dice('dentro del umbral')){
+    if(!p.stop_mas_cercano || p.stop_mas_cercano.dentro_umbral !== true) return false;
+  }
+  if(dice('fuera del umbral')){
+    if(!p.stop_mas_cercano || p.stop_mas_cercano.dentro_umbral !== false) return false;
+  }
+  // Concentración: sólo se nombra si de verdad supera su umbral.
+  if(dice('umbral de concentracion')){
+    if(!p.concentracion || p.concentracion.supera_umbral !== true) return false;
+  }
+  // Drawdown por banda (la forma que el prompt fija).
+  if(dice('mas alla del umbral')){
+    if(p.drawdown_supera_umbral !== true) return false;
+  }
+  // Exposición: las tres bandas son excluyentes entre sí.
+  if(dice('casi todo en efectivo') && p.exposicion_banda !== 'casi_todo_efectivo') return false;
+  if(dice('casi todo invertido')   && p.exposicion_banda !== 'casi_todo_invertido') return false;
+  if(dice('repartidos')            && p.exposicion_banda !== 'mixta') return false;
+
+  /* Disciplina: se verifica la DIRECCIÓN de la divergencia. El ticker ya lo
+     validó la capa 2; lo que aquí no puede mentir es quién daría salida y
+     quién entrada. Se recorren TODAS las apariciones: una frase correcta y
+     otra inventada en el mismo texto no puede colarse por la primera. */
+  const det = (p.conflictos && p.conflictos.detalle) || [];
+  const nk  = (typeof phNormTk === 'function') ? phNormTk : (v => String(v || '').trim().toUpperCase());
+  const dirOk = (verbo, sen, largo) => {
+    const re = new RegExp('daria ' + verbo + ' a ([a-z0-9.\\-]{1,10})', 'gi');
+    let m;
+    while((m = re.exec(t)) !== null){
+      const e = det.find(d => nk(d.ticker) === nk(m[1]));
+      if(!e || e['señal'] !== sen || e.largo !== largo) return false;
+    }
+    return true;
+  };
+  if(!dirOk('salida',  'SELL', true))  return false;
+  if(!dirOk('entrada', 'BUY',  false)) return false;
+
+  // Despliegue: el conteo de BUY fuera de cartera, en sus dos formas.
+  if(dice('no hay senales buy del modelo fuera')){
+    if(!p.despliegue || p.despliegue.buys_fuera_cartera !== 0) return false;
+  }
+  const mD = t.match(/(\d+)\s+senales?\s+buy\s+fuera/);
+  if(mD){
+    if(!p.despliegue || Number(mD[1]) !== p.despliegue.buys_fuera_cartera) return false;
+  }
+  return true;
+}
+
 function phiaVerifNum(texto, payload){
   if(!payload) return false;
   let t = phiaNormTexto(texto);
@@ -12706,6 +12817,15 @@ function phiaVerifNum(texto, payload){
        .replace(/\$/g, ' ')
        .replace(/\b(d[oó]lares|d[oó]lar)\b/gi, ' ');
 
+  /* Vocabulario de SEÑAL, no tickers. El prompt EXIGE escribir "señales BUY
+     fuera de tu cartera", y el escaneo de tickers de más abajo leía ese BUY
+     como un símbolo ausente de la cartera y tumbaba la frase entera. Es
+     LITERALMENTE el mismo falso positivo que tuvo "USD" —dos líneas arriba— y
+     se resuelve igual: se retira el ropaje antes de escanear. Sólo afecta a la
+     capa de tickers; ningún número cambia, y un símbolo inventado que no sea
+     una de estas tres palabras sigue tumbando la frase. */
+  t = t.replace(/(^|[^\w-])(BUY|SELL|HOLD)\b/g, '$1 ');
+
   const set = phiaNumSet(payload);
   const toks = (t.match(/-?\d[\d.,]*/g) || []).map(s => s.replace(/[.,]+$/, ''));
   for(let i = 0; i < toks.length; i++){
@@ -12719,10 +12839,20 @@ function phiaVerifNum(texto, payload){
   const perm = new Set();
   const nk = (typeof phNormTk === 'function') ? phNormTk : (v => String(v || '').trim().toUpperCase());
   ((typeof POSITIONS !== 'undefined' && POSITIONS) || []).forEach(p => { if(p && p.symbol) perm.add(nk(p.symbol)); });
+  /* Los tickers del DESPLIEGUE no están en cartera POR DEFINICIÓN —son BUY del
+     modelo FUERA de ella—, así que la lista de POSITIONS los rechazaba y la
+     frase entera caía. La regla real, la que el prompt enuncia, es "menciona
+     solo tickers que aparezcan en los datos": el permiso sigue anclado al
+     PAYLOAD, que es la única fuente. Ningún símbolo que no venga en él pasa. */
+  ((payload.despliegue && payload.despliegue.tickers) || []).forEach(tk => { if(tk) perm.add(nk(tk)); });
   const men = t.match(/\b[A-Z][A-Z0-9.\-]{1,9}\b/g) || [];
   for(let i = 0; i < men.length; i++){
     if(!perm.has(nk(men[i]))) return false;
   }
+
+  /* Tercera capa: las BANDAS. Va colgada AQUÍ y no de phiaVerifLing porque
+     phiaVigente sólo re-corre el numérico en cada tick — ver phiaVerifBandas. */
+  if(!phiaVerifBandas(texto, payload)) return false;
   return true;
 }
 
@@ -12943,6 +13073,11 @@ const PHIA_CAT = {
     detalle: p => p.conflictos.n + ' de ' + p.n_posiciones + ' posiciones'
                   + (p.conflictos.tickers.length ? ' — ' + p.conflictos.tickers.join(', ') : '')
   },
+  despliegue: {
+    etiqueta: 'Despliegue del modelo',
+    detalle: p => p.despliegue.buys_fuera_cartera + ' BUY fuera de cartera'
+                  + (p.despliegue.tickers.length ? ' — ' + p.despliegue.tickers.join(', ') : '')
+  },
   peor_posicion: {
     etiqueta: 'Mayor pérdida',
     detalle: p => p.peor_posicion.ticker + ' −' + p.peor_posicion.perdida_pct
@@ -13018,7 +13153,14 @@ function phiaFactores(texto, p){
   const tks  = (phiaNormTexto(texto).match(/\b[A-Z][A-Z0-9.\-]{1,9}\b/g) || []);
   const hay  = vals => vals.some(v => v != null && !isNaN(v) && nums.indexOf(Number(v)) >= 0);
   const hayTk = s => !!s && tks.indexOf(String(s).toUpperCase()) >= 0;
-  const kwConf = phiaHallaAlguno(phiaSinAcentos(phiaNormTexto(texto)).toLowerCase(), PHIA_KW_CONFLICTO);
+  const plano  = phiaSinAcentos(phiaNormTexto(texto)).toLowerCase();
+  const kwConf = phiaHallaAlguno(plano, PHIA_KW_CONFLICTO);
+  /* R6.2 · las magnitudes se narran por BANDA, sin cifra, así que la detección
+     por número ya no las ve: se añade la palabra de la banda como segunda vía.
+     Sin esto el desglose perdería las líneas de exposición y drawdown justo
+     cuando la prosa SÍ las menciona. */
+  const bandaExpo = /casi todo en efectivo|casi todo invertido|repartidos/.test(plano);
+  const bandaDD   = /mas alla del umbral/.test(plano);
 
   const claves = [];
   if(p.stop_cruzado && (hay([p.stop_cruzado.n]) || (p.stop_cruzado.tickers || []).some(hayTk))) claves.push('stop_cruzado');
@@ -13027,8 +13169,11 @@ function phiaFactores(texto, p){
   if(p.evento_proximo && (hay([p.evento_proximo.dias_restantes, p.evento_proximo.ordinal]) || hayTk(p.evento_proximo.ticker))) claves.push('evento');
   if(p.peor_posicion && (hay([p.peor_posicion.perdida_pct, p.peor_posicion.perdida_usd]) || hayTk(p.peor_posicion.ticker))) claves.push('peor_posicion');
   if(p.concentracion && (hay([p.concentracion.pct, p.concentracion.valor]) || hayTk(p.concentracion.ticker))) claves.push('concentracion');
-  if(p.drawdown_pct != null && hay([p.drawdown_pct, Math.abs(p.drawdown_pct)])) claves.push('drawdown');
-  if(hay([p.efectivo_pct, p.invertido_pct, p.efectivo, p.invertido_usd])) claves.push('exposicion');
+  if(p.drawdown_pct != null && (hay([p.drawdown_pct, Math.abs(p.drawdown_pct)]) || bandaDD)) claves.push('drawdown');
+  if(hay([p.efectivo_pct, p.invertido_pct, p.efectivo, p.invertido_usd]) || bandaExpo) claves.push('exposicion');
+  /* El despliegue se detecta por su conteo o por cualquiera de sus tickers —
+     que ahora son citables (ver la capa 2 de phiaVerifNum). */
+  if(p.despliegue && (hay([p.despliegue.buys_fuera_cartera]) || (p.despliegue.tickers || []).some(hayTk))) claves.push('despliegue');
   if(p.pl_dia != null && hay([p.pl_dia, Math.abs(p.pl_dia)])) claves.push('pl_dia');
   return phiaLineas(claves, p);
 }
@@ -13041,6 +13186,7 @@ function phiaFactoresR5(p){
   if(p.stop_cruzado)     claves.push('stop_cruzado');
   if(p.stop_mas_cercano) claves.push('stop_cerca');
   if(p.conflictos && p.conflictos.n > 0) claves.push('conflictos');
+  if(p.despliegue && p.despliegue.buys_fuera_cartera > 0) claves.push('despliegue');
   if(p.evento_proximo) claves.push('evento');
   if(p.peor_posicion)  claves.push('peor_posicion');
   if(p.concentracion && p.concentracion.pct > p.umbral_concentracion_pct) claves.push('concentracion');
@@ -13072,6 +13218,16 @@ function phiaDetalleHTML(){
     + '<span class="v">' + phiaEscHtml(f.detalle) + '</span></div>').join('');
 }
 
+/* El velo §5 no lo decide esta tarjeta: se reusa la MISMA bandera que ya pinta
+   "en reserva (§5)" en el Pulso (PHE_STATE.rc.edge_en_reserva, l.10541). Si el
+   recompute todavía no cargó no se afirma nada: sin bandera, sin pie. */
+function phiaVeloActivo(){
+  try{
+    return !!(typeof PHE_STATE !== 'undefined' && PHE_STATE && PHE_STATE.rc
+              && PHE_STATE.rc.edge_en_reserva);
+  }catch(e){ return false; }
+}
+
 function phiaPintar(){
   const body = $('phia-body');
   if(body) body.innerHTML = phiaDetalleHTML();
@@ -13083,9 +13239,16 @@ function phiaPintar(){
        "SEÑAL IA" / "FORECAST IA", con su filete dorado ::after. Reutilizada,
        no replicada, para que R6 herede cambios futuros del patrón. Sin el ◆:
        las tarjetas IA del panel derecho no lo llevan y el rótulo ya cumple. */
+    /* El pie del velo es UI ESTÁTICA: no lo escribe la IA y por tanto no pasa
+       por el verificador. Va fuera de .phia-txt para que ni el desglose ni
+       phiaFactores lo confundan con prosa del modelo. */
     prosa.innerHTML = (PHIA_UI.estado === 'listo' && res && res.ok)
       ? '<div class="rp-lbl">Análisis IA</div>'
         + '<span class="phia-txt">' + phiaEscHtml(res.texto) + '</span>'
+        + (phiaVeloActivo()
+            ? '<div class="phia-velo">Rendimiento y edge en reserva hasta el checkpoint '
+              + '(&sect;5) — esta tarjeta describe postura, no resultados.</div>'
+            : '')
       : '';
   }
 }
