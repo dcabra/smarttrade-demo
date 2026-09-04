@@ -12251,7 +12251,7 @@ CÓMO DESCRIBIR LAS MAGNITUDES (por su banda, no por su número):
 
 DISCIPLINA (hecho, no consejo): por cada entrada en conflictos.detalle, di el hecho de la divergencia: si señal es SELL y largo es true → "el modelo daría salida a [ticker]; tú sigues largo"; si señal es BUY y largo es false → "el modelo daría entrada a [ticker]; tú sigues corto". Es la señal del modelo frente a tu posición. NUNCA añadas qué hacer.
 
-DESPLIEGUE (hecho): si despliegue existe: buys_fuera_cartera es 0 → "no hay señales BUY del modelo fuera de tu cartera"; es mayor → "el modelo tiene [N] señales BUY fuera de tu cartera: [tickers]". Si despliegue no viene, no lo menciones.
+DESPLIEGUE (hecho de ejecución): si despliegue existe: buys_fuera_cartera es 0 → "no hay señales BUY del modelo en tu universo que no estés tomando"; es mayor → "el modelo tiene [N] señales BUY en tu universo que no estás tomando: [tickers]". La palabra es "universo", nunca "cartera". NUNCA menciones buys_fuera_universo ni tickers_fuera_universo: no son oportunidades de esta estrategia. Si despliegue no viene, no lo menciones.
 
 REGLAS DE REDACCIÓN (inviolables): indicativo, hechos. Cero imperativos (nada de reduce, vende, sal, confirma, considera, compra, mantén, ajusta, revisa). Cero adjetivos de juicio (nada de arriesgada, sólida, saludable, baja, alta, urgente, tranquila, sin urgencia). Cada frase afirma un hecho de los datos. Tickers solo los que aparecen en el JSON. Español neutro: "tienes", nunca "tenés".
 
@@ -12263,7 +12263,7 @@ PRIORIDAD (abre con lo más importante; 2-4 líneas; no entierres lo alto entre 
 5. evento_proximo — "[ticker] reporta [tipo] en [N] días" / "hay [tipo] en [N] días". Hecho.
 6. concentracion, drawdown — solo si superan umbral, por banda. peor_posicion sin cifra.
 7. exposición — por banda, al final, como contexto.
-Si no hay stop_cruzado, conflictos, despliegue con BUYs, stop_mas_cercano ni evento: di que la cartera está alineada con el modelo y describe la exposición por banda. No inventes una alerta.
+Si no hay stop_cruzado, conflictos, BUYs del despliegue en tu universo, stop_mas_cercano ni evento: di que la cartera está alineada con el modelo y describe la exposición por banda. No inventes una alerta.
 
 Devuelve solo las líneas, sin preámbulo, sin comillas, sin markdown.`;
 
@@ -12560,14 +12560,35 @@ function phiaPayload(){
       detalle: X.conflictos.map(c => ({ ticker:c.ticker, 'señal':c['señal'], largo:c.largo }))
     };
     p.confirmadas = X.confirmas.length;
-    /* DESPLIEGUE · señales BUY del modelo sobre tickers que NO están en cartera
-       (X.rest es el resto del libro). Es DIRECCIÓN, no retorno → velo-safe.
-       Responde el hecho detrás de "por qué tanto efectivo" sin interpretarlo. */
-    const buysFuera = X.rest.filter(s => s && s['señal'] === 'BUY');
-    p.despliegue = {
-      buys_fuera_cartera: buysFuera.length,
-      tickers: buysFuera.map(s => s.ticker)
-    };
+    /* DESPLIEGUE · EJECUCIÓN, no cobertura. Es DIRECCIÓN, no retorno → velo-safe.
+       `buys_fuera_cartera` cuenta SÓLO el universo que esta estrategia PUEDE
+       comprar (params.universo.tickers): ése es el hecho que le sirve a quien
+       opera — "el modelo ve algo que yo no estoy tomando".
+       Los BUY fuera del universo son COBERTURA del modelo, no oportunidad de
+       esta estrategia: van al desglose y la IA tiene prohibido citarlos. Medido
+       el 4-sep: el libro barre 117 tickers y la #29 opera 9, así que sin acotar
+       la tarjeta decía "14 señales BUY" de las cuales NINGUNA era comprable —
+       una cifra grande de "oportunidades" inalcanzables que induce urgencia
+       falsa, justo lo que el contrato de esta tarjeta prohíbe.
+       El universo sale de PHD_STATE, que ya lo trae: cero backend. */
+    const uni = new Set((((PHD_STATE && PHD_STATE.strat && PHD_STATE.strat.params
+                        && PHD_STATE.strat.params.universo
+                        && PHD_STATE.strat.params.universo.tickers) || [])).map(phNormTk));
+    const buys     = X.rest.filter(s => s && s['señal'] === 'BUY');
+    const enUni    = buys.filter(s => uni.has(phNormTk(s.ticker)));
+    const fueraUni = buys.filter(s => !uni.has(phNormTk(s.ticker)));
+    /* Universo sin cargar (uni vacío) → se OMITE el bloque entero, igual que
+       `conflictos` cuando no hay libro. Decir "0 sin tomar" sin saber cuál es
+       el universo sería afirmar algo que no se sabe. */
+    if(uni.size){
+      p.despliegue = {
+        buys_fuera_cartera:     enUni.length,          // EJECUCIÓN (lo que cita la IA)
+        tickers:                enUni.map(s => s.ticker),
+        universo_n:             uni.size,
+        buys_fuera_universo:    fueraUni.length,       // COBERTURA (sólo desglose)
+        tickers_fuera_universo: fueraUni.map(s => s.ticker)
+      };
+    }
   }
 
   /* ── BANDAS · el corazón del rediseño ───────────────────────────────────
@@ -12672,7 +12693,10 @@ function phiaNumSet(p){
   /* El conteo del despliegue SÍ es citable como número ("3 señales BUY fuera
      de tu cartera"): es un conteo, no una magnitud de mercado. Sin esto ese 3
      tumbaría la frase entera — la misma lección que invertido_usd. */
-  if(p.despliegue) add(p.despliegue.buys_fuera_cartera);
+  /* SÓLO el conteo operable y el tamaño del universo. `buys_fuera_universo` NO
+     entra al set A PROPÓSITO: si Haiku citara ese 14, el verificador numérico
+     lo rechaza — es cobertura del modelo, no un hecho de esta estrategia. */
+  if(p.despliegue){ add(p.despliegue.buys_fuera_cartera); add(p.despliegue.universo_n); }
   if(p.drawdown_pct != null){ add(p.drawdown_pct); add(Math.abs(p.drawdown_pct)); }
   if(p.pl_dia != null){ add(p.pl_dia); add(Math.abs(p.pl_dia)); }
   /* El período del drawdown ES un dato del payload, y el modelo lo verbaliza
@@ -12782,13 +12806,24 @@ function phiaVerifBandas(texto, p){
   if(!dirOk('salida',  'SELL', true))  return false;
   if(!dirOk('entrada', 'BUY',  false)) return false;
 
-  // Despliegue: el conteo de BUY fuera de cartera, en sus dos formas.
-  if(dice('no hay senales buy del modelo fuera')){
+  /* Despliegue · anclado a "en tu universo". La forma vieja ("fuera de tu
+     cartera") queda PROHIBIDA: contaba los 117 del libro y no lo que esta
+     estrategia puede comprar, que es un hecho distinto y engañoso. */
+  if(dice('fuera de tu cartera') || dice('fuera de tu universo')) return false;
+  if(dice('no hay senales buy del modelo en tu universo')){
     if(!p.despliegue || p.despliegue.buys_fuera_cartera !== 0) return false;
   }
-  const mD = t.match(/(\d+)\s+senales?\s+buy\s+fuera/);
+  const mD = t.match(/(\d+)\s+senal(?:es)?\s+buy\s+en\s+tu\s+universo/);
   if(mD){
     if(!p.despliegue || Number(mD[1]) !== p.despliegue.buys_fuera_cartera) return false;
+  }
+  /* La IA no habla de COBERTURA: nombrar un ticker que el modelo señaló fuera
+     del universo operable presenta como oportunidad algo que esta estrategia
+     no puede comprar. La capa 2 ya no los admite en `perm`; esto lo cierra
+     también por nombre, por si alguno coincidiera con una posición. */
+  const fuera = (p.despliegue && p.despliegue.tickers_fuera_universo) || [];
+  for(let i = 0; i < fuera.length; i++){
+    if(dice(String(fuera[i]).toLowerCase())) return false;
   }
   return true;
 }
@@ -12845,7 +12880,16 @@ function phiaVerifNum(texto, payload){
      solo tickers que aparezcan en los datos": el permiso sigue anclado al
      PAYLOAD, que es la única fuente. Ningún símbolo que no venga en él pasa. */
   ((payload.despliegue && payload.despliegue.tickers) || []).forEach(tk => { if(tk) perm.add(nk(tk)); });
-  const men = t.match(/\b[A-Z][A-Z0-9.\-]{1,9}\b/g) || [];
+  /* {1,15}, no {1,9}: un simbolo con sufijo de bolsa -'ECOPETROL.CL', 12
+     caracteres- excedia el tope y el regex lo PARTIA en 'ECOPETROL.' + 'CL'.
+     Ninguno de los dos trozos estaba en `perm`, asi que la frase entera se
+     rechazaba con motivo 'num' y el dorado no encendia nunca. 'ETB.CL' (6)
+     pasaba entero, lo que hacia el fallo intermitente segun la cartera.
+     Ampliar el tope NO afloja nada: el token sigue teniendo que estar en
+     `perm`, que se construye SOLO con POSITIONS + los tickers del payload.
+     Un simbolo largo inventado se rechaza igual; lo unico que cambia es
+     que un ticker legitimo deja de fragmentarse. */
+  const men = t.match(/\b[A-Z][A-Z0-9.\-]{1,15}\b/g) || [];
   for(let i = 0; i < men.length; i++){
     if(!perm.has(nk(men[i]))) return false;
   }
@@ -13073,10 +13117,22 @@ const PHIA_CAT = {
     detalle: p => p.conflictos.n + ' de ' + p.n_posiciones + ' posiciones'
                   + (p.conflictos.tickers.length ? ' — ' + p.conflictos.tickers.join(', ') : '')
   },
+  /* Dos líneas, dos hechos distintos: lo que esta estrategia PODRÍA tomar y no
+     toma (ejecución), y lo que el modelo ve fuera de su alcance (cobertura). El
+     desglose sí puede dar la segunda: es determinista y va con su etiqueta, no
+     mezclada en una frase que suene a oportunidad perdida. */
   despliegue: {
     etiqueta: 'Despliegue del modelo',
-    detalle: p => p.despliegue.buys_fuera_cartera + ' BUY fuera de cartera'
-                  + (p.despliegue.tickers.length ? ' — ' + p.despliegue.tickers.join(', ') : '')
+    detalle: p => p.despliegue.buys_fuera_cartera
+                  ? p.despliegue.buys_fuera_cartera + ' BUY en tu universo sin tomar — '
+                    + p.despliegue.tickers.join(', ')
+                  : '0 — alineado'
+  },
+  despliegue_fuera: {
+    etiqueta: 'Fuera de tu universo',
+    detalle: p => p.despliegue.buys_fuera_universo
+                  + ' BUY en tickers que esta estrategia no opera — '
+                  + (p.despliegue.tickers_fuera_universo || []).join(', ')
   },
   peor_posicion: {
     etiqueta: 'Mayor pérdida',
@@ -13150,7 +13206,11 @@ const PHIA_KW_CONFLICTO = ['contradice','contradicen','contradiccion','conflicto
 function phiaFactores(texto, p){
   if(!p) return [];
   const nums = phiaNumsTexto(texto, p);
-  const tks  = (phiaNormTexto(texto).match(/\b[A-Z][A-Z0-9.\-]{1,9}\b/g) || []);
+  /* Mismo tope que la capa 2 del verificador: si aqui se partiera
+     'ECOPETROL.CL' el desglose no reconoceria el factor que la prosa SI
+     nombra y el detalle perderia su linea. Los dos escaneos deben leer el
+     mismo alfabeto de tickers, o el desglose miente por omision. */
+  const tks  = (phiaNormTexto(texto).match(/\b[A-Z][A-Z0-9.\-]{1,15}\b/g) || []);
   const hay  = vals => vals.some(v => v != null && !isNaN(v) && nums.indexOf(Number(v)) >= 0);
   const hayTk = s => !!s && tks.indexOf(String(s).toUpperCase()) >= 0;
   const plano  = phiaSinAcentos(phiaNormTexto(texto)).toLowerCase();
@@ -13174,6 +13234,9 @@ function phiaFactores(texto, p){
   /* El despliegue se detecta por su conteo o por cualquiera de sus tickers —
      que ahora son citables (ver la capa 2 de phiaVerifNum). */
   if(p.despliegue && (hay([p.despliegue.buys_fuera_cartera]) || (p.despliegue.tickers || []).some(hayTk))) claves.push('despliegue');
+  /* La cobertura se muestra SIEMPRE que exista, la cite o no la prosa: la IA
+     tiene prohibido nombrarla, así que el desglose es su único sitio. */
+  if(p.despliegue && p.despliegue.buys_fuera_universo > 0) claves.push('despliegue_fuera');
   if(p.pl_dia != null && hay([p.pl_dia, Math.abs(p.pl_dia)])) claves.push('pl_dia');
   return phiaLineas(claves, p);
 }
@@ -13187,6 +13250,7 @@ function phiaFactoresR5(p){
   if(p.stop_mas_cercano) claves.push('stop_cerca');
   if(p.conflictos && p.conflictos.n > 0) claves.push('conflictos');
   if(p.despliegue && p.despliegue.buys_fuera_cartera > 0) claves.push('despliegue');
+  if(p.despliegue && p.despliegue.buys_fuera_universo > 0) claves.push('despliegue_fuera');
   if(p.evento_proximo) claves.push('evento');
   if(p.peor_posicion)  claves.push('peor_posicion');
   if(p.concentracion && p.concentracion.pct > p.umbral_concentracion_pct) claves.push('concentracion');
