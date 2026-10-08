@@ -5073,7 +5073,7 @@ async function rpLoadModelPerf(t){
   host2.innerHTML=`
     <div class="rp-mp-kpis">
       <span class="rp-mp-roi" style="color:${col}">${roiFin>=0?'+':''}${roiFin.toFixed(2)}%</span>
-      ${winRate!=null?`<span class="rp-mp-win" title="Señales acertadas / evaluadas">✦ ${winRate}%${nSig?` · ${nSig} señales`:''}</span>`:''}
+      ${winRate!=null?`<span class="rp-mp-win" title="Señales evaluadas (histórico, no es promesa)">✦ ${winRate}%${nSig?` · ${nSig} señales`:''}</span>`:''}
       ${tag}
     </div>
     <svg viewBox="0 0 ${W2} ${H2}" preserveAspectRatio="none" style="width:100%;height:34px;display:block">
@@ -5126,7 +5126,7 @@ function openRpMax(kind){
       ${sintDeg&&sintNota?`<div class="rp-sint-deg">⚠ ${sintNota}</div>`:(!sint&&sintNota?`<div class="rp-sint-deg">ℹ ${sintNota}</div>`:'')}
       ${sint?`<div><div class="rpx-lbl">Síntesis del modelo</div><div class="rpx-sint">${sint}</div></div>`:''}
       ${fAll?`<div><div class="rpx-lbl">Factores considerados</div><div class="rpx-factors">${fAll}</div></div>`:''}
-      <div class="rpx-disc">El modelo predice — esto NO constituye consejo de inversión. Resultados pasados no garantizan resultados futuros.</div>`;
+      <div class="rpx-disc">El modelo proyecta — información, no consejo de inversión. Resultados pasados no garantizan resultados futuros.</div>`;
   }
 
   else if(kind==='fc'){
@@ -5165,7 +5165,7 @@ function openRpMax(kind){
       <div class="rpx-fc-grid">${cols}</div>
       <div><div class="rpx-lbl">Niveles SL/TP de referencia (solo lectura — se editan en el panel)</div><div class="rpx-sltp-ref">${ref}</div></div>
       <div class="rpx-note">p50 = mediana del pronóstico · p10/p90 = rango probable · método ${fcMetodoTxt(sig)}. Concordancia forecast↔señal: el gate de estrategias exige que la dirección del forecast acompañe a la señal.</div>
-      <div class="rpx-disc">El modelo predice — esto NO constituye consejo de inversión. Resultados pasados no garantizan resultados futuros.</div>`;
+      <div class="rpx-disc">El modelo proyecta — información, no consejo de inversión. Resultados pasados no garantizan resultados futuros.</div>`;
   }
 
   else if(kind==='perf'){
@@ -5176,7 +5176,7 @@ function openRpMax(kind){
     node.parentNode.insertBefore(RPMAX_PH,node);
     body.innerHTML='';
     body.appendChild(node);
-    body.insertAdjacentHTML('beforeend','<div class="rpx-disc">Efectividad etiquetada por origen (paper real / backtest simulado), muestra y fechas. Resultados pasados no garantizan resultados futuros.</div>');
+    body.insertAdjacentHTML('beforeend','<div class="rpx-disc">Comportamiento histórico de la señal, etiquetado por origen (paper real / backtest simulado), muestra y fechas. Resultados pasados no garantizan resultados futuros.</div>');
   }
 
   $('rpmax-overlay')?.classList.add('show');
@@ -7260,7 +7260,7 @@ async function buildNewsTicker(){
   if(bestSig && bestSig.t !== ACTIVE){
     const bs = bestSig.s, bsen = bs['señal']||'HOLD';
     const bc = bsen==='BUY'?'#2ecc71':bsen==='SELL'?'#e74c3c':'#f39c12';
-    items.push({sym:bestSig.t, color:bc, icon:'⭐', text:`${bsen} ${fmtConfPct(bestConf)}% conf · $${bs.precio_actual?.toFixed(2)||'—'}`, tag:'TOP SEÑAL'});
+    items.push({sym:bestSig.t, color:bc, icon:'⭐', text:`${bsen} ${fmtConfPct(bestConf)}% conf · $${bs.precio_actual?.toFixed(2)||'—'}`, tag:'SEÑAL DESTACADA'});
   }
 
   const wrap = document.getElementById('news-ticker-wrap');
@@ -7701,7 +7701,7 @@ function openAlertExplain(id){
       <span>Horizonte ref. <b>${a.hz||'—'}</b></span>
     </div>
     <div class="alx-body">
-      <div class="alx-why">El modelo cambió su señal de <b>${a.from}</b> a <b style="color:${toCol}">${a.to}</b>. Esto es una predicción del modelo, no una recomendación de inversión.</div>
+      <div class="alx-why">El modelo cambió su señal de <b>${a.from}</b> a <b style="color:${toCol}">${a.to}</b>. Esto es lo que ve el modelo; información, no recomendación.</div>
       ${scoreLine}
       ${pos?`<div class="alx-sec"><div class="alx-sec-t">Factores a favor</div>${pos}</div>`:''}
       ${neg?`<div class="alx-sec"><div class="alx-sec-t">Factores en contra</div>${neg}</div>`:''}
