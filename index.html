@@ -1386,6 +1386,13 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .tkr-pl-xs{font-size:8.5px;margin-left:5px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .tkr-fc-xs{font-size:8px;margin-left:4px;white-space:nowrap}
 .tkr-vol-xs{font-size:8px;margin-left:4px;color:var(--text-label);white-space:nowrap;flex-shrink:0}
+/* Fase 3·1 · Chip de volatilidad del panel izquierdo (reemplaza el badge de señal).
+   Punto de color (NIVEL de volatilidad, no dirección) + texto ±X%. La rampa
+   frío→cálido (azul/ámbar/violeta) NO reusa el verde/rojo de compra-venta ni los
+   de P&L. Mismo tamaño compacto que el pill que sustituye. */
+.tkr-vol-chip{font-size:8px;font-weight:700;letter-spacing:.03em;display:inline-flex;align-items:center;gap:3px;flex-shrink:0;white-space:nowrap}
+.tkr-vol-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block}
+.tkr-vol-dash{color:var(--text-label);font-weight:600}
 /* Panel derecho: posición propia, nota SL/TP, desempeño del modelo */
 .rp-pos-sec{background:rgba(77,158,247,.05);border-left:2px solid rgba(77,158,247,.4)}
 .rp-pos-grid{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11px}
@@ -5855,7 +5862,7 @@ function buildLeft(){
         <span class="tkr-pl-xs" id="pl-${t}" title="P&L no realizado de la posición"></span>
         <span class="tkr-right">
           <span class="tkr-bell" id="bell-${t}" title="Ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
-          <span class="tkr-pill-xs pz" id="p-${t}">···</span>
+          <span class="tkr-vol-chip" id="volc-${t}" title="${RIESGO_VOL_TOOLTIP}">${riesgoVolChipInner(t)}</span>
         </span>
       </div>
       <div class="tkr-conf-row">
@@ -5888,7 +5895,9 @@ function fillRow(t,sig,fc){
     } else fcEl.innerHTML='';
   }
   const r=$('r-'+t); if(r) r.classList.remove('skel');
-  const pEl=$('p-'+t); if(pEl){pEl.textContent=pillLbl(sen);pEl.className='tkr-pill-xs '+pillCls(sen);}
+  // Fase 3·1: la fila ya no muestra el badge de señal; refresca el chip de
+  // volatilidad por si RIESGO_STATE ya cargó (la señal sigue en el panel del ticker).
+  const vcEl=$('volc-'+t); if(vcEl && typeof riesgoVolChipInner==='function') vcEl.innerHTML=riesgoVolChipInner(t);
   const pxEl=$('px-'+t); if(pxEl) pxEl.textContent=fP(px);
   const cfEl=$('cf-'+t); if(cfEl) cfEl.textContent=fmtConfPct(conf)+'%';
   const confColor = conf>=85?'var(--green)':conf>=70?'var(--blue)':conf>=55?'var(--orange)':'var(--red)';
@@ -6214,6 +6223,57 @@ function riesgoVolLineHTML(t){
     : '—';
   return `Rango de volatilidad esperado: ${cuerpo} · rango estimado, no un objetivo de precio`;
 }
+/* ── Fase 3·1 · Chip de volatilidad del panel izquierdo ─────────────────────
+   Reemplaza el badge de señal BUY/HOLD/SELL de las filas (PORTAFOLIO y WATCHLIST)
+   por el NIVEL de volatilidad (magnitud, no dirección). Lee rango_10d.rango_pct
+   del mismo RIESGO_STATE (reusa riesgoRangoTicker, Fase 1b). La señal sigue
+   intacta dentro del panel del ticker; aquí no se toca su lógica.
+
+   Umbrales sobre el rango ±X% a 10 ruedas (banda ~70%, ±1σ). Justificación con la
+   distribución observada: SPY ~±2%, una large-cap típica ~±4–6%, nombres volátiles
+   (p. ej. AMD) >±7%. De ahí tres niveles, fáciles de ajustar (dos constantes):
+     calmado < 4%   ·   medio 4–7%   ·   agitado > 7%
+   Si el payload de riesgo trajera una clasificación propia se usaría; hoy m13 solo
+   expone rango_pct, así que se deriva de ahí. */
+const RIESGO_VOL_CALMADO_PCT = 4;   // < 4% a 10 ruedas → calmado
+const RIESGO_VOL_AGITADO_PCT = 7;   // > 7% a 10 ruedas → agitado (4–7% = medio)
+function riesgoVolNivel(r10){
+  if(r10==null || isNaN(r10)) return null;
+  if(r10 < RIESGO_VOL_CALMADO_PCT) return 'calmado';
+  if(r10 <= RIESGO_VOL_AGITADO_PCT) return 'medio';
+  return 'agitado';
+}
+/* Rampa frío→cálido. NO usa el verde/rojo de compra-venta ni los de P&L:
+   azul (calmado) → ámbar (medio) → violeta (agitado). */
+function riesgoVolColor(nivel){
+  return nivel==='calmado' ? '#4aa3df'
+       : nivel==='medio'   ? '#e0a030'
+       : nivel==='agitado' ? '#c56cf0'
+       : 'var(--text-label)';
+}
+const RIESGO_VOL_TOOLTIP = 'rango esperado ±X% a 10 ruedas (banda ~70%). El color indica el nivel de volatilidad, no la dirección.';
+/* HTML interno del chip (punto de color + ±X%), o un guion discreto si no hay
+   dato para el ticker (degrada sin romper la fila). */
+function riesgoVolChipInner(t){
+  const v = riesgoRangoTicker(t);
+  if(v.r10==null) return '<span class="tkr-vol-dash">—</span>';
+  const col = riesgoVolColor(riesgoVolNivel(v.r10));
+  return `<span class="tkr-vol-dot" style="background:${col}"></span><span style="color:${col}">${riesgoRangoTxt(v.r10)}</span>`;
+}
+/* Refresca los chips de volatilidad de ambas listas por id, sin reconstruir las
+   filas. Se llama cuando RIESGO_STATE termina de cargar (las filas se pintan
+   antes que el estado de riesgo). */
+function riesgoRenderVolChips(){
+  const todos = [...new Set([
+    ...(typeof TICKERS!=='undefined'   && TICKERS   ? TICKERS   : []),
+    ...(typeof WATCHLIST!=='undefined' && WATCHLIST ? WATCHLIST : [])
+  ])].filter(Boolean);
+  todos.forEach(t=>{
+    const el = document.getElementById('volc-'+t);
+    if(el) el.innerHTML = riesgoVolChipInner(t);
+  });
+}
+
 /* Actualiza solo la línea de volatilidad del Forecast IA del ticker activo,
    sin re-renderizar toda la tarjeta (evita cerrar un modal expandido o pisar
    una edición de SL/TP en curso). */
@@ -6248,6 +6308,7 @@ async function riesgoCargar(){
   riesgoRenderChip();
   if(typeof phriskRender === 'function') phriskRender();        // 1a · fila del panel Riesgo
   if(typeof renderWatchlist === 'function') renderWatchlist();  // 1b · banda de volatilidad en la watchlist
+  if(typeof riesgoRenderVolChips === 'function') riesgoRenderVolChips();  // 3·1 · chips de volatilidad (ambas listas)
   riesgoRenderRPVol();                                          // 1b · rango en el Forecast IA del ticker activo
 }
 
@@ -6500,14 +6561,13 @@ function renderWatchlist(){
         <span class="tkr-day-xs" id="day-${t}" title="Cambio del día">${fmtDayChip(dayV)}</span>
         <span class="tkr-right">
           <span class="tkr-bell" id="bell-${t}" title="Ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
-          <span class="tkr-pill-xs pz" id="p-${t}" title="Señal del modelo · información, no recomendación">${sig ? pillLbl(sen) : '···'}</span>
+          <span class="tkr-vol-chip" id="volc-${t}" title="${RIESGO_VOL_TOOLTIP}">${riesgoVolChipInner(t)}</span>
         </span>
       </div>
       <div class="tkr-conf-row">
         <span id="sl-${t}" class="tkr-sl-xs">${effNiv2.sl ? 'SL$'+effNiv2.sl.toFixed(1) : ''}</span>
         <span id="tp-${t}" class="tkr-tp-xs">${effNiv2.tp1 ? 'TP$'+effNiv2.tp1.toFixed(1) : ''}</span>
         <span class="tkr-fc-xs" id="fcd-${t}" title="Forecast 3D del modelo">${fcHtml}</span>
-        <span class="tkr-vol-xs" id="vol-${t}" title="Rango de volatilidad estimado · 10 ruedas (recorrido, no un objetivo de precio)">${volWlTxt}</span>
         <span class="tkr-cf-xs" id="cf-${t}">${sig ? fmtConfPct(conf)+'%' : '—'}</span>
         <div class="tkr-conf-bar-wrap"><div id="b-${t}" class="tkr-conf-bar" style="width:${conf}%;background:${confColor}"></div></div>
       </div>
@@ -6524,12 +6584,10 @@ function renderWatchlist(){
     }
     const r=$('r-'+t);
     if(r && CACHE[t]?.sig) r.classList.remove('skel');
-    // Aplicar pill color
-    const sig=CACHE[t]?.sig;
-    if(sig){
-      const pEl=$('p-'+t);
-      if(pEl){pEl.textContent=pillLbl(sig['señal']||'HOLD');pEl.className='tkr-pill-xs '+pillCls(sig['señal']||'HOLD');}
-    }
+    // Fase 3·1: la fila ya no muestra badge de señal; mantener el chip de
+    // volatilidad al día (la señal sigue intacta dentro del panel del ticker).
+    const vc=$('volc-'+t);
+    if(vc && typeof riesgoVolChipInner==='function') vc.innerHTML=riesgoVolChipInner(t);
   });
 }
 
