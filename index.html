@@ -1901,27 +1901,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
         <!-- Columna izquierda · Eficiencia · Pulso · Eventos -->
         <div class="phz-term-left">
 
-          <!-- ═══ Eficiencia del modelo (S2 · roadmap home) ══════════════════════
-               Frontend puro. Motor VIVO leído por-respuesta (pheMotorVivo → confMotor
-               sobre CACHE, default v2 · espejo de motorBadge). NO toca MOTOR_V3 /
-               motor_flags / usa_v3() / data_fetcher. -->
-          <div class="ph-card phz-mini" id="phe-card" style="display:none">
-            <div class="ph-card-hdr">
-              <div class="ph-card-hdr-left">
-                <span class="ph-card-title">Eficiencia del modelo</span>
-                <span class="phe-motor" id="phe-motor" style="display:none">motor v3</span>
-                <span class="ph-card-sub" id="phe-sub"></span>
-                <span class="phz-info" title="Detalle al pasar el mouse">ⓘ</span>
-              </div>
-              <div class="ph-range" id="phe-hz">
-                <button class="ph-rbtn" data-h="1" onclick="pheSetHz(this)">1D</button>
-                <button class="ph-rbtn on" data-h="3" onclick="pheSetHz(this)">3D</button>
-                <button class="ph-rbtn" data-h="7" onclick="pheSetHz(this)">7D</button>
-              </div>
-            </div>
-            <div class="phz-mini-num" id="phe-compact"></div>
-            <div class="phz-pop"><div class="phe-body" id="phe-body"></div></div>
-          </div>
+          <!-- #phe-card ("Eficiencia del modelo") movido al Laboratorio (#body-strat) · 2c-ii -->
 
           <!-- S3 · Pulso del modelo hoy + drift. NO toca MOTOR_V3/motor_flags/usa_v3/data_fetcher. -->
           <div class="ph-card phz-mini" id="phd-card" style="display:none">
@@ -2467,6 +2447,26 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       <button style="flex:0 0 auto;padding:5px 10px;border:1px solid var(--border2);border-radius:6px;background:var(--bg2);color:var(--text);cursor:pointer;font-size:11px" onclick="openBacktest()">🧪 Abrir control de backtest ↗</button>
     </div>
     <div class="strat-expo" id="strat-expo"><div class="strat-expo-hint">Cargando exposición…</div></div>
+    <!-- Eficiencia del modelo · métrica de investigación (movida del home en 2c-ii).
+         Frontend puro. Motor VIVO por-respuesta (pheMotorVivo → confMotor). NO toca MOTOR_V3 /
+         motor_flags / usa_v3() / data_fetcher. Conserva id y pheRender tal cual. -->
+    <div class="ph-card phz-mini" id="phe-card" style="display:none;margin:4px 8px">
+      <div class="ph-card-hdr">
+        <div class="ph-card-hdr-left">
+          <span class="ph-card-title">Eficiencia del modelo</span>
+          <span class="phe-motor" id="phe-motor" style="display:none">motor v3</span>
+          <span class="ph-card-sub" id="phe-sub"></span>
+          <span class="phz-info" title="Detalle al pasar el mouse">ⓘ</span>
+        </div>
+        <div class="ph-range" id="phe-hz">
+          <button class="ph-rbtn" data-h="1" onclick="pheSetHz(this)">1D</button>
+          <button class="ph-rbtn on" data-h="3" onclick="pheSetHz(this)">3D</button>
+          <button class="ph-rbtn" data-h="7" onclick="pheSetHz(this)">7D</button>
+        </div>
+      </div>
+      <div class="phz-mini-num" id="phe-compact"></div>
+      <div class="phz-pop"><div class="phe-body" id="phe-body"></div></div>
+    </div>
     <div class="stratp-wrap">
       <div class="stratp-list">
         <div class="stratp-list-head">
@@ -10931,7 +10931,7 @@ function phdRender(){
   body.innerHTML = '<div class="phd-grid">'
     + '<div class="phd-half"><div class="phd-lbl">Señales del último cierre</div>' + sigHtml + '</div>'
     + '<div class="phd-half"><div class="phd-lbl">P&amp;L de la estrategia</div>' + pnlHtml + '</div>'
-    + '</div>' + driftHtml;
+    + '</div>';   // 2c-ii: el drift (win-rate vivo − backtest) ya no se pinta en el home; driftHtml queda computado sin usar
 
   // Número compacto de la mini-card (el detalle va en el popup en hover).
   const cel = $('phd-compact');
@@ -10944,8 +10944,7 @@ function phdRender(){
       + '<span class="phz-mini-lbl">' + ncLbl + '</span>'
       + '<span class="phz-mini-sep">·</span>'
       + '<span class="phz-mini-mid" style="color:' + _phdPnlCol + '">' + _phdPnl + '</span>'
-      + '<span class="phz-mini-lbl">P&amp;L</span>'
-      + '<span class="phz-mini-chip" style="color:' + dl[1] + '">' + dl[0] + '</span>';
+      + '<span class="phz-mini-lbl">P&amp;L</span>';   // 2c-ii: chip de drift retirado del home
   }
 }
 
@@ -13487,8 +13486,7 @@ function motorIaMontar(){
   const home = document.getElementById('cp-home');
   const wrap = document.getElementById('phia-wrap');
   if(!home || !wrap) return;
-  const phe = document.getElementById('phe-card');
-  const phd = document.getElementById('phd-card');
+  const phd = document.getElementById('phd-card');   // 2c-ii: phe-card ya no se trae al home
 
   /* Andamiaje con createElement, NO con innerHTML: así en toda esta función
      no hay una sola escritura de innerHTML, y el invariante "aquí nada se
@@ -13509,7 +13507,7 @@ function motorIaMontar(){
   home.insertBefore(sec, wrap);                            // ocupa el sitio de R6
 
   grid.insertBefore(wrap, kpis);                           // R6 a la izquierda (60%)
-  if(phe) kpis.appendChild(phe);                           // Eficiencia arriba
+  // 2c-ii: "Eficiencia del modelo" (#phe-card) vive ahora en el Laboratorio, no en el home.
   if(phd) kpis.appendChild(phd);                           // Pulso debajo
   motorIaSync();
 }
@@ -13522,10 +13520,9 @@ function motorIaMontar(){
 function motorIaSync(){
   const sec = document.getElementById('motor-ia'); if(!sec) return;
   const wrap = document.getElementById('phia-wrap');
-  const phe  = document.getElementById('phe-card');
   const phd  = document.getElementById('phd-card');
   const vis = e => !!e && e.style.display !== 'none' && !e.classList.contains('phia-vacio');
-  sec.classList.toggle('motor-ia-vacio', !(vis(wrap) || vis(phe) || vis(phd)));
+  sec.classList.toggle('motor-ia-vacio', !(vis(wrap) || vis(phd)));   // 2c-ii: phe-card salió del home
 }
 
 motorIaMontar();
