@@ -5864,22 +5864,22 @@ function buildLeft(){
   $('lp-list').innerHTML=sortLpList(TICKERS, PF_SORT).map(t=>`
     <div class="tkr skel" id="r-${t}" onclick="pick('${t}')">
       <div class="tkr-row">
-        <span class="tkr-sym">${t}</span>
-        <span class="tkr-px-xs" id="px-${t}">—</span>
-        <span class="tkr-day-xs" id="day-${t}" title="Cambio del día"></span>
-        <span class="tkr-portfolio-val" id="pv-${t}"></span>
+        <span class="tkr-sym" title="símbolo">${t}</span>
+        <span class="tkr-px-xs" id="px-${t}" title="último precio">—</span>
+        <span class="tkr-day-xs" id="day-${t}" title="cambio del día"></span>
+        <span class="tkr-portfolio-val" id="pv-${t}" title="valor de mercado de la posición"></span>
         <span class="tkr-pl-xs" id="pl-${t}" title="P&L no realizado de la posición"></span>
         <span class="tkr-right">
-          <span class="tkr-bell" id="bell-${t}" title="Ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
+          <span class="tkr-bell" id="bell-${t}" title="ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
           <span class="tkr-vol-chip" id="volc-${t}" title="${RIESGO_VOL_TOOLTIP}">${riesgoVolChipInner(t)}</span>
         </span>
       </div>
       <div class="tkr-conf-row">
-        <span id="sl-${t}" class="tkr-sl-xs"></span>
-        <span id="tp-${t}" class="tkr-tp-xs"></span>
-        <span class="tkr-fc-xs" id="fcd-${t}" title="Forecast 3D del modelo (p50 vs precio actual)"></span>
-        <span class="tkr-cf-xs" id="cf-${t}">—</span>
-        <div class="tkr-conf-bar-wrap"><div id="b-${t}" class="tkr-conf-bar" style="width:0"></div></div>
+        <span id="sl-${t}" class="tkr-sl-xs" title="stop-loss (nivel del modelo)"></span>
+        <span id="tp-${t}" class="tkr-tp-xs" title="take-profit (nivel del modelo)"></span>
+        <span class="tkr-fc-xs" id="fcd-${t}" title="proyección del modelo a 3 ruedas · información, no un objetivo de precio"></span>
+        <span class="tkr-cf-xs" id="cf-${t}" title="confianza del modelo en la señal · información, no recomendación">—</span>
+        <div class="tkr-conf-bar-wrap" title="confianza del modelo en la señal · información, no recomendación"><div id="b-${t}" class="tkr-conf-bar" style="width:0"></div></div>
       </div>
     </div>`).join('');
 }
@@ -6204,16 +6204,28 @@ function riesgoPctTxt(x){
 function riesgoExpoPct(frac){
   return (frac!=null && !isNaN(frac)) ? Number(frac)*100 : null;
 }
+/* Fase 3·2 · Techo de plausibilidad del rango de volatilidad a 10 ruedas.
+   Una barra mala en el histórico puede inflar el pronóstico a cifras absurdas
+   (CRM mostró ±9695,7%). Ninguna acción real se acerca a ±60% a 10 ruedas
+   (±1σ ~70%), así que por encima de este techo —o si el valor es ≤0, NaN o no
+   finito— se trata como SIN DATO. Ajustable en una sola constante. */
+const RIESGO_VOL_MAX_PLAUSIBLE_PCT = 60;
+function riesgoVolPlausible(x){
+  return (x != null && isFinite(x) && x > 0 && x <= RIESGO_VOL_MAX_PLAUSIBLE_PCT)
+    ? Number(x) : null;
+}
 /* Fase 1·1b · rango de volatilidad ESTIMADO de un ticker, leído del mismo
    RIESGO_STATE que carga 1a (sin segunda llamada al endpoint). Degrada a nulls
-   si no hay estado o si el ticker no viajó en el tickers= de /v1/riesgo/estado. */
+   si no hay estado, si el ticker no viajó en el tickers= de /v1/riesgo/estado, o
+   si el valor es implausible (Fase 3·2). Punto ÚNICO de saneo: el chip de la
+   fila, el donut y la línea del panel del ticker leen todos de aquí. */
 function riesgoRangoTicker(t){
   const pt = (t && RIESGO_STATE && RIESGO_STATE.por_ticker) ? RIESGO_STATE.por_ticker[t] : null;
   const g = pt && pt.rango_10d ? pt.rango_10d.rango_pct : null;
   const c = pt && pt.rango_5d  ? pt.rango_5d.rango_pct  : null;
   return {
-    r10: (g!=null && !isNaN(g)) ? Number(g) : null,
-    r5:  (c!=null && !isNaN(c)) ? Number(c) : null
+    r10: riesgoVolPlausible(g),
+    r5:  riesgoVolPlausible(c)
   };
 }
 /* "±X %" a partir de un % de rango, o «—» si no hay dato (reusa riesgoPctTxt).
@@ -6607,22 +6619,22 @@ function renderWatchlist(){
     const confColor = conf>=85?'var(--green)':conf>=70?'var(--blue)':conf>=55?'var(--orange)':'var(--red)';
     return `<div class="tkr${ACTIVE===t?' sel':''} skel" id="r-${t}" onclick="pick('${t}')">
       <div class="tkr-row">
-        <span class="tkr-sym" id="sym-${t}">${t}</span>
-        <span class="tkr-px-xs" id="px-${t}">${sig ? fP(px) : '—'}</span>
-        <span class="tkr-day-xs" id="day-${t}" title="Cambio del día">${fmtDayChip(dayV)}</span>
+        <span class="tkr-sym" id="sym-${t}" title="símbolo">${t}</span>
+        <span class="tkr-px-xs" id="px-${t}" title="último precio">${sig ? fP(px) : '—'}</span>
+        <span class="tkr-day-xs" id="day-${t}" title="cambio del día">${fmtDayChip(dayV)}</span>
         <span class="tkr-right">
-          <span class="tkr-bell" id="bell-${t}" title="Ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
+          <span class="tkr-bell" id="bell-${t}" title="ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
           <span class="tkr-vol-chip" id="volc-${t}" title="${RIESGO_VOL_TOOLTIP}">${riesgoVolChipInner(t)}</span>
         </span>
       </div>
       <div class="tkr-conf-row">
-        <span id="sl-${t}" class="tkr-sl-xs">${effNiv2.sl ? 'SL$'+effNiv2.sl.toFixed(1) : ''}</span>
-        <span id="tp-${t}" class="tkr-tp-xs">${effNiv2.tp1 ? 'TP$'+effNiv2.tp1.toFixed(1) : ''}</span>
-        <span class="tkr-fc-xs" id="fcd-${t}" title="Forecast 3D del modelo">${fcHtml}</span>
-        <span class="tkr-cf-xs" id="cf-${t}">${sig ? fmtConfPct(conf)+'%' : '—'}</span>
-        <div class="tkr-conf-bar-wrap"><div id="b-${t}" class="tkr-conf-bar" style="width:${conf}%;background:${confColor}"></div></div>
+        <span id="sl-${t}" class="tkr-sl-xs" title="stop-loss (nivel del modelo)">${effNiv2.sl ? 'SL$'+effNiv2.sl.toFixed(1) : ''}</span>
+        <span id="tp-${t}" class="tkr-tp-xs" title="take-profit (nivel del modelo)">${effNiv2.tp1 ? 'TP$'+effNiv2.tp1.toFixed(1) : ''}</span>
+        <span class="tkr-fc-xs" id="fcd-${t}" title="proyección del modelo a 3 ruedas · información, no un objetivo de precio">${fcHtml}</span>
+        <span class="tkr-cf-xs" id="cf-${t}" title="confianza del modelo en la señal · información, no recomendación">${sig ? fmtConfPct(conf)+'%' : '—'}</span>
+        <div class="tkr-conf-bar-wrap" title="confianza del modelo en la señal · información, no recomendación"><div id="b-${t}" class="tkr-conf-bar" style="width:${conf}%;background:${confColor}"></div></div>
       </div>
-      <span class="tkr-del" onclick="event.stopPropagation();removeWatchlist('${t}')">✕</span>
+      <span class="tkr-del" title="quitar de la watchlist" onclick="event.stopPropagation();removeWatchlist('${t}')">✕</span>
     </div>`;
   }).join('');
   // Aplicar colores sel
