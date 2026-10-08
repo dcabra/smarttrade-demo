@@ -6085,6 +6085,13 @@ function riesgoPctTxt(x){
   const n = Number(x);
   return (Math.round(n)===n ? n.toFixed(0) : n.toFixed(1)) + ' %';
 }
+/* La exposición (recomendada/por_regimen/por_vol_objetivo) viaja como FRACCIÓN
+   0–1 en /v1/riesgo/estado; la UI la muestra en %. Escala ×100, o null si no
+   hay dato. OJO: la "exposición actual" (invPct) YA viene en %, NO pasa por
+   aquí. */
+function riesgoExpoPct(frac){
+  return (frac!=null && !isNaN(frac)) ? Number(frac)*100 : null;
+}
 /* Fase 1·1b · rango de volatilidad ESTIMADO de un ticker, leído del mismo
    RIESGO_STATE que carga 1a (sin segunda llamada al endpoint). Degrada a nulls
    si no hay estado o si el ticker no viajó en el tickers= de /v1/riesgo/estado. */
@@ -6156,8 +6163,10 @@ async function riesgoCargar(){
 function riesgoRenderChip(){
   const chip = $('regimen-chip'); if(!chip) return;
   const st  = RIESGO_STATE;
-  const reg = st && st.regimen ? String(st.regimen) : null;
-  const exp = st && st.exposicion ? st.exposicion.recomendada : null;
+  // regimen es un OBJETO { estado, risk_on, exposicion_regimen, ... }: el texto
+  // y el color salen de .estado (string), no del objeto.
+  const reg = (st && st.regimen && st.regimen.estado) ? String(st.regimen.estado) : null;
+  const exp = riesgoExpoPct(st && st.exposicion ? st.exposicion.recomendada : null);   // fracción 0–1 → %
   if(!reg){ chip.style.display='none'; chip.innerHTML=''; chip.removeAttribute('title'); return; }
 
   chip.style.display='inline-flex';
@@ -11614,8 +11623,8 @@ function phriskRender(){
   //   X = RIESGO_STATE.exposicion.recomendada (lo que sugiere el régimen).
   //   Y = invPct, la exposición invertida que este panel ya calcula arriba.
   // Sin régimen disponible → X muestra «—»; sin cuenta/posiciones → Y muestra «—».
-  const recExp = (typeof RIESGO_STATE!=='undefined' && RIESGO_STATE && RIESGO_STATE.exposicion)
-                 ? RIESGO_STATE.exposicion.recomendada : null;
+  const recExp = riesgoExpoPct((typeof RIESGO_STATE!=='undefined' && RIESGO_STATE && RIESGO_STATE.exposicion)
+                 ? RIESGO_STATE.exposicion.recomendada : null);   // fracción 0–1 → % (invPct NO se escala)
   const recHtml = `<span class="v">${riesgoPctTxt(recExp)}</span>`
     + `<span class="k">(por régimen) · tu exposición actual: ${invPct!=null ? riesgoPctTxt(invPct) : '—'}</span>`;
 
