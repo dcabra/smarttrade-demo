@@ -1233,6 +1233,26 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .phia-fact .k{color:var(--text-label);flex-shrink:0}
 .phia-fact .v{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
 
+/* ── Analista IA · sección a demanda del panel del ticker (Fase 2 · Bloque 3) ──
+   Complementa "Señal IA" y "Lo que proyecta el modelo", no las reemplaza. Misma
+   gramática del cockpit: el dorado (rgba(245,197,24,…)) significa "IA verificada";
+   el estado por reglas es neutro (sin dorado). La prosa viene ya anclada y
+   verificada del backend (GET /v1/analista/informe); el frontend solo la pinta. */
+.rp-ai-btn{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--border2);border-radius:6px;background:transparent;color:var(--text);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s}
+.rp-ai-btn:hover{border-color:var(--gold);background:rgba(245,197,24,.08)}
+.rp-ai-hint{font-size:9px;color:var(--text3);margin-top:4px}
+.rp-ai-loading{font-size:11px;color:var(--text3);padding:4px 0}
+.rp-ai-prosa{font-size:11.5px;line-height:1.5;color:var(--text2);padding:7px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)}
+.rp-ai-prosa.verif{border-color:rgba(245,197,24,.30)}
+.rp-ai-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gold);border:1px solid rgba(245,197,24,.35);border-radius:4px;padding:1px 6px;margin-bottom:5px}
+.rp-ai-rules{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-label);border:1px solid var(--border2);border-radius:4px;padding:1px 6px;margin-bottom:5px}
+.rp-ai-motivo{font-size:9.5px;color:var(--text3);font-style:italic;margin-top:5px}
+.rp-ai-disc{font-size:9px;color:var(--text3);margin-top:6px}
+.rp-ai-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px}
+.rp-ai-model{font-size:9px;color:var(--text-label)}
+.rp-ai-deep{font-size:9px;color:var(--text2);cursor:pointer;border:none;background:none;text-decoration:underline;font-family:inherit;padding:0}
+.rp-ai-deep:hover{color:var(--gold)}
+
 /* ══ R1 · Movimiento de hoy — tira horizontal bajo los KPIs ═══════════════
    Vive FUERA de .phz-term: no toca la grilla de 3 columnas del layout
    terminal. Rollback: borrar este bloque + la tira HTML #phmv + las
@@ -4881,6 +4901,73 @@ function draw(candles, fullCandles){
 }
 
 /* ── RIGHT PANEL ── */
+/* ══ Analista IA · sección a demanda del panel del ticker (Fase 2 · Bloque 3) ══
+   A demanda (clic), nunca auto, para cuidar el costo: una sola llamada por clic.
+   El backend (GET /v1/analista/informe) cachea 45 min por ticker, así que
+   reabrir la misma acción dentro de la ventana no gasta de nuevo.
+
+   La prosa `informe` viene YA anclada y verificada en el servidor: aquí NO se
+   re-verifica, solo se renderiza. El dorado del cockpit significa "IA
+   verificada"; el estado por reglas (fallback) es neutro, sin dorado. Los
+   tokens NO se muestran al usuario. */
+function analistaEsc(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function analistaModeloLbl(m){
+  const s=String(m||'').toLowerCase();
+  if(s.indexOf('haiku')>=0) return 'Haiku';
+  if(s.indexOf('sonnet')>=0) return 'Sonnet';
+  if(s==='reglas') return 'reglas';
+  return m||'';
+}
+/* Texto discreto del fallback según el motivo. Neutro a propósito: es chrome de
+   la UI y pasa la barrera phiaVerifLing (sin imperativos ni juicio). */
+function analistaMotivoTxt(m){
+  const s=String(m||'');
+  if(s.indexOf('tope_mensual')>=0) return 'se alcanzó el tope de uso; se muestra el resumen por reglas';
+  if(s.indexOf('llm_fallo')>=0)    return 'el servicio de IA no respondió; se muestra el resumen por reglas';
+  return 'el modelo no pasó la verificación; se muestra el resumen por reglas';
+}
+function analistaUnavailable(){
+  return '<div class="rp-ai-prosa">Análisis no disponible ahora.</div>'
+       + '<div class="rp-ai-disc">resumen automático, no es consejo</div>';
+}
+/* Pinta el objeto { informe, verificado, fallback, motivo_fallback, modelo, ... }
+   documentado en PREREGISTRO_ANALISTA_INFORME.md. Función PURA (devuelve HTML):
+   así se puede probar el render de los dos casos sin backend. */
+function analistaRender(res, t){
+  const verif = res.verificado===true;
+  const fb    = res.fallback===true;
+  const prosa = analistaEsc(res.informe||'');
+  const badge = verif
+    ? '<span class="rp-ai-badge">IA verificada</span>'
+    : (fb ? '<span class="rp-ai-rules">resumen por reglas (sin IA)</span>' : '');
+  const motivo = (fb && res.motivo_fallback)
+    ? '<div class="rp-ai-motivo">'+analistaEsc(analistaMotivoTxt(res.motivo_fallback))+'</div>' : '';
+  const modeloLbl = verif ? ('generado con '+analistaEsc(analistaModeloLbl(res.modelo))) : 'sin IA';
+  return badge
+    + '<div class="rp-ai-prosa'+(verif?' verif':'')+'">'+prosa+'</div>'
+    + motivo
+    + '<div class="rp-ai-disc">resumen automático, no es consejo</div>'
+    + '<div class="rp-ai-foot">'
+    +   '<span class="rp-ai-model">'+modeloLbl+'</span>'
+    +   '<button class="rp-ai-deep" onclick="analistaCargar(\''+t+'\',\'capaz\')" title="Análisis con el modelo más capaz (Sonnet).">análisis a fondo</button>'
+    + '</div>';
+}
+/* Dispara la llamada. Guarda contra cambio de ticker durante el await: el panel
+   se reconstruye por completo al cambiar de acción, y el nuevo #rp-analista-body
+   lleva su propio data-tkr; si no coincide, se descarta el resultado viejo. */
+async function analistaCargar(t, modelo){
+  const body=$('rp-analista-body');
+  if(!body || body.dataset.tkr!==t) return;
+  modelo = (modelo==='capaz'||modelo==='sonnet') ? 'capaz' : 'haiku';
+  body.innerHTML = '<div class="rp-ai-loading">Analizando '+analistaEsc(t)+'… puede tardar unos segundos</div>';
+  const res = await get('/v1/analista/informe?ticker='+encodeURIComponent(t)+'&modelo='+modelo);
+  const body2=$('rp-analista-body');
+  if(!body2 || body2.dataset.tkr!==t) return;   // el usuario cambió de ticker: no pisar
+  body2.innerHTML = (res && res.informe) ? analistaRender(res, t) : analistaUnavailable();
+}
+
 function buildRP(t,sig,fc){
   const rp=$('rp');
   closeRpMax();                 // si hay un modal expandido abierto, devolver/cerrar antes de re-render
@@ -4975,6 +5062,13 @@ function buildRP(t,sig,fc){
       <div class="rp-fc-grid">${fcHtml}</div>
       <div class="rp-fc-note" style="margin-top:3px;font-size:9px">proyección del modelo · p50 mediana · p10/p90 rango · ${fcMetodoTxt(sig)}</div>
       <div class="rp-fc-vol" id="rp-fc-vol" style="margin-top:3px;font-size:9px;color:var(--text-label)" title="Recorrido estimado del precio, no un objetivo. Es una banda de volatilidad, no una predicción de dirección.">${riesgoVolLineHTML(t)}</div>
+    </div>
+  </div>
+  <div class="rp-sec" style="padding:6px 14px">
+    <div class="rp-lbl" style="margin-bottom:6px">Analista IA</div>
+    <div id="rp-analista-body" data-tkr="${t}">
+      <button class="rp-ai-btn" onclick="analistaCargar('${t}','haiku')" title="Resumen con IA verificado contra los datos; no es consejo.">Analizar con IA</button>
+      <div class="rp-ai-hint">Disponible a demanda.</div>
     </div>
   </div>
   <div class="rp-sec" style="padding:6px 14px">
