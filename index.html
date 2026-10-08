@@ -1398,6 +1398,11 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .rp-mp-tag{font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border-radius:3px;padding:1px 5px}
 .rp-mp-tag.paper{color:var(--green);background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.3)}
 .rp-mp-tag.bt{color:var(--orange);background:rgba(243,156,18,.1);border:1px solid rgba(243,156,18,.3)}
+/* 2c-iii: el ROI de backtest/paper (número + sparkline) sale de la vista del ticker; quedan win-rate,
+   desglose por motivo y aviso de muestra. Funciones de render intactas. Aplica a la ruta intradía
+   (la diaria ya se simplificó en el render). */
+#rp-mp-body .rp-mp-roi,
+#rp-mp-body > svg{display:none!important}
 .rp-mp-breakdown{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:5px;font-size:9px;color:var(--text2)}
 .rp-mp-bd-item{display:flex;align-items:center;gap:4px}
 .rp-mp-bd-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
@@ -1811,7 +1816,8 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
     </div>
 
     <!-- Panel ROI backtest -->
-    <div class="roi-panel" id="roi-panel" style="height:80px;position:relative">
+    <!-- 2c-iii: panel ROI de backtest retirado del flujo principal (display:none duro; ROI_ACTIVE ya era false/legacy; funciones loadAndDrawROI/drawROI conservadas por si el Laboratorio las usa). -->
+    <div class="roi-panel" id="roi-panel" style="height:80px;position:relative;display:none">
       <canvas id="roi-canvas"></canvas>
     </div>
 
@@ -5062,25 +5068,12 @@ async function rpLoadModelPerf(t){
     host2.innerHTML='<span class="rp-mp-loading">Aún sin señales evaluadas para este ticker (disponible tras ~3 días de historial).</span>';
     return;
   }
-  const roiFin=serie[serie.length-1];
-  const col=roiFin>=0?'var(--green)':'var(--red)';
-  // Sparkline SVG 100% ancho × 34px
-  const W2=100,H2=34,lo2=Math.min(0,...serie),hi2=Math.max(0,...serie),sp2=(hi2-lo2)||1;
-  const ptsS=serie.map((v,i)=>`${(i/(serie.length-1)*W2).toFixed(2)},${(H2-((v-lo2)/sp2)*H2).toFixed(2)}`).join(' ');
-  const y0=(H2-((0-lo2)/sp2)*H2).toFixed(2);
-  const tag = fuente==='paper'
-    ? `<span class="rp-mp-tag paper" title="Curva de señales reales evaluadas en paper (M6)">paper real</span>`
-    : `<span class="rp-mp-tag bt" title="Curva de backtest simulado (M5) — aún no hay señales paper evaluadas">backtest sim.</span>`;
-  host2.innerHTML=`
-    <div class="rp-mp-kpis">
-      <span class="rp-mp-roi" style="color:${col}">${roiFin>=0?'+':''}${roiFin.toFixed(2)}%</span>
-      ${winRate!=null?`<span class="rp-mp-win" title="Señales evaluadas (histórico, no es promesa)">✦ ${winRate}%${nSig?` · ${nSig} señales`:''}</span>`:''}
-      ${tag}
-    </div>
-    <svg viewBox="0 0 ${W2} ${H2}" preserveAspectRatio="none" style="width:100%;height:34px;display:block">
-      <line x1="0" y1="${y0}" x2="${W2}" y2="${y0}" stroke="rgba(255,255,255,.14)" stroke-width="0.5" stroke-dasharray="2,2"/>
-      <polyline points="${ptsS}" fill="none" stroke="${roiFin>=0?'#2ecc71':'#e74c3c'}" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
-    </svg>`;
+  // 2c-iii: el ROI de backtest/paper (número + sparkline) se retira de la vista principal del
+  // ticker; queda solo la línea de "Señales evaluadas" como información, no promesa. El cálculo de
+  // `serie`/`fuente` arriba y las funciones de ROI quedan intactos (por si el Laboratorio los usa).
+  host2.innerHTML = (winRate!=null)
+    ? `<div class="rp-mp-kpis"><span class="rp-mp-win" title="Señales evaluadas (histórico, no es promesa)">✦ ${winRate}%${nSig?` · ${nSig} señales`:''}</span></div>`
+    : `<span class="rp-mp-loading">Sin señales evaluadas para este ticker todavía.</span>`;
 }
 
 /* ── Termómetro de efectividad: selector de timeframe ────────────────────────
