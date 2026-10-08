@@ -3630,18 +3630,18 @@ function renderEquity(eq){
 function renderPositionValues(positions){
   positions.forEach(p => {
     const el = $('pv-'+p.symbol);
-    if(el && p.value!=null && !isNaN(p.value)) el.textContent = fP(p.value);
+    if(el && p.value!=null && !isNaN(p.value)){ el.textContent = fP(p.value); el.title = tipValorPos(p.value); }
     // P&L no realizado de la posición (dato de Alpaca, fracción → %)
     const plEl = $('pl-'+p.symbol);
     if(plEl && p.unrealized_plpc!=null && !isNaN(p.unrealized_plpc)){
       const pc = p.unrealized_plpc*100;
       const col = pc>0?'var(--green)':pc<0?'var(--red)':'var(--text3)';
       plEl.innerHTML = `<span style="color:${col};font-weight:700">${pc>=0?'+':''}${pc.toFixed(2)}%</span>`;
-      plEl.title = `P&L no realizado: ${fPS(p.unrealized_pl)} (${pc>=0?'+':''}${pc.toFixed(2)}%)`;
+      plEl.title = tipPL(p.unrealized_pl, pc);
     }
     // % de cambio del día (change_today de Alpaca)
     const dEl = $('day-'+p.symbol);
-    if(dEl && p.change_today!=null && !isNaN(p.change_today)) dEl.innerHTML = fmtDayChip(p.change_today*100);
+    if(dEl && p.change_today!=null && !isNaN(p.change_today)){ const dv=p.change_today*100; dEl.innerHTML = fmtDayChip(dv); dEl.title = tipDia(dv); }
   });
 }
 
@@ -5864,21 +5864,21 @@ function buildLeft(){
   $('lp-list').innerHTML=sortLpList(TICKERS, PF_SORT).map(t=>`
     <div class="tkr skel" id="r-${t}" onclick="pick('${t}')">
       <div class="tkr-row">
-        <span class="tkr-sym" title="símbolo">${t}</span>
-        <span class="tkr-px-xs" id="px-${t}" title="último precio">—</span>
-        <span class="tkr-day-xs" id="day-${t}" title="cambio del día"></span>
-        <span class="tkr-portfolio-val" id="pv-${t}" title="valor de mercado de la posición"></span>
-        <span class="tkr-pl-xs" id="pl-${t}" title="P&L no realizado de la posición"></span>
+        <span class="tkr-sym" title="símbolo: ${t}">${t}</span>
+        <span class="tkr-px-xs" id="px-${t}" title="${tipPrecio(null)}">—</span>
+        <span class="tkr-day-xs" id="day-${t}" title="${tipDia(null)}"></span>
+        <span class="tkr-portfolio-val" id="pv-${t}" title="${tipValorPos(null)}"></span>
+        <span class="tkr-pl-xs" id="pl-${t}" title="${tipPL(null)}"></span>
         <span class="tkr-right">
           <span class="tkr-bell" id="bell-${t}" title="ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
-          <span class="tkr-vol-chip" id="volc-${t}" title="${RIESGO_VOL_TOOLTIP}">${riesgoVolChipInner(t)}</span>
+          <span class="tkr-vol-chip" id="volc-${t}" title="${tipVol(t)}">${riesgoVolChipInner(t)}</span>
         </span>
       </div>
       <div class="tkr-conf-row">
-        <span id="sl-${t}" class="tkr-sl-xs" title="stop-loss (nivel del modelo)"></span>
-        <span id="tp-${t}" class="tkr-tp-xs" title="take-profit (nivel del modelo)"></span>
-        <span class="tkr-fc-xs" id="fcd-${t}" title="proyección del modelo a 3 ruedas · información, no un objetivo de precio"></span>
-        <span class="tkr-cf-xs" id="cf-${t}" title="confianza del modelo en la señal · información, no recomendación">—</span>
+        <span id="sl-${t}" class="tkr-sl-xs" title="${tipSL(null)}"></span>
+        <span id="tp-${t}" class="tkr-tp-xs" title="${tipTP(null)}"></span>
+        <span class="tkr-fc-xs" id="fcd-${t}" title="${tipFc3(null)}"></span>
+        <span class="tkr-cf-xs" id="cf-${t}" title="${tipConf(null)}">—</span>
         <div class="tkr-conf-bar-wrap" title="confianza del modelo en la señal · información, no recomendación"><div id="b-${t}" class="tkr-conf-bar" style="width:0"></div></div>
       </div>
     </div>`).join('');
@@ -5893,7 +5893,7 @@ function fillRow(t,sig,fc){
   const conf=confPct(sig) ?? CONF_FALLBACK_PCT, niv=sig.niveles||{};
   const fc3=fc?.horizontes?.['3D']?.p50;
   // % de cambio del día
-  const dEl=$('day-'+t); if(dEl) dEl.innerHTML=fmtDayChip(dayChangePct(t));
+  const dEl=$('day-'+t); if(dEl){ const dv=dayChangePct(t); dEl.innerHTML=fmtDayChip(dv); dEl.title=tipDia(dv); }
   // Forecast 3D como delta esperado (flecha + %)
   const fcEl=$('fcd-'+t);
   if(fcEl){
@@ -5901,19 +5901,20 @@ function fillRow(t,sig,fc){
       const d3=(fc3-px)/px*100;
       const c3=d3>0.15?'var(--green)':d3<-0.15?'var(--red)':'var(--text3)';
       fcEl.innerHTML=`<span style="color:${c3}">${d3>0.15?'▲':d3<-0.15?'▼':'▪'}3D ${d3>=0?'+':''}${d3.toFixed(1)}%</span>`;
-    } else fcEl.innerHTML='';
+      fcEl.title=tipFc3(d3);
+    } else { fcEl.innerHTML=''; fcEl.title=tipFc3(null); }
   }
   const r=$('r-'+t); if(r) r.classList.remove('skel');
-  // Fase 3·1: la fila ya no muestra el badge de señal; refresca el chip de
-  // volatilidad por si RIESGO_STATE ya cargó (la señal sigue en el panel del ticker).
-  const vcEl=$('volc-'+t); if(vcEl && typeof riesgoVolChipInner==='function') vcEl.innerHTML=riesgoVolChipInner(t);
-  const pxEl=$('px-'+t); if(pxEl) pxEl.textContent=fP(px);
-  const cfEl=$('cf-'+t); if(cfEl) cfEl.textContent=fmtConfPct(conf)+'%';
+  // Fase 3·1/3·3: la fila ya no muestra el badge de señal; refresca el chip de
+  // volatilidad y su tooltip dinámico por si RIESGO_STATE ya cargó.
+  const vcEl=$('volc-'+t); if(vcEl && typeof riesgoVolChipInner==='function'){ vcEl.innerHTML=riesgoVolChipInner(t); vcEl.title=tipVol(t); }
+  const pxEl=$('px-'+t); if(pxEl){ pxEl.textContent=fP(px); pxEl.title=tipPrecio(px); }
+  const cfEl=$('cf-'+t); if(cfEl){ cfEl.textContent=fmtConfPct(conf)+'%'; cfEl.title=tipConf(conf); }
   const confColor = conf>=85?'var(--green)':conf>=70?'var(--blue)':conf>=55?'var(--orange)':'var(--red)';
-  const bEl=$('b-'+t);   if(bEl){ bEl.style.width=conf+'%'; bEl.style.background=confColor; }
+  const bEl=$('b-'+t);   if(bEl){ bEl.style.width=conf+'%'; bEl.style.background=confColor; const w=bEl.parentElement; if(w) w.title=tipConf(conf); }
   const effNiv = getEffectiveNiv(t);
-  const slEl=$('sl-'+t); if(slEl){ slEl.textContent=effNiv.sl?'SL$'+effNiv.sl.toFixed(1):''; slEl.className='tkr-sl-xs pos-niv'; slEl.dataset.t=t; slEl.dataset.f='sl'; }
-  const tpEl=$('tp-'+t); if(tpEl){ tpEl.textContent=effNiv.tp1?'TP$'+effNiv.tp1.toFixed(1):''; tpEl.className='tkr-tp-xs pos-niv'; tpEl.dataset.t=t; tpEl.dataset.f='tp1'; }
+  const slEl=$('sl-'+t); if(slEl){ slEl.textContent=effNiv.sl?'SL$'+effNiv.sl.toFixed(1):''; slEl.className='tkr-sl-xs pos-niv'; slEl.dataset.t=t; slEl.dataset.f='sl'; slEl.title=tipSL(effNiv.sl); }
+  const tpEl=$('tp-'+t); if(tpEl){ tpEl.textContent=effNiv.tp1?'TP$'+effNiv.tp1.toFixed(1):''; tpEl.className='tkr-tp-xs pos-niv'; tpEl.dataset.t=t; tpEl.dataset.f='tp1'; tpEl.title=tipTP(effNiv.tp1); }
   // Si este ticker es el activo, refrescar chips con la señal real ahora que llegó
   if(t === ACTIVE) updateChatChips(t, sen);
 }
@@ -6234,6 +6235,39 @@ function riesgoRangoTxt(x){
   const s = riesgoPctTxt(x);
   return s==='—' ? '—' : '±'+s;
 }
+/* ── Fase 3·3 · Tooltips DINÁMICOS de las filas del panel izquierdo ──────────
+   Formato "Etiqueta: valor · [encuadre honesto si aplica]". Reusan los
+   formateadores existentes (fP, fPS, fmtConfPct, riesgoRangoTxt). Cualquier
+   valor ausente → "sin dato" (nunca "undefined"/"null"). Se usan tanto en las
+   plantillas (watchlist) como en los actualizadores (fillRow /
+   renderPositionValues / riesgoRenderVolChips), donde se refresca el valor. */
+function _tipSD(){ return 'sin dato'; }
+function tipPrecio(px){ return 'último precio: ' + ((px!=null && !isNaN(px) && px!==0) ? fP(px) : _tipSD()); }
+function tipDia(p){ return 'cambio del día: ' + ((p!=null && !isNaN(p)) ? ((p>=0?'+':'')+Number(p).toFixed(2)+'%') : _tipSD()); }
+function tipValorPos(v){ return 'valor de mercado de la posición: ' + ((v!=null && !isNaN(v)) ? fP(v) : _tipSD()); }
+function tipPL(pl, plpc){
+  if(pl==null || isNaN(pl)) return 'P&L no realizado de la posición: ' + _tipSD();
+  const pct = (plpc!=null && !isNaN(plpc)) ? ` (${plpc>=0?'+':''}${Number(plpc).toFixed(2)}%)` : '';
+  return 'P&L no realizado de la posición: ' + fPS(pl) + pct;
+}
+function tipSL(sl){ return 'stop-loss (nivel del modelo): ' + ((sl!=null && !isNaN(sl)) ? fP(sl) : _tipSD()); }
+function tipTP(tp){ return 'take-profit (nivel del modelo): ' + ((tp!=null && !isNaN(tp)) ? fP(tp) : _tipSD()); }
+function tipFc3(d3){
+  const v = (d3!=null && !isNaN(d3)) ? ((d3>=0?'+':'')+Number(d3).toFixed(1)+'%') : _tipSD();
+  return 'proyección del modelo a 3 ruedas: ' + v + ' · información, no un objetivo de precio';
+}
+function tipConf(c){
+  return 'confianza del modelo en la señal: ' + ((c!=null && !isNaN(c)) ? (fmtConfPct(c)+'%') : _tipSD()) + ' · información, no recomendación';
+}
+/* Volatilidad: rango real (10 ruedas y, si está, 5 ruedas). Lee del punto único
+   saneado (riesgoRangoTicker); sin dato → "sin dato de volatilidad", nunca "±X%". */
+function tipVol(t){
+  const v = riesgoRangoTicker(t);
+  const cola = 'el color indica el nivel de volatilidad, no la dirección';
+  if(v.r10==null) return 'volatilidad esperada: sin dato de volatilidad · ' + cola;
+  const cuerpo = riesgoRangoTxt(v.r10) + ' (10 ruedas)' + (v.r5!=null ? ' · '+riesgoRangoTxt(v.r5)+' (5 ruedas)' : '');
+  return 'volatilidad esperada: ' + cuerpo + ' · banda ~70% · ' + cola;
+}
 /* HTML de la línea de rango de volatilidad para la tarjeta Forecast IA (1b).
    Rótulo explícito: es una ESTIMACIÓN de recorrido, no un objetivo de precio.
    Sin dato para el ticker → «—». Compartida por buildRP y riesgoRenderRPVol. */
@@ -6273,7 +6307,9 @@ function riesgoVolNivel(r10){
    mismo azul). Nada de verde/rojo (dirección/P&L), dorado (verificada) ni
    ámbar/violeta. */
 const RIESGO_VOL_AZUL = '#4d9ef7';
-const RIESGO_VOL_TOOLTIP = 'rango esperado ±X% a 10 ruedas (banda ~70%). El color indica el nivel de volatilidad, no la dirección.';
+/* Fase 3·3: el tooltip de volatilidad lo arma tipVol(t) con el rango REAL (±X%
+   rellenado); se retiró el literal estático RIESGO_VOL_TOOLTIP que mostraba un
+   "±X%" sin sustituir. */
 /* Barritas llenas por nivel: calma 1, media 2, agitado 3 (0 = sin dato). */
 function riesgoVolNivelN(r10){
   const n = riesgoVolNivel(r10);
@@ -6316,7 +6352,7 @@ function riesgoVolDonutHTML(t){
   const R=18, SW=5, C=22, circ=2*Math.PI*R;
   const dash = `${(frac*circ).toFixed(2)} ${(circ-frac*circ).toFixed(2)}`;
   const op = riesgoVolBrillo(v.r10);
-  return `<span class="rp-vol-donut" title="${RIESGO_VOL_TOOLTIP}">`
+  return `<span class="rp-vol-donut" title="${tipVol(t)}">`
     + `<svg viewBox="0 0 44 44" width="44" height="44">`
     + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="rgba(77,158,247,.15)" stroke-width="${SW}"/>`
     + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="${RIESGO_VOL_AZUL}" stroke-opacity="${op}" stroke-width="${SW}" `
@@ -6333,7 +6369,7 @@ function riesgoRenderVolChips(){
   ])].filter(Boolean);
   todos.forEach(t=>{
     const el = document.getElementById('volc-'+t);
-    if(el) el.innerHTML = riesgoVolChipInner(t);
+    if(el){ el.innerHTML = riesgoVolChipInner(t); el.title = tipVol(t); }   // Fase 3·3: tooltip dinámico
   });
 }
 
@@ -6608,31 +6644,29 @@ function renderWatchlist(){
     const fc3 = d.fc?.horizontes?.['3D']?.p50;
     const dayV = dayChangePct(t);
     let fcHtml='';
-    if(fc3!=null && px){
-      const d3=(fc3-px)/px*100;
-      const c3=d3>0.15?'var(--green)':d3<-0.15?'var(--red)':'var(--text3)';
-      fcHtml=`<span style="color:${c3}">${d3>0.15?'▲':d3<-0.15?'▼':'▪'}3D ${d3>=0?'+':''}${d3.toFixed(1)}%</span>`;
+    const d3w = (fc3!=null && px) ? (fc3-px)/px*100 : null;   // Fase 3·3: delta 3D para el tooltip
+    if(d3w!=null){
+      const c3=d3w>0.15?'var(--green)':d3w<-0.15?'var(--red)':'var(--text3)';
+      fcHtml=`<span style="color:${c3}">${d3w>0.15?'▲':d3w<-0.15?'▼':'▪'}3D ${d3w>=0?'+':''}${d3w.toFixed(1)}%</span>`;
     }
-    const volWl = riesgoRangoTicker(t);                 // 1b · rango de volatilidad estimado (10 ruedas)
-    const volWlTxt = volWl.r10!=null ? riesgoRangoTxt(volWl.r10) : '—';
     const effNiv2 = getEffectiveNiv(t);
     const confColor = conf>=85?'var(--green)':conf>=70?'var(--blue)':conf>=55?'var(--orange)':'var(--red)';
     return `<div class="tkr${ACTIVE===t?' sel':''} skel" id="r-${t}" onclick="pick('${t}')">
       <div class="tkr-row">
-        <span class="tkr-sym" id="sym-${t}" title="símbolo">${t}</span>
-        <span class="tkr-px-xs" id="px-${t}" title="último precio">${sig ? fP(px) : '—'}</span>
-        <span class="tkr-day-xs" id="day-${t}" title="cambio del día">${fmtDayChip(dayV)}</span>
+        <span class="tkr-sym" id="sym-${t}" title="símbolo: ${t}">${t}</span>
+        <span class="tkr-px-xs" id="px-${t}" title="${sig ? tipPrecio(px) : tipPrecio(null)}">${sig ? fP(px) : '—'}</span>
+        <span class="tkr-day-xs" id="day-${t}" title="${tipDia(dayV)}">${fmtDayChip(dayV)}</span>
         <span class="tkr-right">
           <span class="tkr-bell" id="bell-${t}" title="ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
-          <span class="tkr-vol-chip" id="volc-${t}" title="${RIESGO_VOL_TOOLTIP}">${riesgoVolChipInner(t)}</span>
+          <span class="tkr-vol-chip" id="volc-${t}" title="${tipVol(t)}">${riesgoVolChipInner(t)}</span>
         </span>
       </div>
       <div class="tkr-conf-row">
-        <span id="sl-${t}" class="tkr-sl-xs" title="stop-loss (nivel del modelo)">${effNiv2.sl ? 'SL$'+effNiv2.sl.toFixed(1) : ''}</span>
-        <span id="tp-${t}" class="tkr-tp-xs" title="take-profit (nivel del modelo)">${effNiv2.tp1 ? 'TP$'+effNiv2.tp1.toFixed(1) : ''}</span>
-        <span class="tkr-fc-xs" id="fcd-${t}" title="proyección del modelo a 3 ruedas · información, no un objetivo de precio">${fcHtml}</span>
-        <span class="tkr-cf-xs" id="cf-${t}" title="confianza del modelo en la señal · información, no recomendación">${sig ? fmtConfPct(conf)+'%' : '—'}</span>
-        <div class="tkr-conf-bar-wrap" title="confianza del modelo en la señal · información, no recomendación"><div id="b-${t}" class="tkr-conf-bar" style="width:${conf}%;background:${confColor}"></div></div>
+        <span id="sl-${t}" class="tkr-sl-xs" title="${tipSL(effNiv2.sl)}">${effNiv2.sl ? 'SL$'+effNiv2.sl.toFixed(1) : ''}</span>
+        <span id="tp-${t}" class="tkr-tp-xs" title="${tipTP(effNiv2.tp1)}">${effNiv2.tp1 ? 'TP$'+effNiv2.tp1.toFixed(1) : ''}</span>
+        <span class="tkr-fc-xs" id="fcd-${t}" title="${tipFc3(d3w)}">${fcHtml}</span>
+        <span class="tkr-cf-xs" id="cf-${t}" title="${sig ? tipConf(conf) : tipConf(null)}">${sig ? fmtConfPct(conf)+'%' : '—'}</span>
+        <div class="tkr-conf-bar-wrap" title="${sig ? tipConf(conf) : tipConf(null)}"><div id="b-${t}" class="tkr-conf-bar" style="width:${conf}%;background:${confColor}"></div></div>
       </div>
       <span class="tkr-del" title="quitar de la watchlist" onclick="event.stopPropagation();removeWatchlist('${t}')">✕</span>
     </div>`;
