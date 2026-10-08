@@ -1383,7 +1383,11 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .lp-hdr-right .lp-sort-sel{margin-left:0}
 /* Filas del panel izquierdo: % día, P&L, forecast 3D */
 .tkr-day-xs{font-size:8.5px;font-weight:600;margin-left:4px;white-space:nowrap}
-.tkr-pl-xs{font-size:8.5px;margin-left:5px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* Fase 3·4: P&L completo, sin elipsis (ya no compite con 3D/confianza, retirados de la fila). */
+.tkr-pl-xs{font-size:8.5px;margin-left:5px;white-space:nowrap;flex-shrink:0}
+/* Fase 3·4: peso en cartera (solo holdings) y marca de earnings (📅 Nd). */
+.tkr-peso-xs{font-size:8.5px;color:var(--text2);margin-left:4px;white-space:nowrap;flex-shrink:0}
+.tkr-earn-xs{font-size:8px;color:var(--gold);margin-left:4px;white-space:nowrap;flex-shrink:0}
 .tkr-fc-xs{font-size:8px;margin-left:4px;white-space:nowrap}
 .tkr-vol-xs{font-size:8px;margin-left:4px;color:var(--text-label);white-space:nowrap;flex-shrink:0}
 /* Fase 3·1 · Chip de volatilidad del panel izquierdo (reemplaza el badge de señal).
@@ -3631,6 +3635,9 @@ function renderPositionValues(positions){
   positions.forEach(p => {
     const el = $('pv-'+p.symbol);
     if(el && p.value!=null && !isNaN(p.value)){ el.textContent = fP(p.value); el.title = tipValorPos(p.value); }
+    // Fase 3·4 · peso en la cartera (solo holdings): market_value / equity × 100.
+    const pesoEl = $('peso-'+p.symbol);
+    if(pesoEl && p.value!=null && !isNaN(p.value) && EQUITY){ const w=p.value/EQUITY*100; pesoEl.textContent = w.toFixed(1)+'%'; pesoEl.title = tipPeso(w); }
     // P&L no realizado de la posición (dato de Alpaca, fracción → %)
     const plEl = $('pl-'+p.symbol);
     if(plEl && p.unrealized_plpc!=null && !isNaN(p.unrealized_plpc)){
@@ -5867,19 +5874,18 @@ function buildLeft(){
         <span class="tkr-sym" title="símbolo: ${t}">${t}</span>
         <span class="tkr-px-xs" id="px-${t}" title="${tipPrecio(null)}">—</span>
         <span class="tkr-day-xs" id="day-${t}" title="${tipDia(null)}"></span>
-        <span class="tkr-portfolio-val" id="pv-${t}" title="${tipValorPos(null)}"></span>
         <span class="tkr-pl-xs" id="pl-${t}" title="${tipPL(null)}"></span>
+        <span class="tkr-peso-xs" id="peso-${t}" title="${tipPeso(null)}"></span>
         <span class="tkr-right">
           <span class="tkr-bell" id="bell-${t}" title="ver alertas" onclick="event.stopPropagation();openAlertsForTicker('${t}')">🔔</span>
           <span class="tkr-vol-chip" id="volc-${t}" title="${tipVol(t)}">${riesgoVolChipInner(t)}</span>
         </span>
       </div>
       <div class="tkr-conf-row">
-        <span id="sl-${t}" class="tkr-sl-xs" title="${tipSL(null)}"></span>
+        <span id="sl-${t}" class="tkr-sl-xs" title="${tipSL(null,null)}"></span>
         <span id="tp-${t}" class="tkr-tp-xs" title="${tipTP(null)}"></span>
-        <span class="tkr-fc-xs" id="fcd-${t}" title="${tipFc3(null)}"></span>
-        <span class="tkr-cf-xs" id="cf-${t}" title="${tipConf(null)}">—</span>
-        <div class="tkr-conf-bar-wrap" title="confianza del modelo en la señal · información, no recomendación"><div id="b-${t}" class="tkr-conf-bar" style="width:0"></div></div>
+        <span class="tkr-earn-xs" id="earn-${t}" title="${tipEarn(earningsDias(t))}">${earnMark(t)}</span>
+        <span class="tkr-portfolio-val" id="pv-${t}" title="${tipValorPos(null)}"></span>
       </div>
     </div>`).join('');
 }
@@ -5894,27 +5900,17 @@ function fillRow(t,sig,fc){
   const fc3=fc?.horizontes?.['3D']?.p50;
   // % de cambio del día
   const dEl=$('day-'+t); if(dEl){ const dv=dayChangePct(t); dEl.innerHTML=fmtDayChip(dv); dEl.title=tipDia(dv); }
-  // Forecast 3D como delta esperado (flecha + %)
-  const fcEl=$('fcd-'+t);
-  if(fcEl){
-    if(fc3!=null && px){
-      const d3=(fc3-px)/px*100;
-      const c3=d3>0.15?'var(--green)':d3<-0.15?'var(--red)':'var(--text3)';
-      fcEl.innerHTML=`<span style="color:${c3}">${d3>0.15?'▲':d3<-0.15?'▼':'▪'}3D ${d3>=0?'+':''}${d3.toFixed(1)}%</span>`;
-      fcEl.title=tipFc3(d3);
-    } else { fcEl.innerHTML=''; fcEl.title=tipFc3(null); }
-  }
   const r=$('r-'+t); if(r) r.classList.remove('skel');
-  // Fase 3·1/3·3: la fila ya no muestra el badge de señal; refresca el chip de
-  // volatilidad y su tooltip dinámico por si RIESGO_STATE ya cargó.
+  // Fase 3·1/3·3: la fila ya no muestra el badge de señal (ni 3D/confianza, Fase 3·4);
+  // refresca el chip de volatilidad y su tooltip dinámico por si RIESGO_STATE ya cargó.
   const vcEl=$('volc-'+t); if(vcEl && typeof riesgoVolChipInner==='function'){ vcEl.innerHTML=riesgoVolChipInner(t); vcEl.title=tipVol(t); }
   const pxEl=$('px-'+t); if(pxEl){ pxEl.textContent=fP(px); pxEl.title=tipPrecio(px); }
-  const cfEl=$('cf-'+t); if(cfEl){ cfEl.textContent=fmtConfPct(conf)+'%'; cfEl.title=tipConf(conf); }
-  const confColor = conf>=85?'var(--green)':conf>=70?'var(--blue)':conf>=55?'var(--orange)':'var(--red)';
-  const bEl=$('b-'+t);   if(bEl){ bEl.style.width=conf+'%'; bEl.style.background=confColor; const w=bEl.parentElement; if(w) w.title=tipConf(conf); }
   const effNiv = getEffectiveNiv(t);
-  const slEl=$('sl-'+t); if(slEl){ slEl.textContent=effNiv.sl?'SL$'+effNiv.sl.toFixed(1):''; slEl.className='tkr-sl-xs pos-niv'; slEl.dataset.t=t; slEl.dataset.f='sl'; slEl.title=tipSL(effNiv.sl); }
+  // Fase 3·4: SL con la distancia real integrada ("SL$23.0 · −4.0%").
+  const slEl=$('sl-'+t); if(slEl){ slEl.textContent=slDispTxt(effNiv.sl, px); slEl.className='tkr-sl-xs pos-niv'; slEl.dataset.t=t; slEl.dataset.f='sl'; slEl.title=tipSL(effNiv.sl, px); }
   const tpEl=$('tp-'+t); if(tpEl){ tpEl.textContent=effNiv.tp1?'TP$'+effNiv.tp1.toFixed(1):''; tpEl.className='tkr-tp-xs pos-niv'; tpEl.dataset.t=t; tpEl.dataset.f='tp1'; tpEl.title=tipTP(effNiv.tp1); }
+  // Fase 3·4: marca de earnings (📅 Nd) si hay dato de PHCAL_STATE.
+  const eEl=$('earn-'+t); if(eEl){ const ed=earningsDias(t); eEl.textContent=(ed!=null)?('📅 '+ed+'d'):''; eEl.title=tipEarn(ed); }
   // Si este ticker es el activo, refrescar chips con la señal real ahora que llegó
   if(t === ACTIVE) updateChatChips(t, sen);
 }
@@ -6250,8 +6246,60 @@ function tipPL(pl, plpc){
   const pct = (plpc!=null && !isNaN(plpc)) ? ` (${plpc>=0?'+':''}${Number(plpc).toFixed(2)}%)` : '';
   return 'P&L no realizado de la posición: ' + fPS(pl) + pct;
 }
-function tipSL(sl){ return 'stop-loss (nivel del modelo): ' + ((sl!=null && !isNaN(sl)) ? fP(sl) : _tipSD()); }
+/* Distancia al stop (riesgo real): (SL/precio − 1)×100 → negativa cuando el stop
+   está por debajo del precio (el caso normal en largo). Solo en %: /v1/signal no
+   trae ATR en los datos de la fila, así que no se puede expresar en ATR aquí. */
+function distStopPct(px, sl){
+  return (px!=null && sl!=null && !isNaN(px) && !isNaN(sl) && px!==0) ? (sl/px - 1)*100 : null;
+}
+/* Texto compacto del SL con la distancia integrada: "SL$23.0 · −4.0%". */
+function slDispTxt(sl, px){
+  if(sl==null || isNaN(sl)) return '';
+  const d = distStopPct(px, sl);
+  return 'SL$'+Number(sl).toFixed(1) + (d!=null ? ' · '+(d>=0?'+':'')+d.toFixed(1)+'%' : '');
+}
+function tipSL(sl, px){
+  if(sl==null || isNaN(sl)) return 'stop-loss (nivel del modelo): ' + _tipSD();
+  const d = distStopPct(px, sl);
+  const dtxt = (d!=null)
+    ? ` · distancia ${(d>=0?'+':'')}${d.toFixed(1)}% (el stop está ${Math.abs(d).toFixed(1)}% ${d<0?'por debajo':'por encima'} del precio)`
+    : '';
+  return 'stop-loss (nivel del modelo): ' + fP(sl) + dtxt;
+}
 function tipTP(tp){ return 'take-profit (nivel del modelo): ' + ((tp!=null && !isNaN(tp)) ? fP(tp) : _tipSD()); }
+function tipPeso(p){ return 'peso en la cartera: ' + ((p!=null && !isNaN(p)) ? (Number(p).toFixed(1)+'% del equity') : _tipSD()); }
+/* Próximo reporte (earnings) por ticker: días restantes si hay un earnings
+   dentro de la ventana del calendario; si no, null (no se inventa). */
+function earningsDias(t){
+  const st = (typeof PHCAL_STATE!=='undefined') ? PHCAL_STATE : null;
+  if(!st || st.error || !Array.isArray(st.eventos)) return null;
+  const nk = (typeof phNormTk==='function') ? phNormTk : (v=>String(v||'').trim().toUpperCase());
+  const lim = (typeof PHCAL_DIAS==='number') ? PHCAL_DIAS : 14;
+  let best = null;
+  st.eventos.forEach(e=>{
+    if(!e || e.dias_restantes==null || isNaN(e.dias_restantes) || !e.ticker) return;
+    if(String(e.tipo||'').toLowerCase().indexOf('earning')<0) return;
+    if(nk(e.ticker)!==nk(t)) return;
+    const dr = Number(e.dias_restantes);
+    if(dr<0 || dr>lim) return;
+    if(best==null || dr<best) best = dr;
+  });
+  return best;
+}
+function earnMark(t){ const d=earningsDias(t); return (d!=null) ? ('📅 '+d+'d') : ''; }
+function tipEarn(d){ return 'próximo reporte: ' + ((d!=null && !isNaN(d)) ? ('en '+d+' '+(d===1?'día':'días')) : _tipSD()); }
+/* Refresca la marca de earnings de ambas listas por id, sin reconstruir filas
+   (PHCAL_STATE carga después de que las filas ya están pintadas). */
+function renderRowEarnings(){
+  const todos = [...new Set([
+    ...(typeof TICKERS!=='undefined'   && TICKERS   ? TICKERS   : []),
+    ...(typeof WATCHLIST!=='undefined' && WATCHLIST ? WATCHLIST : [])
+  ])].filter(Boolean);
+  todos.forEach(t=>{
+    const el = document.getElementById('earn-'+t);
+    if(el){ const d=earningsDias(t); el.textContent = (d!=null)?('📅 '+d+'d'):''; el.title = tipEarn(d); }
+  });
+}
 function tipFc3(d3){
   const v = (d3!=null && !isNaN(d3)) ? ((d3>=0?'+':'')+Number(d3).toFixed(1)+'%') : _tipSD();
   return 'proyección del modelo a 3 ruedas: ' + v + ' · información, no un objetivo de precio';
@@ -6639,18 +6687,10 @@ function renderWatchlist(){
     const sig = d.sig;
     const px = sig?.precio_actual;
     const sen = sig?.['señal'] || '...';
-    const conf = confPct(sig) ?? 0;
-    const niv = sig?.niveles || {};
-    const fc3 = d.fc?.horizontes?.['3D']?.p50;
     const dayV = dayChangePct(t);
-    let fcHtml='';
-    const d3w = (fc3!=null && px) ? (fc3-px)/px*100 : null;   // Fase 3·3: delta 3D para el tooltip
-    if(d3w!=null){
-      const c3=d3w>0.15?'var(--green)':d3w<-0.15?'var(--red)':'var(--text3)';
-      fcHtml=`<span style="color:${c3}">${d3w>0.15?'▲':d3w<-0.15?'▼':'▪'}3D ${d3w>=0?'+':''}${d3w.toFixed(1)}%</span>`;
-    }
+    // Fase 3·4: la fila de watchlist ya no muestra 3D ni confianza (se retiraron);
+    // la señal sigue intacta dentro del panel del ticker.
     const effNiv2 = getEffectiveNiv(t);
-    const confColor = conf>=85?'var(--green)':conf>=70?'var(--blue)':conf>=55?'var(--orange)':'var(--red)';
     return `<div class="tkr${ACTIVE===t?' sel':''} skel" id="r-${t}" onclick="pick('${t}')">
       <div class="tkr-row">
         <span class="tkr-sym" id="sym-${t}" title="símbolo: ${t}">${t}</span>
@@ -6662,11 +6702,9 @@ function renderWatchlist(){
         </span>
       </div>
       <div class="tkr-conf-row">
-        <span id="sl-${t}" class="tkr-sl-xs" title="${tipSL(effNiv2.sl)}">${effNiv2.sl ? 'SL$'+effNiv2.sl.toFixed(1) : ''}</span>
+        <span id="sl-${t}" class="tkr-sl-xs" title="${tipSL(effNiv2.sl, px)}">${slDispTxt(effNiv2.sl, px)}</span>
         <span id="tp-${t}" class="tkr-tp-xs" title="${tipTP(effNiv2.tp1)}">${effNiv2.tp1 ? 'TP$'+effNiv2.tp1.toFixed(1) : ''}</span>
-        <span class="tkr-fc-xs" id="fcd-${t}" title="${tipFc3(d3w)}">${fcHtml}</span>
-        <span class="tkr-cf-xs" id="cf-${t}" title="${sig ? tipConf(conf) : tipConf(null)}">${sig ? fmtConfPct(conf)+'%' : '—'}</span>
-        <div class="tkr-conf-bar-wrap" title="${sig ? tipConf(conf) : tipConf(null)}"><div id="b-${t}" class="tkr-conf-bar" style="width:${conf}%;background:${confColor}"></div></div>
+        <span class="tkr-earn-xs" id="earn-${t}" title="${tipEarn(earningsDias(t))}">${earnMark(t)}</span>
       </div>
       <span class="tkr-del" title="quitar de la watchlist" onclick="event.stopPropagation();removeWatchlist('${t}')">✕</span>
     </div>`;
@@ -7680,14 +7718,16 @@ function sentColor(s){
 
 /* ── UPDATE LEFT PANEL NIV ── */
 function updateLeftPanelNiv(ticker){
-  // Actualiza el valor de SL/TP en la fila del panel izquierdo (posiciones)
+  // Actualiza el valor de SL/TP en la fila del panel izquierdo (posiciones).
+  // Fase 3·4: mantiene el formato con prefijo y la distancia al stop integrada,
+  // y refresca el tooltip dinámico (no pisa "SL$X · −Y%" con un "$X" pelado).
   const d = CACHE[ticker]; if(!d||!d.sig) return;
   const niv = getEffectiveNiv(ticker);
-  // Celdas del panel izquierdo: buscar por data-ticker y data-field
-  ['sl','tp1'].forEach(f=>{
-    const el = document.querySelector(`.pos-niv[data-t="${ticker}"][data-f="${f}"]`);
-    if(el && niv[f]) el.textContent = fP(niv[f]);
-  });
+  const px = d.sig.precio_actual;
+  const slEl = document.querySelector(`.pos-niv[data-t="${ticker}"][data-f="sl"]`);
+  if(slEl && niv.sl){ slEl.textContent = slDispTxt(niv.sl, px); slEl.title = tipSL(niv.sl, px); }
+  const tpEl = document.querySelector(`.pos-niv[data-t="${ticker}"][data-f="tp1"]`);
+  if(tpEl && niv.tp1){ tpEl.textContent = 'TP$'+Number(niv.tp1).toFixed(1); tpEl.title = tipTP(niv.tp1); }
 }
 
 /* ── TOGGLE SECCIONES PANEL DERECHO ── */
@@ -10569,6 +10609,7 @@ async function phcalLoad(){
   PHCAL_STATE = next;
   PHCAL_LOADING = false;
   phcalRender();
+  if(typeof renderRowEarnings === 'function') renderRowEarnings();   // Fase 3·4: marca 📅 en las filas
 }
 
 /* ═══ S5 · Noticias de mis tickers (posiciones + watchlist) ═══════════════════
