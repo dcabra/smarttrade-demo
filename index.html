@@ -1391,8 +1391,17 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
    frío→cálido (azul/ámbar/violeta) NO reusa el verde/rojo de compra-venta ni los
    de P&L. Mismo tamaño compacto que el pill que sustituye. */
 .tkr-vol-chip{font-size:8px;font-weight:700;letter-spacing:.03em;display:inline-flex;align-items:center;gap:3px;flex-shrink:0;white-space:nowrap}
-.tkr-vol-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block}
+/* Barritas estilo "señal de celular": tres de altura ascendente, un solo azul;
+   el nº de llenas y el brillo los fija el JS (riesgoVolBarsHTML). */
+.tkr-vol-bars{display:inline-flex;align-items:flex-end;gap:1.5px;height:9px}
+.tkr-vol-bar{display:inline-block;width:2.5px;border-radius:1px}
+.tkr-vol-bar.b1{height:4px}.tkr-vol-bar.b2{height:6.5px}.tkr-vol-bar.b3{height:9px}
 .tkr-vol-dash{color:var(--text-label);font-weight:600}
+/* Donut de volatilidad del panel del ticker (misma familia azul, compacto). */
+.rp-vol-line{display:flex;align-items:center;gap:8px}
+.rp-vol-line-txt{min-width:0}
+.rp-vol-donut{position:relative;width:44px;height:44px;flex-shrink:0;display:inline-block}
+.rp-vol-donut-c{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--text2);font-variant-numeric:tabular-nums;pointer-events:none}
 /* Panel derecho: posición propia, nota SL/TP, desempeño del modelo */
 .rp-pos-sec{background:rgba(77,158,247,.05);border-left:2px solid rgba(77,158,247,.4)}
 .rp-pos-grid{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:11px}
@@ -6221,7 +6230,11 @@ function riesgoVolLineHTML(t){
   const cuerpo = (v.r10!=null)
     ? `<b style="color:var(--text2)">${riesgoRangoTxt(v.r10)}</b> (10 ruedas)${v.r5!=null ? ' · '+riesgoRangoTxt(v.r5)+' (5 ruedas)' : ''}`
     : '—';
-  return `Rango de volatilidad esperado: ${cuerpo} · rango estimado, no un objetivo de precio`;
+  // Fase 3·1 (ajuste): donut azul a la izquierda (±X% al centro) + la línea como
+  // etiqueta. Sin dato, riesgoVolDonutHTML devuelve '' y queda solo la línea con «—».
+  const donut = riesgoVolDonutHTML(t);
+  const linea = `Rango de volatilidad esperado: ${cuerpo} · rango estimado, no un objetivo de precio`;
+  return `<span class="rp-vol-line">${donut}<span class="rp-vol-line-txt">${linea}</span></span>`;
 }
 /* ── Fase 3·1 · Chip de volatilidad del panel izquierdo ─────────────────────
    Reemplaza el badge de señal BUY/HOLD/SELL de las filas (PORTAFOLIO y WATCHLIST)
@@ -6243,22 +6256,60 @@ function riesgoVolNivel(r10){
   if(r10 <= RIESGO_VOL_AGITADO_PCT) return 'medio';
   return 'agitado';
 }
-/* Rampa frío→cálido. NO usa el verde/rojo de compra-venta ni los de P&L:
-   azul (calmado) → ámbar (medio) → violeta (agitado). */
-function riesgoVolColor(nivel){
-  return nivel==='calmado' ? '#4aa3df'
-       : nivel==='medio'   ? '#e0a030'
-       : nivel==='agitado' ? '#c56cf0'
-       : 'var(--text-label)';
-}
+/* UN SOLO tono: el azul del donut de cartera (#4d9ef7 = rgba(77,158,247,·)).
+   La magnitud va en la FORMA (nº de barritas llenas) y en el BRILLO (opacidad del
+   mismo azul). Nada de verde/rojo (dirección/P&L), dorado (verificada) ni
+   ámbar/violeta. */
+const RIESGO_VOL_AZUL = '#4d9ef7';
 const RIESGO_VOL_TOOLTIP = 'rango esperado ±X% a 10 ruedas (banda ~70%). El color indica el nivel de volatilidad, no la dirección.';
-/* HTML interno del chip (punto de color + ±X%), o un guion discreto si no hay
+/* Barritas llenas por nivel: calma 1, media 2, agitado 3 (0 = sin dato). */
+function riesgoVolNivelN(r10){
+  const n = riesgoVolNivel(r10);
+  return n==='calmado' ? 1 : n==='medio' ? 2 : n==='agitado' ? 3 : 0;
+}
+/* Brillo (opacidad del azul) por nivel: tenue → brillante. */
+function riesgoVolBrillo(r10){
+  const n = riesgoVolNivel(r10);
+  return n==='calmado' ? 0.5 : n==='medio' ? 0.75 : n==='agitado' ? 1 : 0.3;
+}
+/* Tres barritas de altura ascendente (estilo "señal de celular"), SIEMPRE
+   presentes: las llenas al brillo del nivel, las tenues al 18%. */
+function riesgoVolBarsHTML(r10){
+  const llenas = riesgoVolNivelN(r10), op = riesgoVolBrillo(r10);
+  let bars = '';
+  for(let i=1;i<=3;i++){
+    const on = i<=llenas;
+    bars += `<i class="tkr-vol-bar b${i}" style="background:${RIESGO_VOL_AZUL};opacity:${on?op:0.18}"></i>`;
+  }
+  return `<span class="tkr-vol-bars">${bars}</span>`;
+}
+/* HTML interno del chip (barritas azules + ±X%), o un guion discreto si no hay
    dato para el ticker (degrada sin romper la fila). */
 function riesgoVolChipInner(t){
   const v = riesgoRangoTicker(t);
   if(v.r10==null) return '<span class="tkr-vol-dash">—</span>';
-  const col = riesgoVolColor(riesgoVolNivel(v.r10));
-  return `<span class="tkr-vol-dot" style="background:${col}"></span><span style="color:${col}">${riesgoRangoTxt(v.r10)}</span>`;
+  return `${riesgoVolBarsHTML(v.r10)}<span style="color:${RIESGO_VOL_AZUL}">${riesgoRangoTxt(v.r10)}</span>`;
+}
+/* Donut de volatilidad del panel del ticker. Reusa la técnica del anillo del
+   donut de cartera (circ=2πR, stroke-dasharray, rotate(-90)), en tamaño compacto.
+   Llenado = rango_pct / techo. Techo con headroom sobre la distribución observada
+   (SPY ~±2%, large-cap ~±4–6%, volátiles ~±9%): 15% deja aire al tope y es
+   ajustable. Color: el mismo azul, con el brillo del nivel. Sin dato → sin donut
+   (la línea de texto ya degrada a «—»). */
+const RIESGO_VOL_DONUT_MAX_PCT = 15;   // techo del anillo (ajustable)
+function riesgoVolDonutHTML(t){
+  const v = riesgoRangoTicker(t);
+  if(v.r10==null) return '';
+  const frac = Math.max(0, Math.min(1, v.r10 / RIESGO_VOL_DONUT_MAX_PCT));
+  const R=18, SW=5, C=22, circ=2*Math.PI*R;
+  const dash = `${(frac*circ).toFixed(2)} ${(circ-frac*circ).toFixed(2)}`;
+  const op = riesgoVolBrillo(v.r10);
+  return `<span class="rp-vol-donut" title="${RIESGO_VOL_TOOLTIP}">`
+    + `<svg viewBox="0 0 44 44" width="44" height="44">`
+    + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="rgba(77,158,247,.15)" stroke-width="${SW}"/>`
+    + `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="${RIESGO_VOL_AZUL}" stroke-opacity="${op}" stroke-width="${SW}" `
+    + `stroke-dasharray="${dash}" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 ${C} ${C})"/>`
+    + `</svg><span class="rp-vol-donut-c">${riesgoRangoTxt(v.r10)}</span></span>`;
 }
 /* Refresca los chips de volatilidad de ambas listas por id, sin reconstruir las
    filas. Se llama cuando RIESGO_STATE termina de cargar (las filas se pintan
