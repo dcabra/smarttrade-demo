@@ -6037,27 +6037,101 @@ function fmtCountdown(ms){
 /* ── Régimen de correlación del universo (10-jul, punto 2c) ─────────────────
    Consume GET /v1/papertrading/regimen (solo lectura). Si un % alto del
    universo emite señal en la misma dirección, las señales del día son UNA
-   tesis macro, no N independientes. El chip solo se muestra en régimen de
-   alta correlación (silencio = normal). Throttle 10 min: el dato cambia una
-   vez por noche. */
+   tesis macro, no N independientes. Throttle 10 min: el dato cambia una vez
+   por noche.
+
+   Fase 1·1a: esta lógica YA NO pinta el chip del topbar (#regimen-chip). Ese
+   chip lo toma ahora el régimen del giro (riesgoRenderChip, más abajo). El
+   cálculo de correlación se conserva —es un dato honesto del motor— y queda en
+   REGIMEN_CORR_STATE por si otra vista lo consume; simplemente dejó de tocar el
+   chip para no disputárselo al régimen nuevo. */
 let REGIMEN_LAST_FETCH = 0;
+let REGIMEN_CORR_STATE = null;   // último /v1/papertrading/regimen, o null si sin datos
 async function loadRegimen(){
-  const chip=$('regimen-chip'); if(!chip) return;
   const now=Date.now();
   if(now - REGIMEN_LAST_FETCH < 10*60*1000) return;
   REGIMEN_LAST_FETCH = now;
   const d = await get('/v1/papertrading/regimen');
-  if(!d || d.regimen==='sin_datos'){ chip.style.display='none'; return; }
-  if(d.regimen==='alta_correlacion'){
-    chip.style.display='inline-flex';
-    chip.className='mkt-chip closed';
-    chip.style.color='var(--orange)';
-    chip.style.borderColor='rgba(243,156,18,.35)';
-    chip.innerHTML=`⚠ Alta correlación · ${d.pct_dominante}% ${d.direccion_dominante}`;
-    chip.title=d.nota+` (señales de ${d.job_date}: ${d.n_buy} BUY / ${d.n_sell} SELL / ${d.n_hold} HOLD)`;
-  } else {
-    chip.style.display='none';   // normal: sin ruido en el topbar
+  REGIMEN_CORR_STATE = (d && d.regimen && d.regimen!=='sin_datos') ? d : null;
+}
+
+/* ══════════════════════════════════════════════
+   RÉGIMEN DEL GIRO + EXPOSICIÓN RECOMENDADA — Fase 1·1a
+   ──────────────────────────────────────────────
+   Consume GET /v1/riesgo/estado?tickers=<posiciones ∪ watchlist> (LECTURA),
+   con el mismo patrón de auth que los demás /v1 del front (get(): Bearer si hay
+   sesión, null silencioso si falla). Lo que entrega es una RECOMENDACIÓN, no
+   una orden: pinta el chip del topbar (#regimen-chip) y una fila del panel
+   «Riesgo · exposición». NO toca el ejecutor ni las órdenes.
+
+   Degrada a estado neutro: si el endpoint no está disponible, falla, o devuelve
+   disponible:false, RIESGO_STATE queda en null; el chip se oculta y el panel
+   muestra «—». One-shot con TTL (10 min): el régimen cambia una vez por noche.
+   ══════════════════════════════════════════════ */
+let RIESGO_STATE = null;          // respuesta de /v1/riesgo/estado, o null si no disponible
+let RIESGO_LOADING = false;
+let RIESGO_AT = 0;
+const RIESGO_TTL_MS = 10 * 60 * 1000;
+
+function riesgoEsc(s){
+  return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+/* Formatea un % de exposición como lo piden los textos de la fase ("100 %",
+   "73,2 %"): entero si es entero, un decimal si no; «—» si no hay dato. */
+function riesgoPctTxt(x){
+  if(x==null || isNaN(x)) return '—';
+  const n = Number(x);
+  return (Math.round(n)===n ? n.toFixed(0) : n.toFixed(1)) + ' %';
+}
+/* Tooltip honesto compartido por el chip y la fila del panel. */
+const RIESGO_TOOLTIP = 'Recomendación. La defensa por régimen recortó el drawdown ~6 pp a cambio de ~1,5 pp de retorno anual (medido); un solo bajista real, el timing apenas supera al azar.';
+
+async function riesgoCargar(){
+  const fresh = RIESGO_STATE && (Date.now() - RIESGO_AT) < RIESGO_TTL_MS;
+  if(fresh){ riesgoRenderChip(); return; }
+  if(RIESGO_LOADING) return;
+  RIESGO_LOADING = true;
+  try{
+    // Universo = posiciones ∪ watchlist (misma unión que usa el calendario/noticias del Home).
+    const tickers = [...new Set([
+      ...(typeof TICKERS   !== 'undefined' && TICKERS   ? TICKERS   : []),
+      ...(typeof WATCHLIST !== 'undefined' && WATCHLIST ? WATCHLIST : [])
+    ])].filter(Boolean);
+    const qs = tickers.length ? ('?tickers=' + encodeURIComponent(tickers.join(','))) : '';
+    const d = await get('/v1/riesgo/estado' + qs);
+    // get() ya devuelve null ante red/401/no-ok; disponible:false es el "apagado" explícito del backend.
+    RIESGO_STATE = (d && d.disponible !== false) ? d : null;
+    RIESGO_AT = Date.now();
+  }catch(e){
+    RIESGO_STATE = null;
   }
+  RIESGO_LOADING = false;
+  riesgoRenderChip();
+  if(typeof phriskRender === 'function') phriskRender();   // repinta la fila nueva del panel
+}
+
+/* Pinta #regimen-chip con el régimen del giro + la exposición sugerida (reusa
+   el chip que antes mostraba la correlación del universo). Sin dato de régimen
+   → chip oculto (estado neutro, sin ruido en el topbar). */
+function riesgoRenderChip(){
+  const chip = $('regimen-chip'); if(!chip) return;
+  const st  = RIESGO_STATE;
+  const reg = st && st.regimen ? String(st.regimen) : null;
+  const exp = st && st.exposicion ? st.exposicion.recomendada : null;
+  if(!reg){ chip.style.display='none'; chip.innerHTML=''; chip.removeAttribute('title'); return; }
+
+  chip.style.display='inline-flex';
+  chip.className='mkt-chip closed';
+  // Pista visual de la recomendación (no una orden): alcista = al alza (verde),
+  // bajista = defensa (ámbar); cualquier otro régimen, neutro.
+  chip.style.color = reg==='alcista' ? 'var(--green)'
+                   : reg==='bajista' ? 'var(--orange)'
+                   : 'var(--text2)';
+  chip.style.borderColor = reg==='alcista' ? 'rgba(46,204,113,.30)'
+                         : reg==='bajista' ? 'rgba(243,156,18,.35)'
+                         : 'var(--border2)';
+  chip.innerHTML = `Régimen: ${riesgoEsc(reg)} · exposición sugerida ${riesgoPctTxt(exp)}`;
+  chip.title = RIESGO_TOOLTIP;
 }
 
 function renderMktChip(){
@@ -10082,6 +10156,7 @@ function renderHome(){
   phdLoad();              // S3 · pulso del modelo hoy + drift · one-shot con TTL, fire-and-forget
   phcalLoad();            // S4 · próximos eventos (calendario) · one-shot con TTL, fire-and-forget
   phnewsLoad();           // S5 · noticias de mis posiciones · fan-out cache-first, progresivo
+  riesgoCargar();         // Fase 1·1a · régimen del giro + exposición recomendada (chip + fila del panel), fire-and-forget
   // Repinta el chart cuando su contenedor cambia de tamaño (layout, zoom, resize).
   // Un rAF único era demasiado temprano; el observer dispara cuando el panel obtiene
   // sus dimensiones reales, sin importar el timing ni el nivel de zoom.
@@ -11492,6 +11567,15 @@ function phriskRender(){
       + `<span class="k">desde el máximo · ${PH_RANGE}</span>`
     : `<span class="v">—</span><span class="k">sin serie del rango</span>`;
 
+  // Fase 1·1a · exposición recomendada por RÉGIMEN (recomendación, no orden).
+  //   X = RIESGO_STATE.exposicion.recomendada (lo que sugiere el régimen).
+  //   Y = invPct, la exposición invertida que este panel ya calcula arriba.
+  // Sin régimen disponible → X muestra «—»; sin cuenta/posiciones → Y muestra «—».
+  const recExp = (typeof RIESGO_STATE!=='undefined' && RIESGO_STATE && RIESGO_STATE.exposicion)
+                 ? RIESGO_STATE.exposicion.recomendada : null;
+  const recHtml = `<span class="v">${riesgoPctTxt(recExp)}</span>`
+    + `<span class="k">(por régimen) · tu exposición actual: ${invPct!=null ? riesgoPctTxt(invPct) : '—'}</span>`;
+
   el.innerHTML = `
     <div class="phrisk-hdr">Riesgo · exposición</div>
     <div class="phrisk-cash">${cashPct!=null ? cashPct.toFixed(1)+'%' : '—'}</div>
@@ -11501,7 +11585,8 @@ function phriskRender(){
     <div class="phrisk-line"><span class="k">Mayor exposición</span>${
       top ? `<span class="v">${top.symbol} · ${fP(top.value)}</span>` : '<span class="v">—</span>'
     }</div>
-    <div class="phrisk-line"><span class="k">Drawdown</span>${ddHtml}</div>`;
+    <div class="phrisk-line"><span class="k">Drawdown</span>${ddHtml}</div>
+    <div class="phrisk-line" title="${riesgoEsc(RIESGO_TOOLTIP)}"><span class="k">Exposición recomendada</span>${recHtml}</div>`;
 }
 
 function phSetAllocMode(btn){
