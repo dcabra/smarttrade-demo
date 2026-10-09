@@ -1391,19 +1391,22 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
    en TODAS las filas de la lista. Regla de color: verde/rojo SOLO para retornos
    (día, P&L); azul SOLO para la barra de volatilidad; todo lo demás, gris tenue.
    SL/TP/distancia/valor/peso se mudaron a la tarjeta-peek (hover). */
-/* Columnas que CABEN en el panel real (--lp-w 260px − padding ≈ 240px): la de
+/* Columnas que CABEN en el panel real (--lp-w 260px − padding − scrollbar ≈ 237px).
+   MISMA plantilla en PORTAFOLIO y WATCHLIST → alineadas y consistentes. La de
    volatilidad es flexible (1fr) y absorbe el sobrante; precio/día/P&L/📅 van en
-   ancho fijo a la derecha → el P&L y el icono NUNCA se recortan. Alineadas en
-   todas las filas por usar la misma plantilla. */
-.tkr-grid{display:grid;grid-template-columns:28px 44px 40px minmax(40px,1fr) 44px 12px;align-items:center;gap:3px;min-height:20px}
+   ancho fijo a la derecha → nunca se recortan. El ✕ de watchlist es absoluto
+   (no entra en la grilla → no roba ancho). El símbolo tiene 42px: entra un ticker
+   de 4 letras (AMZN, TSLA) sin truncarse. */
+.tkr-grid{display:grid;grid-template-columns:42px 44px 32px minmax(0,1fr) 38px 12px;align-items:center;gap:2px;min-height:20px}
 .tkr-grid .tkr-sym{font-size:10px;font-weight:700;color:var(--text2);min-width:0;overflow:hidden;text-overflow:ellipsis}
-.tkr-grid .tkr-px-xs{font-size:10px;font-weight:600;color:var(--text2);text-align:right;white-space:nowrap}
-.tkr-grid .tkr-day-xs{font-size:8.5px;font-weight:600;text-align:right;white-space:nowrap;margin:0}
+.tkr-grid .tkr-px-xs{font-size:10px;font-weight:600;color:var(--text2);text-align:right;white-space:nowrap;overflow:hidden}
+.tkr-grid .tkr-day-xs{font-size:8.5px;font-weight:600;text-align:right;white-space:nowrap;margin:0;overflow:hidden}
 .tkr-grid .tkr-pl-xs{font-size:8.5px;font-weight:700;text-align:right;white-space:nowrap}
 .tkr.sel .tkr-grid .tkr-sym{color:var(--gold)}
 .tkr.sel .tkr-grid .tkr-px-xs{color:var(--gold)}
-/* Barra fina horizontal de volatilidad (un solo azul; se llena por valor/nivel). */
-.tkr-volcell{display:inline-flex;align-items:center;gap:4px;min-width:0}
+/* Barra fina horizontal de volatilidad (un solo azul; se llena por valor/nivel).
+   nowrap en la celda y en el texto → el ±X% NUNCA se parte en dos líneas. */
+.tkr-volcell{display:inline-flex;align-items:center;gap:3px;min-width:0;white-space:nowrap;overflow:hidden}
 .tkr-volbar{position:relative;width:26px;height:4px;border-radius:2px;background:rgba(77,158,247,.15);flex-shrink:0;overflow:hidden}
 .tkr-volbar-fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px}
 .tkr-volbar-txt{font-size:8px;color:var(--text3);white-space:nowrap}
@@ -6439,8 +6442,11 @@ function riesgoVolBarHTML(t){
   if(v.r10==null) return '<span class="tkr-vol-dash">—</span>';
   const frac = Math.max(0, Math.min(1, v.r10 / RIESGO_VOL_DONUT_MAX_PCT));
   const op = riesgoVolBrillo(v.r10);
+  // Texto compacto SOLO para la fila (sin el espacio de riesgoRangoTxt): "±4.8%".
+  // No se toca el formateador compartido (la ficha y la exposición lo siguen usando).
+  const txt = riesgoRangoTxt(v.r10).replace(/\s+/g,'');
   return `<span class="tkr-volbar"><span class="tkr-volbar-fill" style="width:${(frac*100).toFixed(0)}%;background:${RIESGO_VOL_AZUL};opacity:${op}"></span></span>`
-    + `<span class="tkr-volbar-txt">${riesgoRangoTxt(v.r10)}</span>`;
+    + `<span class="tkr-volbar-txt">${txt}</span>`;
 }
 /* Nombre de empresa por ticker, SOLO si ya está a mano (m2 context de fundamentales,
    que el front carga para posiciones). No se inventa: sin dato → cadena vacía. */
