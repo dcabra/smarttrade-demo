@@ -68,7 +68,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .lp-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 
 /* Ticker row */
-.tkr{padding:3px 8px;cursor:pointer;border-left:3px solid transparent;transition:background .15s;position:relative;overflow:hidden}
+/* Fase 3·7: padding 3px 10px (igual que la 2ª definición de .tkr más abajo) para
+   que no haya divergencia latente de padding según el orden de las reglas. */
+.tkr{padding:3px 10px;cursor:pointer;border-left:3px solid transparent;transition:background .15s;position:relative;overflow:hidden}
 .tkr:hover{background:var(--bg-left2)}
 .tkr.sel{background:#0e1628;border-left-color:var(--gold);box-shadow:inset 1px 0 12px rgba(245,197,24,0.06)}
 .tkr-top{display:none}  /* obsoleto, reemplazado por tkr-row */
@@ -6009,6 +6011,29 @@ function peekHide(){
   PEEK_TIMER=setTimeout(()=>{ if(PEEK_EL) PEEK_EL.classList.remove('show'); PEEK_TIMER=null; }, 120);
 }
 
+/* Fase 3·7 · Constructor ÚNICO de fila, compartido por PORTAFOLIO (buildLeft) y
+   WATCHLIST (renderWatchlist). Garantiza filas visualmente idénticas (mismas
+   clases .tkr/.tkr-grid, mismo alto, mismas columnas). La ÚNICA diferencia
+   permitida: `watchlist` añade el ✕ (absoluto, no roba ancho); el P&L va vacío
+   pero presente en watchlist para que las columnas sigan alineadas entre listas. */
+function tkrRowHTML(t, opts){
+  opts = opts || {};
+  const sig = (typeof CACHE!=='undefined' && CACHE[t]) ? CACHE[t].sig : null;
+  const px  = sig ? sig.precio_actual : null;
+  const dayV = dayChangePct(t);
+  const del = opts.watchlist
+    ? `<span class="tkr-del" onclick="event.stopPropagation();removeWatchlist('${t}')">✕</span>` : '';
+  return `<div class="tkr${ACTIVE===t?' sel':''} skel" id="r-${t}" onclick="pick('${t}')" onmouseenter="peekShow('${t}',this)" onmouseleave="peekHide()">`
+    + `<div class="tkr-grid">`
+    + `<span class="tkr-sym" id="sym-${t}">${t}</span>`
+    + `<span class="tkr-px-xs" id="px-${t}">${sig ? fP(px) : '—'}</span>`
+    + `<span class="tkr-day-xs" id="day-${t}">${fmtDayChip(dayV)}</span>`
+    + `<span class="tkr-volcell" id="volc-${t}">${riesgoVolBarHTML(t)}</span>`
+    + `<span class="tkr-pl-xs" id="pl-${t}"></span>`
+    + `<span class="tkr-earn-ico" id="earn-${t}">${earnIco(t)}</span>`
+    + `</div>${del}</div>`;
+}
+
 function buildLeft(){
   $('lp-cnt').textContent = TICKERS.length + (TICKERS.length===1 ? ' posición' : ' posiciones');
   const sel=$('pf-sort'); if(sel) sel.value=PF_SORT;
@@ -6016,17 +6041,7 @@ function buildLeft(){
     $('lp-list').innerHTML = '<div class="empty"><strong>Sin posiciones</strong>Tu cuenta de Alpaca no tiene posiciones abiertas. Explora tickers en tu watchlist ↓</div>';
     return;
   }
-  $('lp-list').innerHTML=sortLpList(TICKERS, PF_SORT).map(t=>`
-    <div class="tkr skel" id="r-${t}" onclick="pick('${t}')" onmouseenter="peekShow('${t}',this)" onmouseleave="peekHide()">
-      <div class="tkr-grid">
-        <span class="tkr-sym">${t}</span>
-        <span class="tkr-px-xs" id="px-${t}">—</span>
-        <span class="tkr-day-xs" id="day-${t}"></span>
-        <span class="tkr-volcell" id="volc-${t}">${riesgoVolBarHTML(t)}</span>
-        <span class="tkr-pl-xs" id="pl-${t}"></span>
-        <span class="tkr-earn-ico" id="earn-${t}">${earnIco(t)}</span>
-      </div>
-    </div>`).join('');
+  $('lp-list').innerHTML=sortLpList(TICKERS, PF_SORT).map(t=>tkrRowHTML(t)).join('');
 }
 
 function fillRow(t,sig,fc){
@@ -6837,25 +6852,8 @@ function renderWatchlist(){
     return;
   }
   const wlSel=$('wl-sort'); if(wlSel) wlSel.value=WL_SORT;
-  list.innerHTML = sortLpList(WATCHLIST, WL_SORT).map(t => {
-    const d = CACHE[t] || {};
-    const sig = d.sig;
-    const px = sig?.precio_actual;
-    const dayV = dayChangePct(t);
-    // Fase 3·5: fila mínima en grilla. La columna de P&L queda vacía pero
-    // alineada (watchlist no es holding). La señal vive en el panel del ticker.
-    return `<div class="tkr${ACTIVE===t?' sel':''} skel" id="r-${t}" onclick="pick('${t}')" onmouseenter="peekShow('${t}',this)" onmouseleave="peekHide()">
-      <div class="tkr-grid">
-        <span class="tkr-sym" id="sym-${t}">${t}</span>
-        <span class="tkr-px-xs" id="px-${t}">${sig ? fP(px) : '—'}</span>
-        <span class="tkr-day-xs" id="day-${t}">${fmtDayChip(dayV)}</span>
-        <span class="tkr-volcell" id="volc-${t}">${riesgoVolBarHTML(t)}</span>
-        <span class="tkr-pl-xs" id="pl-${t}"></span>
-        <span class="tkr-earn-ico" id="earn-${t}">${earnIco(t)}</span>
-      </div>
-      <span class="tkr-del" onclick="event.stopPropagation();removeWatchlist('${t}')">✕</span>
-    </div>`;
-  }).join('');
+  // Fase 3·7: misma fila que PORTAFOLIO (constructor compartido), + el ✕.
+  list.innerHTML = sortLpList(WATCHLIST, WL_SORT).map(t => tkrRowHTML(t, {watchlist:true})).join('');
   // Aplicar colores sel
   WATCHLIST.forEach(t => {
     if(ACTIVE===t){
