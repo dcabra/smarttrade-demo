@@ -1391,7 +1391,11 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
    en TODAS las filas de la lista. Regla de color: verde/rojo SOLO para retornos
    (día, P&L); azul SOLO para la barra de volatilidad; todo lo demás, gris tenue.
    SL/TP/distancia/valor/peso se mudaron a la tarjeta-peek (hover). */
-.tkr-grid{display:grid;grid-template-columns:34px 50px 46px 74px 48px 14px;align-items:center;gap:4px;min-height:20px}
+/* Columnas que CABEN en el panel real (--lp-w 260px − padding ≈ 240px): la de
+   volatilidad es flexible (1fr) y absorbe el sobrante; precio/día/P&L/📅 van en
+   ancho fijo a la derecha → el P&L y el icono NUNCA se recortan. Alineadas en
+   todas las filas por usar la misma plantilla. */
+.tkr-grid{display:grid;grid-template-columns:28px 44px 40px minmax(40px,1fr) 44px 12px;align-items:center;gap:3px;min-height:20px}
 .tkr-grid .tkr-sym{font-size:10px;font-weight:700;color:var(--text2);min-width:0;overflow:hidden;text-overflow:ellipsis}
 .tkr-grid .tkr-px-xs{font-size:10px;font-weight:600;color:var(--text2);text-align:right;white-space:nowrap}
 .tkr-grid .tkr-day-xs{font-size:8.5px;font-weight:600;text-align:right;white-space:nowrap;margin:0}
@@ -1404,20 +1408,25 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .tkr-volbar-fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px}
 .tkr-volbar-txt{font-size:8px;color:var(--text3);white-space:nowrap}
 .tkr-earn-ico{font-size:9px;text-align:center}
-/* Tarjeta-peek (popover al hover). Un único elemento reutilizado, informativo
-   (pointer-events:none: no bloquea el chart ni parpadea). */
-.tkr-peek{position:fixed;z-index:9998;width:264px;max-width:92vw;background:var(--bg4,#131f38);border:1px solid var(--border2);border-radius:10px;box-shadow:0 14px 38px rgba(0,0,0,.6);padding:10px 12px;pointer-events:none;display:none}
+/* Tarjeta-peek (popover al hover) — ficha etiqueta-izquierda / valor-derecha.
+   Un único elemento reutilizado, informativo (pointer-events:none: no bloquea el
+   chart ni parpadea). Jerarquía de contraste: valores brillantes (var(--text) o
+   color semántico), etiquetas var(--text-label), notas var(--text3). */
+.tkr-peek{position:fixed;z-index:9998;width:244px;max-width:92vw;background:var(--bg4,#131f38);border:1px solid var(--border2);border-radius:10px;box-shadow:0 14px 38px rgba(0,0,0,.6);padding:10px 12px;pointer-events:none;display:none}
 .tkr-peek.show{display:block}
-.tkr-peek-hd{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.tkr-peek-hd{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .tkr-peek-sym{font-size:13px;font-weight:800;color:var(--text)}
-.tkr-peek-name{font-size:10px;color:var(--text3);flex:1 1 100%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;order:3}
-.tkr-peek-px{font-size:12px;font-weight:700;color:var(--text2);font-variant-numeric:tabular-nums}
+.tkr-peek-r{display:flex;align-items:baseline;gap:8px;flex-shrink:0}
+.tkr-peek-px{font-size:12px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
 .tkr-peek-day{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
-.tkr-peek-visual{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.tkr-peek-spark{flex:1;min-width:0}
-.tkr-peek-grp{margin-top:6px}
-.tkr-peek-grp-t{font-size:8px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-label);margin-bottom:2px}
-.tkr-peek-line{font-size:10.5px;color:var(--text2);line-height:1.45}
+.tkr-peek-name{font-size:10px;color:var(--text3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tkr-peek-spark{display:block;width:100%;height:28px;margin:6px 0 2px}
+.tkr-peek-grp{margin-top:7px;padding-top:5px;border-top:1px solid var(--border)}
+.tkr-peek-grp-t{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-label);margin-bottom:3px}
+.tkr-peek-kv{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:10.5px;line-height:1.5}
+.tkr-peek-kv .k{color:var(--text-label);flex-shrink:0}
+.tkr-peek-kv .v{color:var(--text);font-weight:600;text-align:right;font-variant-numeric:tabular-nums;min-width:0}
+.tkr-peek-donut{display:flex;justify-content:center;margin-top:9px}
 /* Fase 3·4: peso en cartera (solo holdings) y marca de earnings (📅 Nd). */
 .tkr-peso-xs{font-size:8.5px;color:var(--text2);margin-left:4px;white-space:nowrap;flex-shrink:0}
 .tkr-earn-xs{font-size:8px;color:var(--gold);margin-left:4px;white-space:nowrap;flex-shrink:0}
@@ -5913,6 +5922,13 @@ function peekSparkline(t){
   return `<svg class="tkr-peek-spark" viewBox="0 0 ${W} ${H}" height="${H}" preserveAspectRatio="none">`
     + `<polyline points="${pts}" fill="none" stroke="var(--text3)" stroke-width="1.3" vector-effect="non-scaling-stroke"/></svg>`;
 }
+/* Una línea etiqueta/valor de la ficha. `col` opcional pinta el valor con su
+   color semántico (retorno verde/rojo, vol azul, evento dorado); por defecto el
+   valor va brillante (var(--text)). */
+function peekKV(k, v, col){
+  const style = col ? ` style="color:${col}"` : '';
+  return `<div class="tkr-peek-kv"><span class="k">${k}</span><span class="v"${style}>${v}</span></div>`;
+}
 function peekHTML(t){
   const d = (typeof CACHE!=='undefined') ? CACHE[t] : null;
   const sig = d && d.sig;
@@ -5924,28 +5940,55 @@ function peekHTML(t){
   const pos = (typeof POSITIONS!=='undefined' && POSITIONS) ? POSITIONS.find(p=>p && p.symbol===t) : null;
   const niv = (typeof getEffectiveNiv==='function') ? getEffectiveNiv(t) : {};
 
+  // Encabezado: símbolo (izq) · precio + cambio del día (der) · nombre · sparkline.
   const hd = `<div class="tkr-peek-hd"><span class="tkr-peek-sym">${t}</span>`
-    + `<span class="tkr-peek-px">${px!=null?fP(px):'sin dato'}</span>`
-    + `<span class="tkr-peek-day" style="color:${diaCol}">${diaTxt}</span>`
-    + (name?`<span class="tkr-peek-name">${name}</span>`:'') + `</div>`;
-  const visual = `<div class="tkr-peek-visual">${riesgoVolDonutHTML(t)||''}${peekSparkline(t)}</div>`;
+    + `<span class="tkr-peek-r"><span class="tkr-peek-px">${px!=null?fP(px):'sin dato'}</span>`
+    + `<span class="tkr-peek-day" style="color:${diaCol}">${diaTxt}</span></span></div>`
+    + (name?`<div class="tkr-peek-name">${name}</div>`:'')
+    + peekSparkline(t);
 
+  // Grupo "Tu posición" (solo holdings).
   let posGrp='';
   if(pos){
-    const plpc = (pos.unrealized_plpc!=null)?pos.unrealized_plpc*100:null;
-    const peso = (pos.value!=null && typeof EQUITY!=='undefined' && EQUITY)?(pos.value/EQUITY*100):null;
+    const plCol = (pos.unrealized_pl==null||isNaN(pos.unrealized_pl)) ? 'var(--text3)'
+                : pos.unrealized_pl>0?'var(--green)':pos.unrealized_pl<0?'var(--red)':'var(--text3)';
+    const pc = (pos.unrealized_plpc!=null && !isNaN(pos.unrealized_plpc)) ? pos.unrealized_plpc*100 : null;
+    const plVal = (pos.unrealized_pl!=null && !isNaN(pos.unrealized_pl))
+      ? (fPS(pos.unrealized_pl) + (pc!=null?` (${pc>=0?'+':''}${pc.toFixed(2)}%)`:'')) : 'sin dato';
+    const peso = (pos.value!=null && !isNaN(pos.value) && typeof EQUITY!=='undefined' && EQUITY) ? (pos.value/EQUITY*100) : null;
+    const pesoVal = (peso!=null) ? (peso.toFixed(1)+'%') : 'sin dato';
+    const valVal = (pos.value!=null && !isNaN(pos.value)) ? fP(pos.value) : 'sin dato';
     posGrp = `<div class="tkr-peek-grp"><div class="tkr-peek-grp-t">Tu posición</div>`
-      + `<div class="tkr-peek-line">${tipPL(pos.unrealized_pl, plpc)}</div>`
-      + `<div class="tkr-peek-line">${tipPeso(peso)}</div>`
-      + `<div class="tkr-peek-line">${tipValorPos(pos.value)}</div></div>`;
+      + peekKV('P&L', plVal, plCol)         // retorno → verde/rojo
+      + peekKV('Peso', pesoVal)             // gris/blanco
+      + peekKV('Valor', valVal)             // gris/blanco
+      + `</div>`;
   }
+
+  // Grupo "Riesgo": volatilidad (azul) + stop-loss con distancia (gris, NO rojo).
+  const v = riesgoRangoTicker(t);
+  const volVal = (v.r10!=null)
+    ? (riesgoRangoTxt(v.r10) + (v.r5!=null?' / '+riesgoRangoTxt(v.r5):'') + ' · banda ~70%')
+    : 'sin dato';
+  const dst = distStopPct(px, niv.sl);
+  const slVal = (niv.sl!=null && !isNaN(niv.sl))
+    ? ('$'+Number(niv.sl).toFixed(2) + (dst!=null?` · ${dst>=0?'+':''}${dst.toFixed(1)}%`:'')) : 'sin dato';
   const riesgoGrp = `<div class="tkr-peek-grp"><div class="tkr-peek-grp-t">Riesgo</div>`
-    + `<div class="tkr-peek-line">${tipVol(t)}</div>`
-    + `<div class="tkr-peek-line">${tipSL(niv.sl, px)}</div></div>`;
+    + peekKV('Volatilidad', volVal, 'var(--blue)')   // dato neutro → azul
+    + peekKV('Stop-loss · modelo', slVal, 'var(--text2)')  // gris: riesgo, no pérdida
+    + `</div>`;
+
+  // Grupo "Evento": próximo reporte (dorado), solo si aplica.
   const ed = earningsDias(t);
-  const evGrp = (ed!=null) ? `<div class="tkr-peek-grp"><div class="tkr-peek-grp-t">Evento</div>`
-    + `<div class="tkr-peek-line">📅 ${tipEarn(ed)}</div></div>` : '';
-  return hd + visual + posGrp + riesgoGrp + evGrp;
+  const evGrp = (ed!=null)
+    ? `<div class="tkr-peek-grp"><div class="tkr-peek-grp-t">Evento</div>`
+      + peekKV('Próximo reporte', '📅 en '+ed+' '+(ed===1?'día':'días'), 'var(--gold)') + `</div>`
+    : '';
+
+  // Donut de volatilidad (azul) al FINAL.
+  const donut = `<div class="tkr-peek-donut">${riesgoVolDonutHTML(t)||''}</div>`;
+
+  return hd + posGrp + riesgoGrp + evGrp + donut;
 }
 function peekShow(t, rowEl){
   if(PEEK_TIMER){ clearTimeout(PEEK_TIMER); PEEK_TIMER=null; }
@@ -6804,7 +6847,7 @@ function renderWatchlist(){
         <span class="tkr-pl-xs" id="pl-${t}"></span>
         <span class="tkr-earn-ico" id="earn-${t}">${earnIco(t)}</span>
       </div>
-      <span class="tkr-del" title="quitar de la watchlist" onclick="event.stopPropagation();removeWatchlist('${t}')">✕</span>
+      <span class="tkr-del" onclick="event.stopPropagation();removeWatchlist('${t}')">✕</span>
     </div>`;
   }).join('');
   // Aplicar colores sel
