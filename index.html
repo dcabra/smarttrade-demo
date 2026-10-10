@@ -1235,6 +1235,25 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .phia-fact .k{color:var(--text-label);flex-shrink:0}
 .phia-fact .v{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
 
+/* ── Bloque 10 · acceso discreto al laboratorio desde el cockpit ──────────────
+   Enlace pequeño bajo la síntesis del analista. Dorado tenue (el acento del
+   cockpit), sin botón ni fondo: "a un clic, nunca escondido" pero sin competir
+   con la frase. Aparece/oculta con #phia-wrap (bajo .phia-vacio no se ve). */
+.phia-lablink{display:inline-block;margin-top:6px;font-size:10px;color:var(--text3);
+  text-decoration:none;cursor:pointer;letter-spacing:.02em;transition:color .15s ease}
+.phia-lablink:hover{color:rgba(245,197,24,.9)}
+
+/* ── Bloque 10 · sección "Desempeño del modelo" en el Laboratorio ─────────────
+   Agrupa Eficiencia + Desglose + Pulso bajados del home. Encabezado neutro
+   (gris, no dorado): el laboratorio no es el flujo principal. */
+.lab-section{margin:8px 0 2px;border-top:1px solid var(--border2)}
+.lab-section-hdr{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;padding:8px 10px 2px}
+.lab-section-t{font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.05em}
+.lab-section-sub{font-size:10px;color:var(--text3)}
+/* El desglose, ya fuera del dorado del cockpit, lleva marco neutro y el mismo
+   margen lateral que las tarjetas hermanas de la sección. */
+.phia-body--lab{margin:4px 8px}
+
 /* ── Analista IA · sección a demanda del panel del ticker (Fase 2 · Bloque 3) ──
    Complementa "Señal IA" y "Lo que proyecta el modelo", no las reemplaza. Misma
    gramática del cockpit: el dorado (rgba(245,197,24,…)) significa "IA verificada";
@@ -1954,7 +1973,11 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       <div class="phia-wrap phia-vacio" id="phia-wrap">
         <div class="phsyn" id="phsyn" style="display:none"></div>
         <div class="phia-prosa" id="phia-prosa"></div>
-        <div class="phia-body" id="phia-body"></div>
+        <!-- Bloque 10 · el DESGLOSE POR REGLAS (#phia-body) bajó al Laboratorio,
+             sección "Desempeño del modelo" (#lab-modelperf). El cockpit conserva
+             solo la síntesis del analista (R5 #phsyn / R6 prosa). phiaPintar()
+             sigue escribiendo #phia-body por id en su nueva ubicación. -->
+        <a class="phia-lablink" onclick="irADesempenoModelo()" title="Abre el laboratorio en la sección Desempeño del modelo">ver desempeño del modelo →</a>
       </div>
 
       <!-- ══ R1 · Movimiento de hoy ═══════════════════════════════════════
@@ -1992,24 +2015,11 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
           <div class="ph-chart-legend" id="ph-chart-legend"></div>
         </div>
 
-        <!-- Columna izquierda · Eficiencia · Pulso · Eventos -->
+        <!-- Columna izquierda · Próximos eventos (Eficiencia y Pulso viven en el Laboratorio) -->
         <div class="phz-term-left">
 
           <!-- #phe-card ("Eficiencia del modelo") movido al Laboratorio (#body-strat) · 2c-ii -->
-
-          <!-- S3 · Pulso del modelo hoy + drift. NO toca MOTOR_V3/motor_flags/usa_v3/data_fetcher. -->
-          <div class="ph-card phz-mini" id="phd-card" style="display:none">
-            <div class="ph-card-hdr">
-              <div class="ph-card-hdr-left">
-                <span class="ph-card-title">Pulso del modelo hoy</span>
-                <span class="phe-motor" id="phd-motor" style="display:none">motor v3</span>
-                <span class="ph-card-sub" id="phd-sub"></span>
-                <span class="phz-info" title="Detalle al pasar el mouse">ⓘ</span>
-              </div>
-            </div>
-            <div class="phz-mini-num" id="phd-compact"></div>
-            <div class="phz-pop"><div class="phd-body" id="phd-body"></div></div>
-          </div>
+          <!-- #phd-card ("Pulso del modelo hoy") movido al Laboratorio · Bloque 10 (sección "Desempeño del modelo") -->
 
           <!-- S4 · Próximos eventos (calendario macro/earnings). GET /v1/strategies/calendar/events (LECTURA). -->
           <div class="ph-card" id="phcal-card" style="display:none">
@@ -2541,26 +2551,65 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       <button style="flex:0 0 auto;padding:5px 10px;border:1px solid var(--border2);border-radius:6px;background:var(--bg2);color:var(--text);cursor:pointer;font-size:11px" onclick="openBacktest()">🧪 Abrir control de backtest ↗</button>
     </div>
     <div class="strat-expo" id="strat-expo"><div class="strat-expo-hint">Cargando exposición…</div></div>
-    <!-- Eficiencia del modelo · métrica de investigación (movida del home en 2c-ii).
-         Frontend puro. Motor VIVO por-respuesta (pheMotorVivo → confMotor). NO toca MOTOR_V3 /
-         motor_flags / usa_v3() / data_fetcher. Conserva id y pheRender tal cual. -->
-    <div class="ph-card phz-mini" id="phe-card" style="display:none;margin:4px 8px">
-      <div class="ph-card-hdr">
-        <div class="ph-card-hdr-left">
-          <span class="ph-card-title">Eficiencia del modelo</span>
-          <span class="phe-motor" id="phe-motor" style="display:none">motor v3</span>
-          <span class="ph-card-sub" id="phe-sub"></span>
-          <span class="phz-info" title="Detalle al pasar el mouse">ⓘ</span>
-        </div>
-        <div class="ph-range" id="phe-hz">
-          <button class="ph-rbtn" data-h="1" onclick="pheSetHz(this)">1D</button>
-          <button class="ph-rbtn on" data-h="3" onclick="pheSetHz(this)">3D</button>
-          <button class="ph-rbtn" data-h="7" onclick="pheSetHz(this)">7D</button>
-        </div>
+
+    <!-- ══ Bloque 10 · DESEMPEÑO DEL MODELO ═══════════════════════════════════
+         El razonamiento del motor baja del flujo principal (home) al laboratorio,
+         mismo criterio honesto que el panel izquierdo. Agrupa tres marcadores que
+         antes vivían en el cockpit: la Eficiencia del modelo (ya movida en 2c-ii),
+         el DESGLOSE POR REGLAS (#phia-body) y el PULSO DEL MODELO HOY (#phd-card).
+         No se borra lógica: los ids se conservan y sus funciones de render
+         (pheRender, phiaPintar, phdRender/phdLoad) siguen escribiendo por id en su
+         nueva ubicación. NO toca MOTOR_V3 / motor_flags / usa_v3 / ejecutor. -->
+    <div class="lab-section" id="lab-modelperf">
+      <div class="lab-section-hdr">
+        <span class="lab-section-t">Desempeño del modelo</span>
+        <span class="lab-section-sub">cómo se ha comportado la señal · histórico, no es promesa</span>
       </div>
-      <div class="phz-mini-num" id="phe-compact"></div>
-      <div class="phz-pop"><div class="phe-body" id="phe-body"></div></div>
+
+      <!-- Eficiencia del modelo · métrica de investigación (movida del home en 2c-ii).
+           Frontend puro. Motor VIVO por-respuesta (pheMotorVivo → confMotor). NO toca MOTOR_V3 /
+           motor_flags / usa_v3() / data_fetcher. Conserva id y pheRender tal cual. -->
+      <div class="ph-card phz-mini" id="phe-card" style="display:none;margin:4px 8px">
+        <div class="ph-card-hdr">
+          <div class="ph-card-hdr-left">
+            <span class="ph-card-title">Eficiencia del modelo</span>
+            <span class="phe-motor" id="phe-motor" style="display:none">motor v3</span>
+            <span class="ph-card-sub" id="phe-sub"></span>
+            <span class="phz-info" title="Detalle al pasar el mouse">ⓘ</span>
+          </div>
+          <div class="ph-range" id="phe-hz">
+            <button class="ph-rbtn" data-h="1" onclick="pheSetHz(this)">1D</button>
+            <button class="ph-rbtn on" data-h="3" onclick="pheSetHz(this)">3D</button>
+            <button class="ph-rbtn" data-h="7" onclick="pheSetHz(this)">7D</button>
+          </div>
+        </div>
+        <div class="phz-mini-num" id="phe-compact"></div>
+        <div class="phz-pop"><div class="phe-body" id="phe-body"></div></div>
+      </div>
+
+      <!-- DESGLOSE POR REGLAS (#phia-body) · bajado del home (#phia-wrap) · Bloque 10.
+           phiaPintar() lo rellena por id con su propio encabezado ("Desglose por
+           reglas" / "Lo que afirma el análisis"). Clase --lab: marco neutro, fuera
+           del dorado del cockpit. -->
+      <div class="phia-body phia-body--lab" id="phia-body"></div>
+
+      <!-- S3 · PULSO DEL MODELO HOY (#phd-card) · bajado del home · Bloque 10.
+           phdRender/phdLoad lo rellenan y lo muestran por id. NO toca MOTOR_V3/
+           motor_flags/usa_v3/data_fetcher. -->
+      <div class="ph-card phz-mini" id="phd-card" style="display:none;margin:4px 8px">
+        <div class="ph-card-hdr">
+          <div class="ph-card-hdr-left">
+            <span class="ph-card-title">Pulso del modelo hoy</span>
+            <span class="phe-motor" id="phd-motor" style="display:none">motor v3</span>
+            <span class="ph-card-sub" id="phd-sub"></span>
+            <span class="phz-info" title="Detalle al pasar el mouse">ⓘ</span>
+          </div>
+        </div>
+        <div class="phz-mini-num" id="phd-compact"></div>
+        <div class="phz-pop"><div class="phd-body" id="phd-body"></div></div>
+      </div>
     </div>
+
     <div class="stratp-wrap">
       <div class="stratp-list">
         <div class="stratp-list-head">
@@ -8410,6 +8459,17 @@ function switchTab(tab){
   if(tab==='journal') journalLoad();
 }
 
+/* Bloque 10 · acceso discreto desde el home. Abre el Laboratorio (pestaña
+   'strat') y lleva la vista a la sección "Desempeño del modelo". La efectividad
+   queda a un clic, nunca escondida. switchTab ya expande el panel si estaba
+   minimizado y dispara stratLoad(); el scroll va tras un tick para que el body
+   ya esté visible. */
+function irADesempenoModelo(){
+  if(typeof switchTab === 'function') switchTab('strat');
+  const sec = document.getElementById('lab-modelperf');
+  if(sec) setTimeout(() => { try{ sec.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){ sec.scrollIntoView(); } }, 60);
+}
+
 /* ══════════════════════════════════════════════
    CALENDARIO — eventos reales desde /v1/strategies/calendar/events
    ══════════════════════════════════════════════ */
@@ -11770,10 +11830,13 @@ function phsynFrases(){
   const nC = hayLibro ? X.conflictos.length : 0;
   if(hayLibro && nC > 0){
     const tks = X.conflictos.map(c => phsynEsc(c.ticker)).join(', ');
+    // Bloque 10 · reencuadre neutro: "contradice" sonaba a juicio. "ve distinto"
+    // describe sin recomendar; el pie "información, no recomendación" lo deja
+    // explícito. Pasa la barrera phiaVerifLing (sin imperativos/juicio/voseo).
     // Con una sola posición, "1 de tus 1 posiciones" suena a máquina.
     destacados.push(nPos === 1
-      ? `El modelo contradice tu única posición (${tks}).`
-      : `El modelo contradice <b>${nC}</b> de tus <b>${nPos}</b> posiciones (${tks}).`);
+      ? `El modelo ve distinto en tu única posición (${tks}) · información, no recomendación.`
+      : `El modelo ve distinto en <b>${nC}</b> ${nC === 1 ? 'posición' : 'posiciones'} de <b>${nPos}</b> (${tks}) · información, no recomendación.`);
   }
 
   // 2 · Concentración de la mayor posición.
@@ -14070,8 +14133,11 @@ phiaMontar = function(){
   if(typeof motorIaSync === 'function') motorIaSync();
 };
 
-/* ══ MOTOR IA · reorganización del Home ═══════════════════════════════════
-   Agrupa ANÁLISIS IA (R6) + Eficiencia + Pulso en una sección 60/40.
+/* ══ ANÁLISIS DEL PORTAFOLIO · reorganización del Home ════════════════════
+   Bloque 10: la sección del cockpit conserva SOLO la síntesis del analista
+   (R5 #phsyn / R6 prosa). El desglose por reglas y el Pulso bajaron al
+   Laboratorio ("Desempeño del modelo"), la Eficiencia ya se había movido en
+   2c-ii. Antes era una rejilla 60/40 (síntesis + Pulso); ahora, una columna.
 
    Se hace con appendChild/insertBefore y NO regenerando markup, y eso es lo
    que salva el auto-disparo: esos métodos MUEVEN el nodo —no lo clonan ni lo
@@ -14096,7 +14162,10 @@ function motorIaMontar(){
   const home = document.getElementById('cp-home');
   const wrap = document.getElementById('phia-wrap');
   if(!home || !wrap) return;
-  const phd = document.getElementById('phd-card');   // 2c-ii: phe-card ya no se trae al home
+  // Bloque 10: el Pulso (#phd-card) y el desglose (#phia-body) bajaron al
+  // Laboratorio (sección "Desempeño del modelo"). El cockpit conserva SOLO la
+  // síntesis del analista, así que la sección es de UNA columna: sin grid 60/40
+  // ni columna de KPIs. (2c-ii: la Eficiencia #phe-card ya se había movido.)
 
   /* Andamiaje con createElement, NO con innerHTML: así en toda esta función
      no hay una sola escritura de innerHTML, y el invariante "aquí nada se
@@ -14109,16 +14178,9 @@ function motorIaMontar(){
   };
   const sec  = nuevo('section', 'motor-ia-vacio');
   sec.id = 'motor-ia';
-  const grid = nuevo('div', 'motor-ia-grid');
-  const kpis = nuevo('div', 'motor-ia-kpis');
-  sec.appendChild(nuevo('div', 'motor-ia-hdr', 'Motor IA'));
-  sec.appendChild(grid);
-  grid.appendChild(kpis);
-  home.insertBefore(sec, wrap);                            // ocupa el sitio de R6
-
-  grid.insertBefore(wrap, kpis);                           // R6 a la izquierda (60%)
-  // 2c-ii: "Eficiencia del modelo" (#phe-card) vive ahora en el Laboratorio, no en el home.
-  if(phd) kpis.appendChild(phd);                           // Pulso debajo
+  sec.appendChild(nuevo('div', 'motor-ia-hdr', 'Análisis del portafolio'));
+  home.insertBefore(sec, wrap);                            // ocupa el sitio de la síntesis
+  sec.appendChild(wrap);                                   // la síntesis, MOVIDA (observer intacto)
   motorIaSync();
 }
 
@@ -14130,9 +14192,10 @@ function motorIaMontar(){
 function motorIaSync(){
   const sec = document.getElementById('motor-ia'); if(!sec) return;
   const wrap = document.getElementById('phia-wrap');
-  const phd  = document.getElementById('phd-card');
   const vis = e => !!e && e.style.display !== 'none' && !e.classList.contains('phia-vacio');
-  sec.classList.toggle('motor-ia-vacio', !(vis(wrap) || vis(phd)));   // 2c-ii: phe-card salió del home
+  // Bloque 10: la sección sólo contiene la síntesis; se oculta si el wrapper
+  // está vacío (sin posiciones). El Pulso ya no vive aquí.
+  sec.classList.toggle('motor-ia-vacio', !vis(wrap));
 }
 
 motorIaMontar();
