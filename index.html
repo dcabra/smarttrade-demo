@@ -6604,6 +6604,24 @@ function riesgoRenderVolChips(){
   });
 }
 
+/* Fase 3·9 · Gemelo de riesgoRenderVolChips para el "cambio del día". Repinta la
+   celda day-${t} de AMBAS listas (posiciones ∪ watchlist) por id, sin reconstruir
+   la fila. Necesario porque las filas se pintan antes de tener velas: las de las
+   posiciones cargan sig+fc al arranque y las velas llegan luego (phEnsureTickerHistories),
+   sin repintar la celda. Idempotente y barato; si un ticker sigue con <2 velas,
+   dayChangePct→null y fmtDayChip deja "—" (honesto). MISMA fuente que la fila de
+   watchlist y la tarjeta-peek → mismo ticker, mismo número en fila y ficha. */
+function riesgoRenderDayCells(){
+  const todos = [...new Set([
+    ...(typeof TICKERS!=='undefined'   && TICKERS   ? TICKERS   : []),
+    ...(typeof WATCHLIST!=='undefined' && WATCHLIST ? WATCHLIST : [])
+  ])].filter(Boolean);
+  todos.forEach(t=>{
+    const el = document.getElementById('day-'+t);
+    if(el){ el.innerHTML = fmtDayChip(dayChangePct(t)); }
+  });
+}
+
 /* Actualiza solo la línea de volatilidad del Forecast IA del ticker activo,
    sin re-renderizar toda la tarjeta (evita cerrar un modal expandido o pisar
    una edición de SL/TP en curso). */
@@ -7124,6 +7142,16 @@ async function initWatchlist(){
   });
   await Promise.allSettled(proms);
   consolidarSignalSaves();   // una escritura para toda la tanda de la watchlist
+  // Fase 3·9: repintado orden-independiente. riesgoCargar() pide el riesgo de
+  // posiciones ∪ watchlist y repinta los chips de vol al llegar RIESGO_STATE;
+  // pero si el estado de riesgo llegó ANTES de que la watchlist terminara de
+  // hidratarse, aquellas filas quedaban con la vol en "—". Al cerrar el warm-up
+  // repintamos vol y día de ambas listas con lo que ya haya en caché: idempotente
+  // y barato (celdas por id, no reconstruye filas). Combinado con el repintado de
+  // riesgoCargar, el refresco corre tras AMBOS (watchlist init + carga de riesgo),
+  // sea cual sea el orden.
+  if(typeof riesgoRenderVolChips==='function') riesgoRenderVolChips();
+  if(typeof riesgoRenderDayCells==='function') riesgoRenderDayCells();
 }
 
 
@@ -12450,6 +12478,10 @@ async function phEnsureTickerHistories(){
   // Repinta SIEMPRE (aunque todo falle) para que el indicador de estado del
   // overlay refleje ✓/✗ por símbolo y no quede en '⋯' colgado.
   if(CP_VIEW==='home' && PH_DRAW){ if(any) PH_DRAW.tickerLines = phBuildTickerLines(); phPaintValueChart(); }
+  // Fase 3·9: ya en CACHE las velas de las posiciones, repinta el "cambio del día"
+  // de las filas del panel izquierdo (holdings) para que deje de verse "—" sin
+  // esperar al refresco de ~120 s. Independiente de la vista: la lista siempre está.
+  if(any && typeof riesgoRenderDayCells==='function') riesgoRenderDayCells();
 }
 
 /* Pintor PURO de la curva: lee PH_DRAW + PH_ACTIVE_TICKER y repinta el canvas.
