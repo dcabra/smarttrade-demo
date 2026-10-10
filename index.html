@@ -3689,9 +3689,12 @@ function renderPositionValues(positions){
       const col = pc>0?'var(--green)':pc<0?'var(--red)':'var(--text3)';
       plEl.innerHTML = `<span style="color:${col}">${pc>=0?'+':''}${pc.toFixed(2)}%</span>`;
     }
-    // % de cambio del día (change_today de Alpaca)
+    // % de cambio del día · Fase 3·8: MISMA fuente que la watchlist y la ficha
+    // (dayChangePct = close vs close anterior). Antes esta fila usaba
+    // p.change_today*100 (Alpaca), que fuera de sesión venía diminuto y hacía
+    // incoherente el número entre portafolio y watchlist. Si no hay dato ⇒ "—".
     const dEl = $('day-'+p.symbol);
-    if(dEl && p.change_today!=null && !isNaN(p.change_today)){ dEl.innerHTML = fmtDayChip(p.change_today*100); }
+    if(dEl){ dEl.innerHTML = fmtDayChip(dayChangePct(p.symbol)); }
   });
 }
 
@@ -5875,18 +5878,28 @@ let WL_SORT = localStorage.getItem('st_wl_sort') || 'def';
 function setPfSort(v){ PF_SORT=v; localStorage.setItem('st_pf_sort',v); buildLeft(); renderPositionValues(POSITIONS); TICKERS.forEach(t=>{ const d=CACHE[t]; if(d?.sig) fillRow(t,d.sig,d.fc); }); }
 function setWlSort(v){ WL_SORT=v; localStorage.setItem('st_wl_sort',v); renderWatchlist(); }
 
-/* % de cambio del día: último close vs close anterior (velas diarias en caché).
-   Para posiciones, Alpaca ya lo entrega en change_today (fracción). */
+/* Fase 3·8 · FUENTE ÚNICA del "cambio del día" para PORTAFOLIO, WATCHLIST y
+   tarjeta-peek: último close vs close anterior (velas diarias en caché). Es el
+   cambio diario REAL de la última sesión y se calcula igual para holdings y
+   watchlist, así el mismo ticker muestra el mismo número en fila y tarjeta.
+
+   NO usamos change_today de Alpaca aquí: fuera de sesión / en paper llega rancio
+   o diminuto (current_price≈lastday_price ⇒ ~0%), lo que hacía que las posiciones
+   mostraran cambios minúsculos y positivos mientras la watchlist mostraba el real.
+   (change_today sigue siendo correcto para el aporte en $ de "Movimiento de hoy",
+   que es otra pregunta: ese cálculo vive en phmvAportes y no se toca.)
+
+   Si falta el close anterior para un ticker (menos de 2 velas) devolvemos null
+   ⇒ la fila degrada a "—" y la ficha a "sin dato": honesto, no un número engañoso. */
 function dayChangePct(t){
-  const p = (POSITIONS||[]).find(x=>x.symbol===t);
-  if(p && p.change_today!=null && !isNaN(p.change_today)) return p.change_today*100;
   const c = CACHE[t]?.ohlcv?.candles;
   if(!c || c.length<2) return null;
   const a=c[c.length-2].close, b=c[c.length-1].close;
   return a ? (b-a)/a*100 : null;
 }
 function fmtDayChip(v){
-  if(v==null || isNaN(v)) return '';
+  // Fase 3·8: sin dato de cambio del día ⇒ "—" (honesto), no vacío ni un número.
+  if(v==null || isNaN(v)) return `<span style="color:var(--text3)">—</span>`;
   const col = v>0?'var(--green)':v<0?'var(--red)':'var(--text3)';
   return `<span style="color:${col}">${v>=0?'+':''}${v.toFixed(2)}%</span>`;
 }
