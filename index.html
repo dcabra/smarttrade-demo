@@ -1254,6 +1254,25 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
    margen lateral que las tarjetas hermanas de la sección. */
 .phia-body--lab{margin:4px 8px}
 
+/* ── Bloque 11 · Análisis del portafolio (determinista, dentro del marco dorado
+   .rp-sec que se reusa del panel derecho) ─────────────────────────────────────
+   .rp-sec aporta el borde dorado (rgba(245,197,24,.18)), radio y margen; aquí
+   solo se añade el fondo --bg3 (como el resto de tarjetas del Home) y la
+   maquetación interna de los 4 bloques. Nada de dorado nuevo: es la clase de IA
+   existente. */
+.phia-an{display:flex;flex-direction:column;gap:10px;background:var(--bg3)}
+.phia-an-blk{display:flex;flex-direction:column;gap:3px}
+.phia-an-h{font-size:9px;font-weight:700;color:var(--text-label);text-transform:uppercase;letter-spacing:.07em}
+.phia-an-p{font-size:11.5px;line-height:1.5;color:var(--text2)}
+.phia-an .phia-lablink{margin-top:2px}
+/* La síntesis de una línea (#phsyn) y la prosa LLM (#phia-prosa) quedan como
+   maquinaria viva pero OCULTAS: el análisis determinista de 4 bloques las
+   reemplaza como encabezado. El !important gana sobre el display:flex (sin
+   !important) que escriben phsynRender y la regla .phia-on; la INTENCIÓN inline
+   que lee phiaMontar/motorIaSync no se altera, así que esa lógica sigue viva. */
+.phia-wrap > #phsyn,
+.phia-wrap > .phia-prosa{display:none!important}
+
 /* ── Analista IA · sección a demanda del panel del ticker (Fase 2 · Bloque 3) ──
    Complementa "Señal IA" y "Lo que proyecta el modelo", no las reemplaza. Misma
    gramática del cockpit: el dorado (rgba(245,197,24,…)) significa "IA verificada";
@@ -1971,13 +1990,24 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
            que phsynRender reescribe en cada repintado. Swap de visibilidad
            entre hermanos, nunca disputa del mismo nodo.                    -->
       <div class="phia-wrap phia-vacio" id="phia-wrap">
+        <!-- Bloque 11 · ANÁLISIS DEL PORTAFOLIO · el análisis de IA ENCABEZA el
+             panel con 4 bloques en orden (Situación · Riesgos · Volatilidad ·
+             Efectividad), dentro del MARCO DORADO .rp-sec (la MISMA clase de IA
+             del panel derecho: "contenido de IA, no fact del mercado"). Lo
+             rellena phiaAnalisisRender() por COMPOSICIÓN DETERMINISTA anclada a
+             fuentes reales (POSITIONS/EQUITY/RIESGO_STATE/PHCAL_STATE); no hay
+             pronóstico direccional. El enlace al laboratorio vive en el bloque
+             Efectividad (reusa irADesempenoModelo). Bloque 10: el desglose por
+             reglas (#phia-body) ya vive en el Laboratorio. -->
+        <div class="rp-sec phia-an" id="phia-analisis"></div>
+        <!-- #phsyn (R5 síntesis) y #phia-prosa (R6 prosa LLM) quedan como
+             MAQUINARIA VIVA: phsynRender/phsynFrases, phiaMontar, el observador y
+             las barreras phiaVerifNum/phiaVerifLing siguen corriendo intactas. Se
+             OCULTAN por CSS (.phia-wrap > #phsyn / > .phia-prosa) porque el
+             análisis determinista de 4 bloques los reemplaza como encabezado. No
+             se tocan sus funciones ni irADesempenoModelo. -->
         <div class="phsyn" id="phsyn" style="display:none"></div>
         <div class="phia-prosa" id="phia-prosa"></div>
-        <!-- Bloque 10 · el DESGLOSE POR REGLAS (#phia-body) bajó al Laboratorio,
-             sección "Desempeño del modelo" (#lab-modelperf). El cockpit conserva
-             solo la síntesis del analista (R5 #phsyn / R6 prosa). phiaPintar()
-             sigue escribiendo #phia-body por id en su nueva ubicación. -->
-        <a class="phia-lablink" onclick="irADesempenoModelo()" title="Abre el laboratorio en la sección Desempeño del modelo">ver desempeño del modelo →</a>
       </div>
 
       <!-- ══ R1 · Movimiento de hoy ═══════════════════════════════════════
@@ -6707,6 +6737,7 @@ async function riesgoCargar(){
   if(typeof renderWatchlist === 'function') renderWatchlist();  // 1b · banda de volatilidad en la watchlist
   if(typeof riesgoRenderVolChips === 'function') riesgoRenderVolChips();  // 3·1 · chips de volatilidad (ambas listas)
   riesgoRenderRPVol();                                          // 1b · rango en el Forecast IA del ticker activo
+  if(typeof phiaAnalisisRender === 'function') phiaAnalisisRender();  // Bloque 11 · régimen/vol recién cargados → repinta el análisis del home
 }
 
 /* Pinta #regimen-chip con el régimen del giro + la exposición sugerida (reusa
@@ -10758,6 +10789,7 @@ function renderHome(){
   }
   requestAnimationFrame(() => { try { phPaintValueChart(); } catch (e) {} });
   phBindChartLineHover();   // hover sobre curva de un ticker → resalta + activa slice de la dona
+  if(typeof phiaAnalisisRender === 'function') phiaAnalisisRender();   // Bloque 11 · análisis que encabeza el panel (idempotente)
 }
 
 /* ═══ S4 · Próximos eventos (calendario macro/earnings del portafolio) ═════════
@@ -10856,6 +10888,7 @@ async function phcalLoad(){
   PHCAL_LOADING = false;
   phcalRender();
   if(typeof renderRowEarnings === 'function') renderRowEarnings();   // Fase 3·4: marca 📅 en las filas
+  if(typeof phiaAnalisisRender === 'function') phiaAnalisisRender();  // Bloque 11 · earnings 7d recién cargados → repinta el análisis del home
 }
 
 /* ═══ S5 · Noticias de mis tickers (posiciones + watchlist) ═══════════════════
@@ -14011,6 +14044,105 @@ function phiaPintar(){
             : '')
       : '';
   }
+}
+
+/* ══ Bloque 11 · ANÁLISIS DEL PORTAFOLIO (composición determinista) ══════════
+   Encabeza el panel "Análisis del portafolio" con 4 bloques en orden fijo:
+   Situación · Riesgos · Volatilidad · Efectividad. TODO sale de fuentes reales
+   ya existentes —no se inventa cifra ni se pronostica dirección—:
+     · exposición/concentración → phsynExposicion / phsynConcentracion (POSITIONS,
+       EQUITY, CASH_AVAIL).
+     · régimen → RIESGO_STATE.regimen {estado, risk_on}.
+     · stops/soporte → phiaStops (getEffectiveNiv).
+     · earnings 7d → phiaEventoProximo (PHCAL_STATE.eventos ∩ POSITIONS).
+     · volatilidad por posición → riesgoRangoTicker (RIESGO_STATE.por_ticker.rango_10d).
+   Tope de concentración = PHRISK_CONC_ROJO (20%), la fuente única del repo.
+   NO hay banda de volatilidad agregada de cartera (no existe tal campo): se
+   muestra la magnitud esperada POR posición, nunca una dirección.
+
+   Barrera: aunque el texto es determinista, CADA línea pasa por phiaVerifLing
+   (sin payload = filtro puro: imperativos / juicio / voseo). Si una línea no
+   pasara, se descarta — el filtro anti-consejo sigue corriendo sobre lo nuevo.
+   NO toca el motor/señal/forecast ni el camino LLM (#phia-prosa). */
+function phiaAnalisisRender(){
+  const host = $('phia-analisis'); if(!host) return;
+  const nPos = (typeof POSITIONS !== 'undefined' && POSITIONS) ? POSITIONS.length : 0;
+  if(!nPos){ host.innerHTML = ''; return; }   // sin posiciones el wrap ya se oculta (.phia-vacio)
+
+  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const n1  = v => (v != null && !isNaN(v)) ? Number(v).toFixed(1) : null;
+  // El filtro anti-consejo corre sobre CADA línea nueva (phiaVerifLing puro).
+  const ok   = t => (typeof phiaVerifLing !== 'function') || phiaVerifLing(t);
+  const keep = arr => arr.filter(Boolean).filter(ok);
+
+  const x    = (typeof phsynExposicion === 'function')   ? phsynExposicion()   : {};
+  const conc = (typeof phsynConcentracion === 'function')? phsynConcentracion(): { top:null };
+  const reg  = (typeof RIESGO_STATE !== 'undefined' && RIESGO_STATE && RIESGO_STATE.regimen) ? RIESGO_STATE.regimen : null;
+  const st   = (typeof phiaStops === 'function')         ? phiaStops()         : { cruzado:null, cercano:null };
+  const ev   = (typeof phiaEventoProximo === 'function') ? phiaEventoProximo() : null;
+  const TOPE = (typeof PHRISK_CONC_ROJO === 'number')    ? PHRISK_CONC_ROJO    : 20;
+  const stopUmbral = (typeof PHIA_STOP_PCT === 'number') ? PHIA_STOP_PCT       : 6;
+
+  const regTxt = (reg && reg.estado) ? String(reg.estado) : null;
+  const regRO  = reg ? (reg.risk_on === true ? ' (risk-on)' : reg.risk_on === false ? ' (risk-off)' : '') : '';
+
+  // 1 · SITUACIÓN — exposición, concentración vs tope, régimen.
+  const sit = [];
+  if(x.cashPct != null && x.invPct != null)
+    sit.push(`Tienes el ${n1(x.cashPct)}% en efectivo y el ${n1(x.invPct)}% invertido.`);
+  if(conc.top && conc.top.pct != null)
+    sit.push(`La mayor posición (${esc(conc.top.symbol)}) pesa el ${n1(conc.top.pct)}% de la cartera; la referencia es ${TOPE}%.`);
+  if(regTxt)
+    sit.push(`El régimen de mercado es ${esc(regTxt)}${regRO}.`);
+
+  // 2 · RIESGOS — concentración, régimen, soporte/stop, earnings 7d.
+  const rie = [];
+  if(conc.top && conc.top.pct != null && conc.top.pct > TOPE)
+    rie.push(`La mayor posición (${esc(conc.top.symbol)}) pesa ${n1(conc.top.pct)}%, por encima de la referencia del ${TOPE}%.`);
+  if(regTxt === 'bajista')
+    rie.push(`El régimen de mercado es bajista${regRO}.`);
+  if(st.cruzado && st.cruzado.tickers && st.cruzado.tickers.length)
+    rie.push(`${esc(st.cruzado.tickers.join(', '))} ${st.cruzado.tickers.length === 1 ? 'está' : 'están'} por debajo de su stop.`);
+  if(st.cercano)
+    rie.push(`${esc(st.cercano.ticker)} está a ${n1(st.cercano.distancia_pct)}% de su stop (umbral ${stopUmbral}%).`);
+  if(ev && ev.es_posicion && ev.ticker){
+    const cuando = ev.dias_restantes <= 0 ? 'hoy' : (ev.dias_restantes === 1 ? 'mañana' : 'en ' + ev.dias_restantes + ' días');
+    rie.push(`${esc(ev.ticker)} reporta utilidades ${cuando}.`);
+  }
+  if(!rie.length) rie.push('Sin riesgos fuera de lo normal ahora.');
+
+  // 3 · VOLATILIDAD — el único pronóstico honesto: magnitud esperada, NUNCA
+  //     dirección. Por posición (agregada de cartera omitida: no existe campo).
+  const vol = [];
+  const bandas = [];
+  (POSITIONS || [])
+    .filter(p => p && p.value != null && !isNaN(p.value))
+    .slice().sort((a, b) => b.value - a.value)
+    .slice(0, 3)
+    .forEach(p => {
+      const r = (typeof riesgoRangoTicker === 'function') ? riesgoRangoTicker(p.symbol) : null;
+      if(r && r.r10 != null) bandas.push(`${esc(p.symbol)} ±${n1(r.r10)}%`);
+    });
+  vol.push(bandas.length
+    ? `Rango diario esperado por posición (banda ~70%, magnitud, no dirección): ${bandas.join(' · ')}.`
+    : 'Sin banda de volatilidad disponible por posición ahora.');
+
+  // 4 · EFECTIVIDAD — una línea honesta (fija) + enlace existente al laboratorio.
+  const efec = 'La señal no tiene ventaja direccional probada; lo medible es la cobertura de la banda de volatilidad (~70%) y la defensa por régimen (recorta el drawdown ~6 pp).';
+
+  const blk = (titulo, lineas) => lineas.length
+    ? `<div class="phia-an-blk"><div class="phia-an-h">${titulo}</div>`
+      + lineas.map(l => `<div class="phia-an-p">${l}</div>`).join('') + `</div>`
+    : '';
+
+  host.innerHTML =
+      blk('Situación',   keep(sit))
+    + blk('Riesgos',     keep(rie))
+    + blk('Volatilidad', keep(vol))
+    + `<div class="phia-an-blk"><div class="phia-an-h">Efectividad</div>`
+      + (ok(efec) ? `<div class="phia-an-p">${efec}</div>` : '')
+      + `<a class="phia-lablink" onclick="irADesempenoModelo()" title="Abre el laboratorio en la sección Desempeño del modelo">ver desempeño del modelo →</a>`
+    + `</div>`;
 }
 
 /* ── Vigencia de la prosa verificada ───────────────────────────────────────
