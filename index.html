@@ -497,6 +497,12 @@ body.tab-max .cp>.osc-panel{display:none !important}
 .bottom-panel.bp-max .bp-min-btn{display:inline-flex}
 .bottom-panel.bp-max .bp-tab.on{background:rgba(245,197,24,.06)}
 #body-angral.on,#body-anticker.on{overflow:hidden}
+/* Laboratorio: a diferencia del resto de pestañas no delega el scroll a un
+   unico hijo interno, sino que apila banner + exposicion + desempeno del modelo
+   + estrategias. Le damos scroll propio al panel para que su contenido sea
+   alcanzable al 100% de zoom (el alto disponible lo acota flex:1/min-height:0
+   del .bp-body). Scoped a #body-strat: no toca las demas pestanas. */
+#body-strat.on{overflow-y:auto}
 
 /* ── Chat IA ── */
 .chat-msgs{flex:1;overflow-y:auto;padding:8px 12px;display:flex;flex-direction:column;gap:6px}
@@ -9558,7 +9564,11 @@ function moRecordFromModal(){
 /* ── Panel inferior simplificado ── */
 .stratp-wrap{display:flex;height:100%;overflow:hidden}
 /* ── Exposición agregada entre estrategias activas (Roadmap §3.2) ── */
-#body-strat .stratp-wrap{height:auto;flex:1;min-height:0} /* deja sitio al strip de arriba */
+/* Un solo scroll para todo el Laboratorio (#body-strat.on{overflow-y:auto}): la
+   lista de estrategias fluye a su alto natural, sin scroll anidado dentro del
+   panel. flex:none para que no compita por el alto del flex padre ni colapse a
+   0 cuando "Desempeno del modelo" crece. */
+#body-strat .stratp-wrap{height:auto;flex:none;min-height:0}
 .strat-expo{flex-shrink:0;max-height:210px;overflow-y:auto;border-bottom:1px solid var(--border);background:var(--bg2);padding:8px 10px}
 .strat-expo-hint{font-size:10px;color:#7a869a;padding:6px 2px;line-height:1.5}
 .strat-expo-head{display:flex;align-items:center;gap:8px;margin-bottom:7px}
