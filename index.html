@@ -149,17 +149,31 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .osc-lbl.macd-lbl{color:var(--orange)}
 
 /* RIGHT */
-.rp{position:fixed;top:44px;bottom:20px;right:0;left:auto;z-index:40;width:var(--rp-w);flex-shrink:0;background:var(--bg);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
+.rp{position:fixed;top:44px;bottom:20px;right:0;left:auto;z-index:40;width:var(--rp-w);flex-shrink:0;background:var(--bg);--rp-surface:var(--bg);border-left:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column}
 .rp::-webkit-scrollbar{width:3px}
 .rp::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-.rp-sec{padding:12px 14px;border:1px solid rgba(245,197,24,.18);border-radius:8px;margin:4px 8px}
+.rp-sec{position:relative;padding:12px 14px;border:1px solid rgba(245,197,24,.18);border-radius:8px;margin:4px 8px}
 /* Señal IA elástica: absorbe el alto sobrante del panel; su cuerpo hace scroll si el contenido excede */
-.rp-sec-sig{flex:1 1 auto;min-height:120px;display:flex;flex-direction:column;overflow:hidden}
+.rp-sec-sig{flex:1 1 auto;min-height:120px;display:flex;flex-direction:column;overflow:visible}
 .rp-sig-body{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
 .rp-sig-body::-webkit-scrollbar{width:2px}
 .rp-sig-body::-webkit-scrollbar-thumb{background:var(--border2)}
 .rp-sec:last-child{margin-bottom:8px}
 .rp-lbl{font-size:9px;font-weight:600;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;display:flex;align-items:center;gap:5px}
+/* Bloque 13 — título embebido en el marco dorado (patrón legend/fieldset): el
+   .rp-lbl sale del flujo y se monta SOBRE la línea superior del borde, ahorrando
+   el alto que ocupaba dentro de la caja. Aplica solo a las .rp-sec (y a la
+   réplica .phia-prosa) que tienen .rp-lbl; las .rp-sec sin título no se tocan.
+   El fondo que tapa el borde lo da --rp-surface, declarada por contexto
+   (panel derecho=--bg, home/estado=--bg3), nunca hardcodeada. El label completo
+   (texto + ícono maximizar + badge + pill + onclick) viaja íntegro como legend:
+   no se desarma su contenido ni sus zonas de clic. El padding-top existente de
+   cada tarjeta (inline, 5-8px) ya deja pasar la mitad inferior de la legend. */
+.rp-sec > .rp-lbl, .phia-prosa > .rp-lbl{
+  position:absolute; top:0; left:12px; transform:translateY(-50%);
+  margin:0; padding:0 6px; line-height:1;
+  background:var(--rp-surface, var(--bg));
+}
 .rp-lbl::after{content:'';flex:1;height:1px;background:var(--gold-dim);opacity:.5}
 .rp-px{font-size:22px;font-weight:700;color:#e8ecf4;letter-spacing:-.5px}
 .rp-px-sub{font-size:11px;color:var(--text2);margin-top:2px}
@@ -1205,10 +1219,11 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
    Nada de esto es permanente: todo lo dorado vive bajo .phia-on, así que sin
    IA verificada no hay un solo pixel dorado. #phsyn no necesita variante:
    bajo .phia-on está en display:none y si no, manda .phsyn (l.1180), intacta. */
-.phia-prosa{display:none;flex-direction:column;gap:2px;padding:7px 11px;border:1px solid rgba(245,197,24,.18);border-radius:8px;background:var(--bg3);font-size:11.5px;line-height:1.5;color:var(--text2)}
-/* .rp-lbl trae margin-bottom:10px, demasiado para la tarjeta compacta del
-   Home; las propias tarjetas IA lo bajan inline a 4-5px. Mismo criterio. */
-.phia-prosa .rp-lbl{margin-bottom:4px}
+.phia-prosa{position:relative;--rp-surface:var(--bg3);display:none;flex-direction:column;gap:2px;padding:7px 11px;border:1px solid rgba(245,197,24,.18);border-radius:8px;background:var(--bg3);font-size:11.5px;line-height:1.5;color:var(--text2)}
+/* Bloque 13: el .rp-lbl de la tarjeta estado ahora es legend absoluta (margin:0,
+   out-of-flow); el viejo margin-bottom:4px queda sin efecto y se anula para no
+   competir, por orden de fuente, con la regla de legend de arriba. */
+.phia-prosa .rp-lbl{margin:0}
 /* Fade del swap S1→S2. Va por `animation`, no por `transition`: un
    display:none→flex no es transicionable, pero una animación sí corre en
    cuanto el elemento pasa a mostrarse. Suaviza el cambio de contenido; el de
