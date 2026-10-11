@@ -2632,6 +2632,32 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
         <div class="phz-pop"><div class="phe-body" id="phe-body"></div></div>
       </div>
 
+      <!-- Calibración de la banda de volatilidad · Fase 3 · Bloque B (11-oct-2026).
+           Dato MEDIDO por backtest, con CIFRAS FIJAS fechadas: NO se calcula nada en el
+           navegador (es un resultado histórico, no un cálculo vivo). Va junto a "no
+           evaluable aquí" porque es su complemento honesto: lo medible es la MAGNITUD
+           (volatilidad), no la dirección. Color neutro/azul (= volatilidad/dato neutro
+           en el código), nunca verde/rojo: 72% es una calibración, no un retorno; no
+           debe insinuar ganancia. No toca el cockpit ni el análisis del home. -->
+      <div class="ph-card" id="phcal-band-card" style="margin:4px 8px">
+        <div class="ph-card-hdr">
+          <div class="ph-card-hdr-left">
+            <span class="ph-card-title">Calibración de la banda de volatilidad</span>
+            <span style="font-size:10px;font-weight:600;color:var(--blue);background:rgba(77,158,247,.10);border:1px solid rgba(77,158,247,.28);border-radius:4px;padding:2px 7px">medido</span>
+          </div>
+        </div>
+        <div style="padding:14px 16px">
+          <div style="font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:13px">Lo medible es la <b>magnitud</b> (volatilidad), no la dirección: la señal no tiene ventaja direccional probada; la banda de volatilidad sí está calibrada.</div>
+          <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+            <span style="font-size:30px;font-weight:700;color:var(--blue);line-height:1;font-variant-numeric:tabular-nums">72&nbsp;%</span>
+            <span style="font-size:12px;color:var(--text2)">observada · objetivo ~70&nbsp;%</span>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--text2)">En estrés (régimen risk-off, 10 ruedas): <b style="color:var(--blue)">68&nbsp;%</b>.</div>
+          <div style="margin-top:11px;font-size:10px;color:var(--text-label);line-height:1.55">Backtest sobre 7 años de S&amp;P (~50 líquidos + SPY), walk-forward sin look-ahead, con la misma matemática que sirve el cockpit (GJR-GARCH-t ±1σ). Medido 11-oct-2026 · histórico, no es promesa.</div>
+          <div style="margin-top:7px;font-size:9px;color:var(--text3);line-height:1.5">Puede estar algo inflado por supervivencia; un solo ciclo bajista real en la muestra.</div>
+        </div>
+      </div>
+
       <!-- DESGLOSE POR REGLAS (#phia-body) · bajado del home (#phia-wrap) · Bloque 10.
            phiaPintar() lo rellena por id con su propio encabezado ("Desglose por
            reglas" / "Lo que afirma el análisis"). Clase --lab: marco neutro, fuera
