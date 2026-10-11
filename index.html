@@ -1260,11 +1260,11 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
    solo se añade el fondo --bg3 (como el resto de tarjetas del Home) y la
    maquetación interna de los 4 bloques. Nada de dorado nuevo: es la clase de IA
    existente. */
-.phia-an{display:flex;flex-direction:column;gap:10px;background:var(--bg3)}
-.phia-an-blk{display:flex;flex-direction:column;gap:3px}
-.phia-an-h{font-size:9px;font-weight:700;color:var(--text-label);text-transform:uppercase;letter-spacing:.07em}
-.phia-an-p{font-size:11.5px;line-height:1.5;color:var(--text2)}
-.phia-an .phia-lablink{margin-top:2px}
+.phia-an{display:flex;flex-direction:column;gap:4px;background:var(--bg3)}
+.phia-an-blk{line-height:1.45}
+.phia-an-h{display:inline;font-size:9px;font-weight:700;color:var(--text-label);text-transform:uppercase;letter-spacing:.07em;margin-right:6px}
+.phia-an-p{display:inline;font-size:11.5px;line-height:1.45;color:var(--text2)}
+.phia-an .phia-lablink{display:inline;margin-top:0;margin-left:6px}
 /* La síntesis de una línea (#phsyn) y la prosa LLM (#phia-prosa) quedan como
    maquinaria viva pero OCULTAS: el análisis determinista de 4 bloques las
    reemplaza como encabezado. El !important gana sobre el display:flex (sin
@@ -14086,14 +14086,18 @@ function phiaAnalisisRender(){
   const regTxt = (reg && reg.estado) ? String(reg.estado) : null;
   const regRO  = reg ? (reg.risk_on === true ? ' (risk-on)' : reg.risk_on === false ? ' (risk-off)' : '') : '';
 
-  // 1 · SITUACIÓN — exposición, concentración vs tope, régimen.
+  // 1 · SITUACIÓN — exposición, concentración vs tope, régimen. Una línea:
+  //     fragmentos compactos separados por " · " (efectivo · invertido · mayor
+  //     posición · régimen), cada fragmento pasa phiaVerifLing vía keep().
   const sit = [];
-  if(x.cashPct != null && x.invPct != null)
-    sit.push(`Tienes el ${n1(x.cashPct)}% en efectivo y el ${n1(x.invPct)}% invertido.`);
+  if(x.cashPct != null && x.invPct != null){
+    sit.push(`${n1(x.cashPct)}% efectivo`);
+    sit.push(`${n1(x.invPct)}% invertido`);
+  }
   if(conc.top && conc.top.pct != null)
-    sit.push(`La mayor posición (${esc(conc.top.symbol)}) pesa el ${n1(conc.top.pct)}% de la cartera; la referencia es ${TOPE}%.`);
+    sit.push(`mayor posición ${esc(conc.top.symbol)} ${n1(conc.top.pct)}% (ref ${TOPE}%)`);
   if(regTxt)
-    sit.push(`El régimen de mercado es ${esc(regTxt)}${regRO}.`);
+    sit.push(`régimen ${esc(regTxt)}${regRO}`);
 
   // 2 · RIESGOS — concentración, régimen, soporte/stop, earnings 7d.
   const rie = [];
@@ -14130,19 +14134,25 @@ function phiaAnalisisRender(){
   // 4 · EFECTIVIDAD — una línea honesta (fija) + enlace existente al laboratorio.
   const efec = 'La señal no tiene ventaja direccional probada; lo medible es la cobertura de la banda de volatilidad (~70%) y la defensa por régimen (recorta el drawdown ~6 pp).';
 
-  const blk = (titulo, lineas) => lineas.length
-    ? `<div class="phia-an-blk"><div class="phia-an-h">${titulo}</div>`
-      + lineas.map(l => `<div class="phia-an-p">${l}</div>`).join('') + `</div>`
+  // Una línea por bloque: etiqueta inline + fragmentos verificados unidos por
+  // " · ". frag() quita solo el punto final (formato de lista, no cambia el
+  // texto verificado); la línea entera vuelve a pasar la barrera antes de pintar.
+  const frag = s => String(s).replace(/\s*\.\s*$/, '');
+  const linea = arr => { const l = keep(arr).map(frag).join(' · '); return (l && ok(l)) ? l : ''; };
+  const blk = (titulo, l) => l
+    ? `<div class="phia-an-blk"><span class="phia-an-h">${titulo}</span><span class="phia-an-p">${l}</span></div>`
     : '';
 
+  const efecL = ok(efec) ? frag(efec) : '';
+
   host.innerHTML =
-      blk('Situación',   keep(sit))
-    + blk('Riesgos',     keep(rie))
-    + blk('Volatilidad', keep(vol))
-    + `<div class="phia-an-blk"><div class="phia-an-h">Efectividad</div>`
-      + (ok(efec) ? `<div class="phia-an-p">${efec}</div>` : '')
-      + `<a class="phia-lablink" onclick="irADesempenoModelo()" title="Abre el laboratorio en la sección Desempeño del modelo">ver desempeño del modelo →</a>`
-    + `</div>`;
+      blk('Situación',   linea(sit))
+    + blk('Riesgos',     linea(rie))
+    + blk('Volatilidad', linea(vol))
+    + (efecL
+        ? `<div class="phia-an-blk"><span class="phia-an-h">Efectividad</span><span class="phia-an-p">${efecL}</span>`
+          + `<a class="phia-lablink" onclick="irADesempenoModelo()" title="Abre el laboratorio en la sección Desempeño del modelo">ver desempeño del modelo →</a></div>`
+        : '');
 }
 
 /* ── Vigencia de la prosa verificada ───────────────────────────────────────
