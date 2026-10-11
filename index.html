@@ -11853,7 +11853,7 @@ const PHSYN_MAX_DEST = 2;    // como mucho 2 destacados + exposición de cierre
    entero y dejaba la Cartera y el chart en blanco. Leerlo dentro de la función
    mantiene la fuente única del umbral sin acoplar el orden de declaración. */
 function phsynConcUmbral(){
-  return (typeof PHRISK_CONC_ROJO === 'number') ? PHRISK_CONC_ROJO : 20;
+  return (typeof PHRISK_CONC_ROJO === 'number') ? PHRISK_CONC_ROJO : 15;
 }
 
 function phsynEsc(s){
@@ -12109,7 +12109,7 @@ function renderHomeAllocation(){
    silencio: `phrRender` quedó declarada dos veces y la segunda ganaba, y el
    `try/catch` del llamador se tragaba el síntoma. Renombrado en el fix.      */
 const PHRISK_CONC_AMBAR = 10;   // % de la mayor posición sobre el equity
-const PHRISK_CONC_ROJO  = 20;
+const PHRISK_CONC_ROJO  = 15;   // tope de concentración (founder, oct-2026): 20 → 15
 
 function phriskConcColor(pct){
   if(pct==null || isNaN(pct)) return 'var(--text3)';
@@ -13061,7 +13061,7 @@ const PHIA_ALZA = [
 /* Umbrales EN TIEMPO DE EJECUCIÓN (ver nota del TDZ en la cabecera). */
 function phiaUmbrales(){
   return {
-    conc: (typeof phsynConcUmbral === 'function') ? phsynConcUmbral() : 20,
+    conc: (typeof phsynConcUmbral === 'function') ? phsynConcUmbral() : 15,
     dd:   (typeof PHSYN_DD_PCT === 'number') ? PHSYN_DD_PCT : 10
   };
 }
@@ -13138,7 +13138,7 @@ function phiaStops(){
    de honestidad de R5 (l.10523-10525), que ningún verificador detectaría.
 
    Los umbrales VIAJAN en el payload porque el system prompt ordena escribir
-   "ninguna posición supera el 20%": ese 20 es PHRISK_CONC_ROJO, no un dato de
+   "ninguna posición supera el 15%": ese 15 es PHRISK_CONC_ROJO, no un dato de
    la cartera, y sin esto el verificador numérico lo leería como cifra
    inventada y descartaría el texto justo en el escenario tranquilo.
 
@@ -14072,7 +14072,7 @@ function phiaPintar(){
      · stops/soporte → phiaStops (getEffectiveNiv).
      · earnings 7d → phiaEventoProximo (PHCAL_STATE.eventos ∩ POSITIONS).
      · volatilidad por posición → riesgoRangoTicker (RIESGO_STATE.por_ticker.rango_10d).
-   Tope de concentración = PHRISK_CONC_ROJO (20%), la fuente única del repo.
+   Tope de concentración = PHRISK_CONC_ROJO (15%), la fuente única del repo.
    NO hay banda de volatilidad agregada de cartera (no existe tal campo): se
    muestra la magnitud esperada POR posición, nunca una dirección.
 
@@ -14096,7 +14096,7 @@ function phiaAnalisisRender(){
   const reg  = (typeof RIESGO_STATE !== 'undefined' && RIESGO_STATE && RIESGO_STATE.regimen) ? RIESGO_STATE.regimen : null;
   const st   = (typeof phiaStops === 'function')         ? phiaStops()         : { cruzado:null, cercano:null };
   const ev   = (typeof phiaEventoProximo === 'function') ? phiaEventoProximo() : null;
-  const TOPE = (typeof PHRISK_CONC_ROJO === 'number')    ? PHRISK_CONC_ROJO    : 20;
+  const TOPE = (typeof PHRISK_CONC_ROJO === 'number')    ? PHRISK_CONC_ROJO    : 15;
   const stopUmbral = (typeof PHIA_STOP_PCT === 'number') ? PHIA_STOP_PCT       : 6;
 
   const regTxt = (reg && reg.estado) ? String(reg.estado) : null;
