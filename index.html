@@ -5220,8 +5220,9 @@ function buildRP(t,sig,fc){
     </div>
   </div>
   <div class="rp-sec" style="padding:5px 14px">
-    <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center;cursor:pointer" title="Clic para ver el detalle completo" onclick="openRpMax('fc')">Lo que proyecta el modelo (sin garantía)<span class="rp-max-ico" title="Maximizar la proyección del modelo" onclick="event.stopPropagation();openRpMax('fc')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+    <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center;cursor:pointer" title="Clic para ver el detalle completo" onclick="openRpMax('fc')">Proyección del modelo<span class="rp-max-ico" title="Maximizar la proyección del modelo" onclick="event.stopPropagation();openRpMax('fc')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div>
+      <div style="font-size:10px;color:var(--text2);margin-bottom:4px">sin garantía</div>
       <div class="rp-fc-grid">${fcHtml}</div>
       <div class="rp-fc-note" style="margin-top:3px;font-size:9px">proyección del modelo · p50 mediana · p10/p90 rango · ${fcMetodoTxt(sig)}</div>
       <div class="rp-fc-vol" id="rp-fc-vol" style="margin-top:3px;font-size:9px;color:var(--text-label)" title="Recorrido estimado del precio, no un objetivo. Es una banda de volatilidad, no una predicción de dirección.">${riesgoVolLineHTML(t)}</div>
