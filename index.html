@@ -13061,9 +13061,33 @@ const PHIA_IMPERATIVOS = [
   'reduce','reduci','reduzca','vende','venda','considera','considere','compra','compre',
   'manten','mantene','mantenga','ajusta','ajuste','evita','evite','revisa','revise',
   'aumenta','aumente','disminuye','disminuya','diversifica','diversifique','rebalancea',
-  'rebalancee','protege','proteja','limita','limite','cierra','abre','mira','deberias',
+  'rebalancee','protege','proteja','cierra','abre','mira','deberias',
   'recomiendo','sugiero','te conviene','te recomiendo'
 ];
+/* 'limita'/'limite' van APARTE (no en PHIA_IMPERATIVOS): como SUSTANTIVO ("el límite
+   del 15%", concepto que el prompt autoriza a nombrar) NO son consejo, pero como
+   imperativo de *limitar* sin determinante delante ("limite su exposición") sí. Como
+   la barrera quita acentos, "límite"→"limite" colisionaba con el imperativo y tiraba
+   prosa honesta a R5 (gemelo del falso positivo del backend m14, detectado en AMD).
+   Guarda: se marca sólo cuando NO viene precedido inmediatamente de un determinante. */
+const PHIA_DETERMINANTES = new Set([
+  'el','la','los','las','un','una','unos','unas','del','al',
+  'su','sus','mi','mis','tu','tus','este','esta','estos','estas',
+  'ese','esa','esos','esas','cada','nuestro','nuestra','nuestros','nuestras'
+]);
+const PHIA_RE_LIMITAR = /(?:(\w+)\s+)?(limit[ae])\b/ig;
+function phiaEsImperativoLimitar(plano){
+  /* true si 'limite'/'limita' aparece como IMPERATIVO (sin determinante delante).
+     'el límite', 'del límite', 'su límite' → sustantivo (no consejo); 'limite su
+     exposición', 'limita el riesgo' (sin artículo antes) → imperativo (sí consejo).
+     Opera sobre el texto ya sin acentos/minúsculas, igual que el resto de la barrera. */
+  PHIA_RE_LIMITAR.lastIndex = 0;
+  let m;
+  while((m = PHIA_RE_LIMITAR.exec(plano)) !== null){
+    if(!PHIA_DETERMINANTES.has((m[1] || '').toLowerCase())) return true;
+  }
+  return false;
+}
 const PHIA_JUICIO = [
   'arriesgada','arriesgado','riesgosa','riesgoso','solida','solido','repartida','repartido',
   'concentrada','concentrado','diversificada','diversificado','saludable','peligrosa',
@@ -13767,6 +13791,7 @@ function phiaVerifLing(texto, payload){
   const plano = phiaSinAcentos(crudo).toLowerCase();   // imperativos y juicio
   const conTilde = crudo.toLowerCase();                // voseo: la tilde ES el dato
   if(phiaHallaAlguno(plano, PHIA_IMPERATIVOS)) return false;
+  if(phiaEsImperativoLimitar(plano))           return false;
   if(phiaHallaAlguno(plano, PHIA_JUICIO))      return false;
   if(phiaHallaAlguno(conTilde, PHIA_VOSEO))    return false;
   if(phiaVetoDireccion(texto, payload))        return false;
