@@ -6091,6 +6091,31 @@ function peekKV(k, v, col){
   const style = col ? ` style="color:${col}"` : '';
   return `<div class="tkr-peek-kv"><span class="k">${k}</span><span class="v"${style}>${v}</span></div>`;
 }
+/* E-2 · Distancia del stop MOSTRADO (niv.sl) con contexto de volatilidad (ATR).
+   - Sin override manual: usa los campos del backend (sig.sl_distancia_pct/atr),
+     que miden el stop del MODELO.
+   - Con override manual de SL: recalcula desde el SL mostrado (pct = |px−sl|/px×100
+     y, si sig.atr.valor>0, el múltiplo = |px−sl|/atr), así la línea siempre refleja
+     el SL que se ve.
+   Si falta el %, devuelve '' (no se pinta). Si falta ATR, muestra solo el %. */
+function stopCtxTxt(t, sig, niv, px){
+  if(!sig) return '';
+  const atrV = (sig.atr && typeof sig.atr.valor==='number') ? sig.atr.valor : null;
+  const hasOv = (typeof getNivUser==='function') && getNivUser(t,'sl')!=null;
+  let pct=null, mult=null;
+  if(hasOv){
+    const sl = niv ? niv.sl : null;
+    if(px!=null && sl!=null && !isNaN(sl) && px){
+      pct = Math.abs(px - sl)/px*100;
+      if(atrV && atrV>0) mult = Math.abs(px - sl)/atrV;
+    }
+  }else{
+    pct  = (typeof sig.sl_distancia_pct==='number') ? sig.sl_distancia_pct : null;
+    mult = (typeof sig.sl_distancia_atr==='number') ? sig.sl_distancia_atr : null;
+  }
+  if(pct==null) return '';                       // sin % → nada
+  return '−'+pct.toFixed(1)+'%' + (mult!=null ? ' (≈'+mult.toFixed(1)+'×ATR)' : '');
+}
 function peekHTML(t){
   const d = (typeof CACHE!=='undefined') ? CACHE[t] : null;
   const sig = d && d.sig;
@@ -6135,9 +6160,12 @@ function peekHTML(t){
   const dst = distStopPct(px, niv.sl);
   const slVal = (niv.sl!=null && !isNaN(niv.sl))
     ? ('$'+Number(niv.sl).toFixed(2) + (dst!=null?` · ${dst>=0?'+':''}${dst.toFixed(1)}%`:'')) : 'sin dato';
+  // Distancia del stop MOSTRADO escalada a la volatilidad (ATR). Neutro, NO rojo.
+  const stopCtx = stopCtxTxt(t, sig, niv, px);
   const riesgoGrp = `<div class="tkr-peek-grp"><div class="tkr-peek-grp-t">Riesgo</div>`
     + peekKV('Volatilidad', volVal, 'var(--blue)')   // dato neutro → azul
     + peekKV('Stop-loss · modelo', slVal, 'var(--text2)')  // gris: riesgo, no pérdida
+    + (stopCtx ? peekKV('Stop · distancia', stopCtx, 'var(--text2)') : '')  // gris, contexto ATR
     + `</div>`;
 
   // Grupo "Evento": próximo reporte (dorado), solo si aplica.
