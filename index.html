@@ -2666,6 +2666,36 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
         </div>
       </div>
 
+      <!-- Termómetro intradía · ROI neto por timeframe. BAJADO del panel derecho del
+           ticker (Fase 3 · 1b): el flujo principal del ticker ya no pinta ROI/sparkline/
+           win-rate intradía; aquí, en el Laboratorio, es evaluación del motor y el código
+           de color (verde/rojo) lo permite. Reusa las MISMAS funciones (setModelPerfTf /
+           reloadModelPerfIntradia / loadModelPerfIntradia) y los MISMOS ids de config
+           (rp-mp-ventana / rp-mp-costo / rp-mp-vent-lbl / rp-mp-cost-lbl) para no romper
+           getPerfVentanaPref / getPerfCostoPref ni openSettings. El host es #lab-mp-body.
+           NO toca el ejecutor, los endpoints ni las preferencias globales. -->
+      <div class="ph-card" id="lab-intradia-card" style="margin:4px 8px">
+        <div class="ph-card-hdr">
+          <div class="ph-card-hdr-left">
+            <span class="ph-card-title">Termómetro intradía · <span id="lab-mp-tkr">—</span></span>
+            <span class="ph-card-sub">ROI neto simulado por timeframe · evaluación del motor, histórico, no es promesa</span>
+          </div>
+        </div>
+        <div style="padding:10px 12px">
+          <div class="rp-mp-tfbar" id="lab-mp-tfbar">
+            <button class="rp-mp-tf on" data-tf="1h"  onclick="setModelPerfTf(ACTIVE,'1h',this)">1h</button>
+            <button class="rp-mp-tf"    data-tf="15m" onclick="setModelPerfTf(ACTIVE,'15m',this)">15m</button>
+            <button class="rp-mp-tf"    data-tf="5m"  onclick="setModelPerfTf(ACTIVE,'5m',this)">5m</button>
+          </div>
+          <div class="rp-mp-cfg" id="rp-mp-cfg">
+            <span class="rp-mp-cfg-note">Ventana <b id="rp-mp-vent-lbl">8</b> · costo <b id="rp-mp-cost-lbl">0.02%</b> · <a class="rp-mp-cfg-link" onclick="openSettings()">ajustar ⚙️</a></span>
+            <input type="hidden" id="rp-mp-ventana" value="8">
+            <input type="hidden" id="rp-mp-costo" value="0.02">
+          </div>
+          <div class="rp-mp-body" id="lab-mp-body"><span class="rp-mp-loading">Selecciona un ticker en el panel</span></div>
+        </div>
+      </div>
+
       <!-- DESGLOSE POR REGLAS (#phia-body) · bajado del home (#phia-wrap) · Bloque 10.
            phiaPintar() lo rellena por id con su propio encabezado ("Desglose por
            reglas" / "Lo que afirma el análisis"). Clase --lab: marco neutro, fuera
@@ -5175,6 +5205,7 @@ async function analistaCargar(t, modelo){
   modelo = (modelo==='capaz'||modelo==='sonnet') ? 'capaz' : 'haiku';
   body.innerHTML = '<div class="rp-ai-loading">Analizando '+analistaEsc(t)+'… puede tardar unos segundos</div>';
   const res = await get('/v1/analista/informe?ticker='+encodeURIComponent(t)+'&modelo='+modelo);
+  if(res && res.informe){ (CACHE[t]=CACHE[t]||{}).analista = res; }   // cache para la Consulta IA (buildChatContext)
   const body2=$('rp-analista-body');
   if(!body2 || body2.dataset.tkr!==t) return;   // el usuario cambió de ticker: no pisar
   body2.innerHTML = (res && res.informe) ? analistaRender(res, t) : analistaUnavailable();
@@ -5314,29 +5345,18 @@ function buildRP(t,sig,fc){
       }).join('')}
     </div>
     <div id="rp-rr-wrap" style="display:none"></div>
-    <div class="rp-niv-note">Los cambios se guardan solo en este navegador. Las estrategias automáticas siguen usando los niveles del modelo.</div>
+    <div class="rp-niv-note">Los cambios se guardan solo en este navegador y no modifican las órdenes del laboratorio, que usan los niveles del modelo.</div>
   </div>
   <div class="rp-sec" id="rp-model-perf" style="padding:6px 14px">
     <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center;cursor:pointer" title="Clic para ver el detalle completo" onclick="openRpMax('perf')">Desempeño del modelo · ${t}<span class="rp-max-ico" title="Maximizar Desempeño del modelo" onclick="event.stopPropagation();openRpMax('perf')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
-    <div class="rp-mp-tfbar" id="rp-mp-tfbar">
-      <button class="rp-mp-tf on" data-tf="1D"  onclick="setModelPerfTf('${t}','1D',this)">Diario</button>
-      <button class="rp-mp-tf"    data-tf="1h"  onclick="setModelPerfTf('${t}','1h',this)">1h</button>
-      <button class="rp-mp-tf"    data-tf="15m" onclick="setModelPerfTf('${t}','15m',this)">15m</button>
-      <button class="rp-mp-tf"    data-tf="5m"  onclick="setModelPerfTf('${t}','5m',this)">5m</button>
-    </div>
-    <div class="rp-mp-cfg" id="rp-mp-cfg" style="display:none">
-      <span class="rp-mp-cfg-note">Ventana <b id="rp-mp-vent-lbl">8</b> · costo <b id="rp-mp-cost-lbl">0.02%</b> · <a class="rp-mp-cfg-link" onclick="openSettings()">ajustar ⚙️</a></span>
-      <input type="hidden" id="rp-mp-ventana" value="8">
-      <input type="hidden" id="rp-mp-costo" value="0.02">
-    </div>
     <div class="rp-mp-body" id="rp-mp-body"><span class="rp-mp-loading">Cargando historial…</span></div>
   </div>
   <button class="rp-orden-btn" onclick="openOrderModal('${t}')">Orden manual ↗</button>`;
-  // El termómetro arranca en el timeframe del modo de operación elegido.
-  const _mtf = TMODE_TF[TRADING_MODE]||'1D';
-  MODEL_PERF_TF = '1D';   // estado limpio; applyModeToPerf lo lleva al del modo
-  if(_mtf==='1D'){ rpLoadModelPerf(t); }
-  else { setTimeout(applyModeToPerf, 0); }
+  // El panel derecho conserva SOLO la vista Diario ('✦ NN% · N señales'); lo intradía
+  // (ROI/sparkline/win-rate) vive ahora en la tarjeta del Laboratorio (#lab-intradia-card).
+  rpLoadModelPerf(t);
+  // Refrescar la tarjeta intradía del Laboratorio para este ticker (si está renderizada).
+  if(typeof labIntradiaRefresh==='function') labIntradiaRefresh(t);
 }
 
 /* ── Desempeño del modelo en el panel derecho ────────────────────────────
@@ -5467,7 +5487,7 @@ function openRpMax(kind){
       <div style="font-size:11px;color:var(--text2)">Precio actual: <b style="color:var(--text)">${fP(px)}</b> · barra: <span style="color:var(--gold)">▎p50</span> · <span style="color:var(--text2)">▎precio actual</span> · banda = rango p10–p90</div>
       <div class="rpx-fc-grid">${cols}</div>
       <div><div class="rpx-lbl">Niveles SL/TP de referencia (solo lectura — se editan en el panel)</div><div class="rpx-sltp-ref">${ref}</div></div>
-      <div class="rpx-note">p50 = mediana del pronóstico · p10/p90 = rango probable · método ${fcMetodoTxt(sig)}. Concordancia forecast↔señal: el gate de estrategias exige que la dirección del forecast acompañe a la señal.</div>
+      <div class="rpx-note">p50 = mediana del pronóstico · p10/p90 = rango probable · método ${fcMetodoTxt(sig)}</div>
       <div class="rpx-disc">El modelo proyecta — información, no consejo de inversión. Resultados pasados no garantizan resultados futuros.</div>`;
   }
 
@@ -5500,7 +5520,11 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape' && $('rpmax-overlay')?.classList.contains('show')) closeRpMax();
 });
 
-let MODEL_PERF_TF = '1D';
+// Estado del termómetro intradía (vive en la tarjeta del Laboratorio #lab-intradia-card).
+// Arranca en el timeframe del modo de operación; swing (1D) no tiene intradía → '1h'.
+// El valor real se fija justo después de definir TMODE_TF/TRADING_MODE (más abajo),
+// porque referenciarlos aquí daría TDZ sobre esos `const/let` posteriores.
+let MODEL_PERF_TF = '1h';
 
 /* ── Modo de operación del trader (dropdown del topbar) ──────────────────────
    Define CÓMO opera el usuario y, con eso, el timeframe con el que se evalúa
@@ -5612,6 +5636,8 @@ function resetSettings(){
   const msg=$('set-msg'); if(msg) msg.textContent='Valores recomendados cargados (aún sin guardar).';
 }
 let TRADING_MODE = (function(){ try{ return localStorage.getItem('st_trading_mode')||'swing'; }catch(e){ return 'swing'; } })();
+// Valor inicial del termómetro intradía: el timeframe del modo; swing (1D) → '1h'.
+MODEL_PERF_TF = (TMODE_TF[TRADING_MODE] && TMODE_TF[TRADING_MODE] !== '1D') ? TMODE_TF[TRADING_MODE] : '1h';
 
 function setTradingMode(mode){
   if(!TMODE_TF[mode]) mode='swing';
@@ -5626,10 +5652,30 @@ function setTradingMode(mode){
    corresponde, pone la ventana default del modo y recarga. */
 function applyModeToPerf(){
   if(!ACTIVE) return;
+  const card=$('lab-intradia-card'); if(!card) return;   // la tarjeta del Laboratorio no está renderizada
   const tf = TMODE_TF[TRADING_MODE]||'1D';
-  const btn = document.querySelector(`.rp-mp-tf[data-tf="${tf}"]`);
-  if(!btn) return;   // el panel no está en pantalla
+  const btn = card.querySelector(`.rp-mp-tf[data-tf="${tf}"]`);
+  if(!btn) return;   // modo swing (1D): el Laboratorio no tiene timeframe intradía que seleccionar
   setModelPerfTf(ACTIVE, tf, btn);   // ventana/costo se leen de config global al recargar
+}
+
+/* Refresca la tarjeta "Termómetro intradía" del Laboratorio para el ticker dado:
+   actualiza el rótulo del ticker y, si hay ACTIVE, relanza la evaluación intradía
+   con el MODEL_PERF_TF vigente. Guarda contra ticker nulo y contra la tarjeta aún
+   no renderizada. Se llama al final de buildRP y al abrir la pestaña 'strat'. */
+function labIntradiaRefresh(t){
+  const card=$('lab-intradia-card'); if(!card) return;
+  const tkr=$('lab-mp-tkr'); if(tkr) tkr.textContent = (ACTIVE && t) ? t : '—';
+  const host=$('lab-mp-body');
+  if(!ACTIVE || !t){
+    if(host) host.innerHTML='<span class="rp-mp-loading">Selecciona un ticker en el panel</span>';
+    return;
+  }
+  // Mantener el botón resaltado en sincronía con MODEL_PERF_TF antes de repintar.
+  if(MODEL_PERF_TF && MODEL_PERF_TF!=='1D'){
+    card.querySelectorAll('.rp-mp-tf').forEach(b=>b.classList.toggle('on', b.getAttribute('data-tf')===MODEL_PERF_TF));
+  }
+  reloadModelPerfIntradia(t);
 }
 
 /* Sincronización con la gráfica: 1D/5D del chart usan velas HORARIAS →
@@ -5639,29 +5685,28 @@ function applyModeToPerf(){
    tipo (intradía/diario) no se lo pisa. */
 function syncPerfWithChart(isIntradayChart){
   if(!ACTIVE) return;
+  const card=$('lab-intradia-card'); if(!card) return;   // la tarjeta del Laboratorio no está renderizada
   const wantTf = isIntradayChart
     ? (TMODE_TF[TRADING_MODE]!=='1D' ? TMODE_TF[TRADING_MODE] : '1h')
     : '1D';
   const isIntraNow = MODEL_PERF_TF!=='1D';
   if(isIntradayChart === isIntraNow) return;   // ya está en el tipo correcto
-  const btn = document.querySelector(`.rp-mp-tf[data-tf="${wantTf}"]`);
-  if(!btn) return;
+  const btn = card.querySelector(`.rp-mp-tf[data-tf="${wantTf}"]`);
+  if(!btn) return;   // p. ej. wantTf='1D': el Laboratorio no tiene botón Diario
   setModelPerfTf(ACTIVE, wantTf, btn);   // ventana/costo se leen de config global al recargar
 }
 
 function setModelPerfTf(t, tf, btn){
+  if(tf==='1D') return;   // el Laboratorio es intradía; la vista Diario vive en el panel derecho (rpLoadModelPerf)
   MODEL_PERF_TF = tf;
-  // Resaltar el botón activo
+  // Resaltar el botón activo (los botones viven en la tarjeta del Laboratorio)
   document.querySelectorAll('.rp-mp-tf').forEach(b=>b.classList.remove('on'));
   if(btn) btn.classList.add('on');
-  // Mostrar controles de config solo en intradía
-  const cfg=$('rp-mp-cfg'); if(cfg) cfg.style.display = (tf==='1D') ? 'none' : 'flex';
-  if(tf==='1D') rpLoadModelPerf(t);
-  else reloadModelPerfIntradia(t);
+  reloadModelPerfIntradia(t);
 }
 
 function reloadModelPerfIntradia(t){
-  const host=$('rp-mp-body'); if(!host) return;
+  const host=$('lab-mp-body'); if(!host) return;
   if(MODEL_PERF_TF==='1D') return;   // guardia: los controles solo aplican intradía
   // Los valores vienen de la configuración GLOBAL (modal ⚙️), no de campos por ticker.
   const ventana = getPerfVentanaPref(MODEL_PERF_TF);
@@ -5677,7 +5722,7 @@ function reloadModelPerfIntradia(t){
 
 async function loadModelPerfIntradia(t, tf, ventana, costo){
   const token = getBrokerToken();
-  const host=$('rp-mp-body'); if(!host) return;
+  const host=$('lab-mp-body'); if(!host) return;
   let data=null;
   try{
     const url = API+`/v1/papertrading/intradia?ticker=${encodeURIComponent(t)}&timeframe=${tf}&ventana=${ventana}&costo_pct=${costo}`;
@@ -5686,7 +5731,7 @@ async function loadModelPerfIntradia(t, tf, ventana, costo){
   }catch(e){}
   // El usuario pudo cambiar de ticker o timeframe mientras cargaba
   if(ACTIVE!==t || MODEL_PERF_TF!==tf) return;
-  const host2=$('rp-mp-body'); if(!host2) return;
+  const host2=$('lab-mp-body'); if(!host2) return;
 
   if(!data || data.roi_neto_pct==null || !data.n_ops){
     host2.innerHTML=`<span class="rp-mp-loading">Aún no hay señales intradía (${tf}) evaluables para este ticker. Se acumulan con el mercado abierto.</span>`;
@@ -8576,7 +8621,7 @@ function switchTab(tab){
   // Cargar datos al abrir las pestañas de análisis
   if(tab==='angral') loadAngral();
   if(tab==='anticker' && ACTIVE) loadAnTicker(ACTIVE);
-  if(tab==='strat') stratLoad(); else if(typeof stratStopMonitor==='function') stratStopMonitor();
+  if(tab==='strat'){ stratLoad(); if(typeof labIntradiaRefresh==='function') labIntradiaRefresh(ACTIVE); } else if(typeof stratStopMonitor==='function') stratStopMonitor();
   if(tab==='cal'){ loadCalendar(); loadPausas(); }
   if(tab==='orders') ordersRender();
   if(tab==='alerts') markAlertsRead();
@@ -9016,7 +9061,7 @@ function renderAnTkSentimiento(ticker, ctx){
   el.innerHTML = `
     <div class="an-card">
       <div class="an-card-title">Sentimiento · ${ticker}</div>
-      <div class="an-row"><span class="an-row-k">Score</span><span class="an-row-v" style="color:${scoreCol}">${sn.sentimiento_score?.toFixed(3)||'—'}</span></div>
+      <div class="an-row"><span class="an-row-k">Score (derivado de titulares)</span><span class="an-row-v" style="color:${scoreCol}">${sn.sentimiento_score?.toFixed(2)||'—'}</span></div>
       <div class="an-row"><span class="an-row-k">Label</span><span class="an-row-v">${sentLbl(sn.sentimiento_label)}</span></div>
       <div class="an-row"><span class="an-row-k">Analizadas</span><span class="an-row-v">${sn.total_noticias||0}</span></div>
       <div class="an-row"><span class="an-row-k">Positivas</span><span class="an-row-v" style="color:var(--green)">${d.positivo||0} (${pPos}%)</span></div>
@@ -9028,7 +9073,8 @@ function renderAnTkSentimiento(ticker, ctx){
         <div style="flex:${pNeg};background:var(--red)"></div>
       </div>
       ${sn.resumen?`<div style="font-size:9px;color:var(--text3);margin-top:6px">${sn.resumen}</div>`:''}
-    </div>`;
+    </div>
+    <div style="font-size:9px;color:var(--text3);margin-top:4px">Sentimiento derivado de los titulares recientes (Polygon) · información, no recomendación</div>`;
 }
 
 function renderAnTkMicro(ticker){
@@ -9092,9 +9138,8 @@ function renderAnTkFund(ticker, ctx){
     <div class="an-row"><span class="an-row-k">Beta</span><span class="an-row-v">${f.beta!=null?f.beta:'—'}</span></div>
     <div class="an-row"><span class="an-row-k">Rango 52W</span><span class="an-row-v">${(f.low_52w!=null&&f.high_52w!=null)?'$'+f.low_52w.toFixed(0)+' – $'+f.high_52w.toFixed(0):'—'}</span></div>
     <div class="an-row"><span class="an-row-k">Sector</span><span class="an-row-v">${f.sector||'—'}</span></div>
-    <div class="an-row"><span class="an-row-k">Precio objetivo</span><span class="an-row-v">${f.target_precio?'$'+f.target_precio:'—'}</span></div>
     ${f.earnings_fecha?`<div class="an-row"><span class="an-row-k">Próx. earnings</span><span class="an-row-v" style="color:var(--orange)">${f.earnings_fecha}</span></div>`:''}
-    <div style="font-size:8.5px;color:var(--text3);font-style:italic;margin-top:5px">Fuente: Alpha Vantage (overview de la compañía; puede tener rezago de un trimestre)</div>
+    <div style="font-size:8.5px;color:var(--text3);font-style:italic;margin-top:5px">Fuente: SEC EDGAR (XBRL companyfacts) · datos del último reporte, pueden tener rezago de un trimestre</div>
   </div>`;
 }
 
@@ -9146,9 +9191,40 @@ function buildChatContext(){
   let ctx=`Eres el asistente IA de SmartTrade, una plataforma de análisis técnico + contextual para traders retail en LatAm.
 Fecha actual: ${now}.
 Tickers en el panel: ${[...TICKERS,...WATCHLIST].join(', ')}.
-IMPORTANTE: SmartTrade SÍ incorpora noticias (Alpha Vantage), datos macro (FRED) y fundamentales en su análisis. Puedes decir que la plataforma USA esas fuentes; NO digas que solo hace análisis técnico.
+IMPORTANTE: SmartTrade SÍ incorpora noticias y sentimiento (Polygon), datos macro (FRED) y fundamentales (SEC EDGAR) en su análisis. Puedes decir que la plataforma USA esas fuentes; NO digas que solo hace análisis técnico.
 REGLA CRÍTICA — cíñete a los datos: responde ÚNICAMENTE con la información de ESTE contexto. NO uses tu conocimiento propio sobre las empresas, sus productos, arquitecturas, chips, ejecutivos, resultados o noticias — aunque creas saberlo. Distingue "qué fuentes usa la plataforma" (puedes mencionarlo) de "qué dijeron esas fuentes" (solo lo que aparezca literalmente aquí). Si te preguntan algo que este contexto no cubre, di con claridad que no tienes ese dato en el análisis, en vez de completarlo de memoria. Inventar un dato con apariencia de fuente es el peor error posible aquí.
 `;
+  // ── CAPA DE RIESGO (validada) · va ANTES de la señal del modelo ──────────────
+  //    Redacta lo YA calculado reusando los accesores existentes (RIESGO_STATE,
+  //    riesgoExpoPct/riesgoPctTxt, riesgoRangoTicker/riesgoRangoTxt); sin lógica
+  //    nueva. El régimen y la volatilidad SÍ están validados; la señal/forecast
+  //    son información sin ventaja direccional probada.
+  if(t){
+    let regLinea;
+    if(RIESGO_STATE && RIESGO_STATE.regimen && RIESGO_STATE.regimen.estado){
+      const reg = RIESGO_STATE.regimen;
+      const riskOn = (reg.risk_on===true) ? ' · risk-on' : (reg.risk_on===false ? ' · risk-off' : '');
+      const expo = riesgoPctTxt(riesgoExpoPct(RIESGO_STATE.exposicion ? RIESGO_STATE.exposicion.recomendada : null));
+      regLinea = `Régimen de mercado: ${reg.estado}${riskOn} · exposición recomendada ${expo}`;
+    } else {
+      regLinea = 'Régimen de mercado: no disponible';
+    }
+    const vr = (typeof riesgoRangoTicker==='function') ? riesgoRangoTicker(t) : null;
+    let volLinea;
+    if(vr && vr.r10!=null){
+      volLinea = `Rango de volatilidad esperado de ${t}: ${riesgoRangoTxt(vr.r10)} (10 ruedas)`
+        + (vr.r5!=null ? ` · ${riesgoRangoTxt(vr.r5)} (5 ruedas)` : '')
+        + ' — banda calibrada (~70% de cobertura medida), magnitud, no dirección';
+    } else {
+      volLinea = `Rango de volatilidad esperado de ${t}: —`;
+    }
+    ctx+=`
+CAPA DE RIESGO (validada):
+${regLinea}
+${volLinea}
+La señal y el forecast del modelo son información sin ventaja direccional probada; la capa de riesgo (régimen y volatilidad) sí está validada. Al responder, prioriza riesgo y contexto sobre la dirección.
+`;
+  }
   if(t && sig){
     const niv=sig.niveles||{};
     const Hz=fc?.horizontes||{};
@@ -9166,6 +9242,15 @@ Factores negativos: ${(traz.factores_negativos||[]).join('; ')||'ninguno'}
 Alertas del modelo: ${(traz.alertas||[]).join('; ')||'ninguna'}
 Síntesis completa: ${(sig.sintesis||'').split('\n').join(' ').split('#').join('').split('*').join('').trim().substring(0,600)}
 Indicadores técnicos activos en pantalla: ${Object.entries(IND).filter(([k,v])=>v).map(([k])=>k.toUpperCase()).join(', ')||'ninguno'}
+`;
+  }
+  // Informe del Analista IA: solo si el usuario ya lo generó para ESTE ticker y
+  // pasó la verificación anti-alucinación del backend. Texto ya calculado, truncado.
+  if(t && CACHE[t]?.analista?.verificado === true){
+    const an = CACHE[t].analista;
+    const informe = String(an.informe||'').replace(/[\n\r]+/g,' ').replace(/[#*]/g,'').trim().substring(0,600);
+    ctx+=`
+Informe del Analista IA (verificado, ${an.generado_en||'sin fecha'}): ${informe}
 `;
   }
   // Incluir contexto M2 si está disponible en cache
@@ -9226,7 +9311,7 @@ Estrategias automáticas (siempre simuladas en paper, NO ejecutan en la cuenta r
 Instrucciones: Responde en español neutro latinoamericano. Máximo 4-5 oraciones salvo que pidan detalle.
 Integra técnico + noticias + macro en tu respuesta cuando estén disponibles.
 No des consejos directos de inversión. Usa "el modelo sugiere", "el análisis indica".
-El bloque de noticias es un resumen de sentimiento agregado de Alpha Vantage: puedes referirte al conteo y al sentimiento general, pero NO tienes los titulares individuales, así que NO describas ni cites noticias específicas. Los datos macro del FRED (si aparecen arriba) sí puedes citarlos con su valor.${BROKER_INFO?.paper===false?'\n⚠ IMPORTANTE: la cuenta conectada es REAL con DINERO REAL. Sé especialmente prudente al hablar de riesgo; recuerda que las pérdidas son reales.':''}`;
+El bloque de noticias es un resumen de sentimiento agregado de Polygon: puedes referirte al conteo y al sentimiento general, pero NO tienes los titulares individuales, así que NO describas ni cites noticias específicas. Los datos macro del FRED (si aparecen arriba) sí puedes citarlos con su valor.${BROKER_INFO?.paper===false?'\n⚠ IMPORTANTE: la cuenta conectada es REAL con DINERO REAL. Sé especialmente prudente al hablar de riesgo; recuerda que las pérdidas son reales.':''}`;
   return ctx;
 }
 
