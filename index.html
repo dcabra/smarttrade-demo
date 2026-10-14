@@ -153,9 +153,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .rp::-webkit-scrollbar{width:3px}
 .rp::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 .rp-sec{position:relative;padding:12px 14px;border:1px solid rgba(245,197,24,.18);border-radius:8px;margin:4px 8px}
-/* Señal IA elástica: absorbe el alto sobrante del panel; su cuerpo hace scroll si el contenido excede */
-.rp-sec-sig{flex:1 1 auto;min-height:120px;display:flex;flex-direction:column;overflow:visible}
-.rp-sig-body{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+/* Señal IA: se dimensiona por su contenido (triage 14-oct); el scroll lo lleva el panel .rp, no la tarjeta */
+.rp-sec-sig{display:flex;flex-direction:column;overflow:visible}
+.rp-sig-body{display:flex;flex-direction:column;gap:6px}
 .rp-sig-body::-webkit-scrollbar{width:2px}
 .rp-sig-body::-webkit-scrollbar-thumb{background:var(--border2)}
 .rp-sec:last-child{margin-bottom:8px}
@@ -231,7 +231,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .rp-sint-deg{font-size:10px;line-height:1.45;color:var(--orange);font-weight:600;background:rgba(243,156,18,.10);border:1px solid rgba(243,156,18,.30);border-radius:6px;padding:5px 8px;margin-top:6px}
 .rp-sint::-webkit-scrollbar{width:2px}
 .rp-sint::-webkit-scrollbar-thumb{background:var(--border2)}
-.rp-factors{margin-top:0;flex:1;min-height:48px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;border:1px solid rgba(245,197,24,.20);border-radius:6px;padding:6px 8px}
+.rp-factors{margin-top:0;display:flex;flex-direction:column;gap:3px;border:1px solid rgba(245,197,24,.20);border-radius:6px;padding:6px 8px}
 .rp-factors::-webkit-scrollbar{width:2px}
 .rp-factors::-webkit-scrollbar-thumb{background:var(--border2)}
 .rp-f{display:flex;align-items:flex-start;gap:5px;font-size:10px;color:var(--text2);line-height:1.35}
@@ -283,10 +283,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .rp-caret{transition:transform .2s}
 /* Toggle SL/TP en toolbar */
 #btn-sltp{position:relative}
-/* Panel derecho: sección señal IA con scroll propio */
-.rp-sint-wrap{max-height:110px;overflow-y:auto;margin-top:6px;padding-right:2px}
-.rp-sint-wrap::-webkit-scrollbar{width:2px}
-.rp-sint-wrap::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 /* Botón Orden panel derecho */
 .news-cat-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;background:var(--bg-left)}
 .news-cat-tabs::-webkit-scrollbar{display:none}
