@@ -159,6 +159,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .rp-sig-body::-webkit-scrollbar{width:2px}
 .rp-sig-body::-webkit-scrollbar-thumb{background:var(--border2)}
 .rp-sec:last-child{margin-bottom:8px}
+/* P-1 · Norte 14-oct — tarjetas FACT (dato crudo, sin marco dorado) y colores neutros.
+   .rp-fact usa .rp-fact-lbl (no .rp-lbl) para NO heredar la regla legend de .rp-sec. */
+.rp-fact{position:relative;padding:8px 14px;border:1px solid var(--border2);border-radius:8px;margin:4px 8px}
+.rp-fact-lbl{font-size:9px;font-weight:600;color:var(--text-label);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.rp-sl-tag{font-size:8px;color:var(--text-label);margin-left:4px;white-space:nowrap}
+.rp-fc-d{color:var(--text2)}                      /* Δ % del forecast sin verde/rojo */
+.rp-rr-v{color:var(--text2)}                      /* R/B neutro; el ⚠ se mantiene si < 1 */
+.rp-sltp-cell .dn,.rp-sltp-cell .up{color:var(--text-label)}  /* % de distancia, neutro */
 .rp-lbl{font-size:9px;font-weight:600;color:var(--gold);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px;display:flex;align-items:center;gap:5px}
 /* Bloque 13 — título embebido en el marco dorado (patrón legend/fieldset): el
    .rp-lbl sale del flujo y se monta SOBRE la línea superior del borde, ahorrando
@@ -225,7 +233,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .rp-cf-val{font-size:18px;font-weight:700;color:var(--gold)}
 .rp-cf-lbl{font-size:9px;color:var(--text-label);text-transform:uppercase;letter-spacing:.07em}
 .rp-cf-bg{height:3px;background:var(--bg3);border-radius:2px;margin-top:4px;overflow:hidden}
-.rp-cf-fg{height:100%;border-radius:2px;background:var(--gold);transition:width .4s}
+.rp-cf-fg{height:100%;border-radius:2px;background:var(--blue);transition:width .4s}
 .rp-sint-wrap{border:1px solid rgba(245,197,24,.20);border-radius:6px;padding:6px 8px;margin-top:6px}
 .rp-sint{font-size:11px;color:var(--text2);line-height:1.55}
 .rp-sint-deg{font-size:10px;line-height:1.45;color:var(--orange);font-weight:600;background:rgba(243,156,18,.10);border:1px solid rgba(243,156,18,.30);border-radius:6px;padding:5px 8px;margin-top:6px}
@@ -253,8 +261,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 /* valor editable: estado display */
 .rp-niv-display{display:flex;align-items:center;gap:5px;cursor:pointer}
 .rp-niv-val{font-size:12px;font-weight:600;border-bottom:1px dashed transparent;transition:border-color .15s}
-.rp-niv-val.dn{color:var(--red)}
-.rp-niv-val.up{color:var(--green)}
+.rp-niv-val.dn{color:var(--text)}
+.rp-niv-val.up{color:var(--text)}
 .rp-niv-val.edited{color:var(--gold);border-bottom-color:rgba(245,197,24,.4)}
 .rp-niv-pct{font-size:9px}
 .rp-niv-pen{font-size:9px;opacity:0;transition:opacity .15s;color:var(--text3)}
@@ -5229,7 +5237,7 @@ function buildRP(t,sig,fc){
       <div class="rp-fc-h">${h}</div>
       <div class="rp-fc-p">${fP(hd.p50)}</div>
       <div class="rp-fc-r">${fP(hd.p10)}-${fP(hd.p90)}</div>
-      ${d!=null?`<div class="rp-fc-d" style="color:${d>0.05?'var(--green)':d<-0.05?'var(--red)':'var(--text3)'}">${fPct(d)}</div>`:''}
+      ${d!=null?`<div class="rp-fc-d">${fPct(d)}</div>`:''}
     </div>`;
   }).join('');
 
@@ -5240,8 +5248,8 @@ function buildRP(t,sig,fc){
     const upl=myPos.unrealized_pl, uplpc=(myPos.unrealized_plpc!=null)?myPos.unrealized_plpc*100:null;
     const pc2=(upl==null||upl===0)?'var(--text2)':(upl>0?'var(--green)':'var(--red)');
     const pctEq=(EQUITY&&myPos.value!=null)?(myPos.value/EQUITY*100):null;
-    posHtml=`<div class="rp-sec rp-pos-sec" style="padding:7px 14px">
-      <div class="rp-lbl" style="margin-bottom:4px">💼 Tu posición</div>
+    posHtml=`<div class="rp-fact rp-pos-sec" style="padding:7px 14px">
+      <div class="rp-fact-lbl">💼 Tu posición</div>
       <div class="rp-pos-grid">
         <span class="rp-pos-k">${myPos.qty} u. @ ${myPos.avg_entry_price!=null?fP(myPos.avg_entry_price):'—'}</span>
         <span class="rp-pos-v" style="color:${pc2};font-weight:700">${upl!=null?fPS(upl):'—'}${uplpc!=null?` (${uplpc>=0?'+':''}${uplpc.toFixed(2)}%)`:''}</span>
@@ -5257,7 +5265,7 @@ function buildRP(t,sig,fc){
     return CACHE[t]?.sigAt || Date.now();
   })();
   const ageMin=Math.max(0,(Date.now()-dataTs)/60000);
-  const freshCol = ageMin<2?'var(--green)':ageMin<15?'var(--orange)':'var(--red)';
+  const freshCol = ageMin<2?'var(--text3)':ageMin<15?'var(--orange)':'var(--red)';
   const freshTxt = ageMin<1?'ahora':ageMin<60?`hace ${Math.round(ageMin)}m`:`hace ${(ageMin/60).toFixed(1)}h`;
 
   const fPos=(traz.factores_positivos||[]).map(f=>`<div class="rp-f"><span class="rp-fi">✅</span>${f}</div>`).join('');
@@ -5268,11 +5276,11 @@ function buildRP(t,sig,fc){
   const sc=sigCol(sen);
 
   rp.innerHTML=`
-  <div class="rp-sec" style="padding:8px 14px">
+  <div class="rp-fact" style="padding:8px 14px">
     <div class="rp-px-row">
       <span class="rp-px-compact">${fP(px)}</span>
       <span class="rp-px-sub-inline">${t} · ${now.getDate()} ${mes}</span>
-      <span class="rp-ts-inline" title="Antigüedad del dato de la señal (no la hora del reloj)"><span style="color:${freshCol}">●</span> <span id="rp-timestamp">${freshTxt}</span></span>
+      <span class="rp-ts-inline" title="Antigüedad del último dato de precio (no la hora del reloj)"><span style="color:${freshCol}">●</span> <span id="rp-timestamp">${freshTxt}</span></span>
     </div>
   </div>
   ${posHtml}
@@ -5283,9 +5291,9 @@ function buildRP(t,sig,fc){
       <div style="flex:1">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
           <span style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Confianza</span>
-          <span style="font-size:13px;font-weight:700;color:${conf>=85?'var(--green)':conf>=70?'var(--blue)':conf>=55?'var(--orange)':'var(--red)'}">${fmtConfPct(conf)}%</span>
+          <span style="font-size:13px;font-weight:700;color:var(--text)">${fmtConfPct(conf)}%</span>
         </div>
-        <div class="rp-cf-bg"><div class="rp-cf-fg" style="width:${confBarW(conf)}%;background:${conf>=85?'var(--green)':conf>=70?'var(--blue)':conf>=55?'var(--orange)':'var(--red)'}"></div></div>
+        <div class="rp-cf-bg"><div class="rp-cf-fg" style="width:${confBarW(conf)}%"></div></div>
       </div>
     </div>
     <div class="rp-sig-body">
@@ -5313,9 +5321,9 @@ function buildRP(t,sig,fc){
   </div>
   <div class="rp-sec" style="padding:6px 14px">
     <div class="rp-lbl" style="margin-bottom:5px;display:flex;align-items:center">
-      <span>SL / TP</span>
+      <span>SL / TP · operativo</span>
       <span style="font-size:9px;color:var(--text3);margin-left:6px">Editable · click para cambiar</span>
-      ${rr!=null?`<span class="rp-rr-v" style="margin-left:auto;font-size:10px;font-weight:700;color:${rr>=1.5?'var(--green)':rr>=1?'var(--blue)':rr>=0.7?'var(--orange)':'var(--red)'}">${rr<1?'⚠ ':''}R/B 1:${rr.toFixed(2)}</span>`:''}
+      ${rr!=null?`<span class="rp-rr-v" style="margin-left:auto;font-size:10px;font-weight:700">${rr<1?'⚠ ':''}R/B 1:${rr.toFixed(2)}</span>`:''}
     </div>
     <div class="rp-sltp-grid">
       ${[['sl','SL','dn',slP],['tp1','TP1','up',tp1P],['tp2','TP2','up',null],['tp3','TP3','up',null]].map(([k,lbl,col,pp])=>{
@@ -5323,10 +5331,24 @@ function buildRP(t,sig,fc){
         const isEdited=stored!=null&&stored!==modelVal;
         const pct=pp!=null?` <span class="${col}" style="font-size:8px">${fPct(pp)}</span>`:'';
         const dispVal=val!=null?val.toFixed(1):'—';
+        // D6 · rótulo del stop operativo en ×ATR (solo celda SL). Sin override: el múltiplo
+        // del backend (sig.sl_distancia_atr) o el nominal '2×ATR'. Con override manual y ATR
+        // disponible: se recomputa desde el SL mostrado (misma lógica que la peek-card).
+        let slTag='';
+        if(k==='sl'){
+          let mult=null;
+          if(isEdited){
+            const atrV=(sig.atr && typeof sig.atr.valor==='number')?sig.atr.valor:null;
+            if(atrV && atrV>0 && px && val!=null && !isNaN(val)) mult=Math.abs(px-val)/atrV;
+          }else if(typeof sig.sl_distancia_atr==='number'){
+            mult=sig.sl_distancia_atr;
+          }
+          slTag=` <span class="rp-sl-tag">${mult!=null?`≈${mult.toFixed(1)}×ATR`:'2×ATR'}</span>`;
+        }
         return `<div class="rp-sltp-cell" id="row-${k}">
           <span class="rp-sltp-lbl">${lbl}</span>
           <div class="rp-niv-display" onclick="startEditNiv('${t}','${k}')" title="Click para editar" style="gap:2px">
-            <span class="rp-niv-val ${col}${isEdited?' edited':''}" id="disp-${k}" style="font-size:11px">${dispVal}</span>${pct}<span class="rp-niv-pen" style="font-size:8px">✏</span>
+            <span class="rp-niv-val ${col}${isEdited?' edited':''}" id="disp-${k}" style="font-size:11px">${dispVal}</span>${pct}${slTag}<span class="rp-niv-pen" style="font-size:8px">✏</span>
           </div>
           <div class="rp-niv-edit">
             <input class="rp-niv-inp" id="inp-${k}" type="number" step="0.01"
