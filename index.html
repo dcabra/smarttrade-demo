@@ -305,6 +305,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .rp-vol-chip.calmado{background:rgba(77,158,247,.10);opacity:.75}
 .rp-vol-chip.medio{background:rgba(77,158,247,.18)}
 .rp-vol-chip.agitado{background:rgba(77,158,247,.28);border-color:rgba(77,158,247,.45)}
+
+/* D3/D4 · "Lo que ve el modelo" colapsada: una línea legible. */
+.rp-model-line{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--text2);min-width:0;font-variant-numeric:tabular-nums}
+.rp-model-line .rp-model-pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;color:var(--gold-dim);background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.35);flex-shrink:0}
+.rp-model-line .rp-model-txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.rp-model-foot{font-size:9px;color:var(--text-label);margin-top:6px;display:flex;justify-content:space-between;gap:8px}
+.rp-model-foot a{color:var(--blue);text-decoration:none}
+/* La línea resumen solo se ve colapsada; el detalle, solo expandida (mecanismo .rp-collapsible-body ya existente). */
+.rp-sec:not(.collapsed) .rp-model-line{display:none}
 /* Toggle SL/TP en toolbar */
 #btn-sltp{position:relative}
 /* Botón Orden panel derecho */
@@ -5290,6 +5299,11 @@ function buildRP(t,sig,fc){
   const slP=pct(px,niv.sl), tp1P=pct(px,niv.tp1);
   const rr=niv.sl&&niv.tp1&&px?Math.abs(niv.tp1-px)/Math.abs(px-niv.sl):null;
   const sc=sigCol(sen);
+  // P-3 · "Lo que ve el modelo": colapsada por defecto; el estado se persiste por usuario.
+  const modelCollapsed = (()=>{try{return localStorage.getItem('rpModelCollapsed')!=='0'}catch(e){return true}})();
+  // Línea resumen sincrónica (datos ya en scope): confianza neutra + Δ% a 7D si existe.
+  const has7D = Hz['7D'] && Hz['7D'].p50!=null;
+  const modelLineTxt = `Confianza ${fmtConfPct(conf)}%` + (has7D ? ` · 7D ${fPct(pct(px,Hz['7D'].p50))}` : '');
 
   rp.innerHTML=`
   <div class="rp-fact" style="padding:8px 14px">
@@ -5303,33 +5317,6 @@ function buildRP(t,sig,fc){
   <div class="rp-sec" id="rp-riesgo" style="padding:6px 14px">
     <div class="rp-lbl" style="margin-bottom:6px">Riesgo · ${t}</div>
     <div id="rp-riesgo-body">${rpRiesgoCardBody(t,sig)}</div>
-  </div>
-  <div class="rp-sec rp-sec-sig" style="padding:8px 14px">
-    <div class="rp-lbl" style="margin-bottom:5px;flex-shrink:0;display:flex;align-items:center;cursor:pointer" title="Lo que ve el modelo — información, no recomendación. Clic para ver el detalle" onclick="openRpMax('sig')">Señal IA${motorBadge(sig)}<span class="rp-max-ico" title="Maximizar Señal IA" onclick="event.stopPropagation();openRpMax('sig')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-shrink:0">
-      <div class="rp-sig-pill" style="background:${sc}18;color:${sc};border:1px solid ${sc}44;padding:3px 10px;font-size:12px">${pillLbl(sen)}</div>
-      <div style="flex:1">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
-          <span style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Confianza</span>
-          <span style="font-size:13px;font-weight:700;color:var(--text)">${fmtConfPct(conf)}%</span>
-        </div>
-        <div class="rp-cf-bg"><div class="rp-cf-fg" style="width:${confBarW(conf)}%"></div></div>
-      </div>
-    </div>
-    <div class="rp-sig-body">
-      <div class="rp-sig-nota" style="font-size:9px;color:var(--text3);margin-bottom:1px">Lo que ve el modelo · información, no recomendación.</div>
-      ${sintDeg&&sintNota?`<div class="rp-sint-deg">⚠ ${sintNota}</div>`:(!sint&&sintNota?`<div class="rp-sint-deg">ℹ ${sintNota}</div>`:'')}
-      ${sint?`<div class="rp-sint-wrap"><div class="rp-sint">${sint}</div></div>`:''}
-      ${fPos||fNeg||fAlt?`<div class="rp-factors">${fPos}${fNeg}${fAlt}</div>`:''}
-    </div>
-  </div>
-  <div class="rp-sec" style="padding:5px 14px">
-    <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center;cursor:pointer" title="Clic para ver el detalle completo" onclick="openRpMax('fc')">Proyección del modelo<span class="rp-max-ico" title="Maximizar la proyección del modelo" onclick="event.stopPropagation();openRpMax('fc')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
-    <div>
-      <div style="font-size:10px;color:var(--text2);margin-bottom:4px">sin garantía</div>
-      <div class="rp-fc-grid">${fcHtml}</div>
-      <div class="rp-fc-note" style="margin-top:3px;font-size:9px">proyección del modelo · p50 mediana · p10/p90 rango · ${fcMetodoTxt(sig)}</div>
-    </div>
   </div>
   <div class="rp-sec" style="padding:6px 14px">
     <div class="rp-lbl" style="margin-bottom:6px">Analista IA</div>
@@ -5384,9 +5371,39 @@ function buildRP(t,sig,fc){
     <div id="rp-rr-wrap" style="display:none"></div>
     <div class="rp-niv-note">Los cambios se guardan solo en este navegador y no modifican las órdenes del laboratorio, que usan los niveles del modelo.</div>
   </div>
-  <div class="rp-sec" id="rp-model-perf" style="padding:6px 14px">
-    <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center;cursor:pointer" title="Clic para ver el detalle completo" onclick="openRpMax('perf')">Desempeño del modelo · ${t}<span class="rp-max-ico" title="Maximizar Desempeño del modelo" onclick="event.stopPropagation();openRpMax('perf')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
-    <div class="rp-mp-body" id="rp-mp-body"><span class="rp-mp-loading">Cargando historial…</span></div>
+  <div class="rp-sec rp-model-fused${modelCollapsed?' collapsed':''}" id="rp-model" style="padding:6px 14px">
+    <div class="rp-lbl" onclick="toggleRpModel()" style="margin-bottom:6px;display:flex;align-items:center;cursor:pointer">Lo que ve el modelo<span class="rp-caret" style="margin-left:auto">▾</span></div>
+    <div class="rp-model-line"><span class="rp-model-pill">${pillLbl(sen)}</span><span class="rp-model-txt">· ${modelLineTxt}</span></div>
+    <div class="rp-collapsible-body">
+      <div class="rp-lbl" style="margin-bottom:5px;flex-shrink:0;display:flex;align-items:center;cursor:pointer" title="Lo que ve el modelo — información, no recomendación. Clic para ver el detalle" onclick="openRpMax('sig')">Señal IA${motorBadge(sig)}<span class="rp-max-ico" title="Maximizar Señal IA" onclick="event.stopPropagation();openRpMax('sig')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-shrink:0">
+        <div class="rp-sig-pill" style="background:${sc}18;color:${sc};border:1px solid ${sc}44;padding:3px 10px;font-size:12px">${pillLbl(sen)}</div>
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+            <span style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em">Confianza</span>
+            <span style="font-size:13px;font-weight:700;color:var(--text)">${fmtConfPct(conf)}%</span>
+          </div>
+          <div class="rp-cf-bg"><div class="rp-cf-fg" style="width:${confBarW(conf)}%"></div></div>
+        </div>
+      </div>
+      <div class="rp-sig-body">
+        <div class="rp-sig-nota" style="font-size:9px;color:var(--text3);margin-bottom:1px">Lo que ve el modelo · información, no recomendación.</div>
+        ${sintDeg&&sintNota?`<div class="rp-sint-deg">⚠ ${sintNota}</div>`:(!sint&&sintNota?`<div class="rp-sint-deg">ℹ ${sintNota}</div>`:'')}
+        ${sint?`<div class="rp-sint-wrap"><div class="rp-sint">${sint}</div></div>`:''}
+        ${fPos||fNeg||fAlt?`<div class="rp-factors">${fPos}${fNeg}${fAlt}</div>`:''}
+      </div>
+      <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center;cursor:pointer" title="Clic para ver el detalle completo" onclick="openRpMax('fc')">Proyección del modelo<span class="rp-max-ico" title="Maximizar la proyección del modelo" onclick="event.stopPropagation();openRpMax('fc')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+      <div>
+        <div style="font-size:10px;color:var(--text2);margin-bottom:4px">sin garantía</div>
+        <div class="rp-fc-grid">${fcHtml}</div>
+        <div class="rp-fc-note" style="margin-top:3px;font-size:9px">proyección del modelo · p50 mediana · p10/p90 rango · ${fcMetodoTxt(sig)}</div>
+      </div>
+      <div class="rp-sec" id="rp-model-perf" style="padding:6px 14px">
+        <div class="rp-lbl" style="margin-bottom:4px;display:flex;align-items:center;cursor:pointer" title="Clic para ver el detalle completo" onclick="openRpMax('perf')">Desempeño del modelo · ${t}<span class="rp-max-ico" title="Maximizar Desempeño del modelo" onclick="event.stopPropagation();openRpMax('perf')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
+        <div class="rp-mp-body" id="rp-mp-body"><span class="rp-mp-loading">Cargando historial…</span></div>
+      </div>
+      <div class="rp-model-foot"><a onclick="irADesempenoModelo()" style="color:var(--blue);text-decoration:none;font-size:9px">ver en el Laboratorio →</a></div>
+    </div>
   </div>
   <button class="rp-orden-btn" onclick="openOrderModal('${t}')">Orden manual ↗</button>`;
   // El panel derecho conserva SOLO la vista Diario ('✦ NN% · N señales'); lo intradía
@@ -6752,20 +6769,6 @@ function tipVol(t){
   if(v.r10==null) return 'volatilidad esperada: sin dato de volatilidad · ' + cola;
   const cuerpo = riesgoRangoTxt(v.r10) + ' (10 ruedas)' + (v.r5!=null ? ' · '+riesgoRangoTxt(v.r5)+' (5 ruedas)' : '');
   return 'volatilidad esperada: ' + cuerpo + ' · banda ~70% · ' + cola;
-}
-/* HTML de la línea de rango de volatilidad para la tarjeta Forecast IA (1b).
-   Rótulo explícito: es una ESTIMACIÓN de recorrido, no un objetivo de precio.
-   Sin dato para el ticker → «—». Compartida por buildRP y riesgoRenderRPVol. */
-function riesgoVolLineHTML(t){
-  const v = riesgoRangoTicker(t);
-  const cuerpo = (v.r10!=null)
-    ? `<b style="color:var(--text2)">${riesgoRangoTxt(v.r10)}</b> (10 ruedas)${v.r5!=null ? ' · '+riesgoRangoTxt(v.r5)+' (5 ruedas)' : ''}`
-    : '—';
-  // Fase 3·1 (ajuste): donut azul a la izquierda (±X% al centro) + la línea como
-  // etiqueta. Sin dato, riesgoVolDonutHTML devuelve '' y queda solo la línea con «—».
-  const donut = riesgoVolDonutHTML(t);
-  const linea = `Rango de volatilidad esperado: ${cuerpo} · rango estimado, no un objetivo de precio`;
-  return `<span class="rp-vol-line">${donut}<span class="rp-vol-line-txt">${linea}</span></span>`;
 }
 /* P-2 · Cuerpo (inner HTML) de la tarjeta "Riesgo del ticker" (§2.3 del diseño):
    rejilla 2×2 de celdas + línea de método. Consume SOLO datos que ya existen
@@ -8236,6 +8239,14 @@ function toggleRpSec(lbl){
   const sec = lbl.closest('.rp-sec');
   if(!sec) return;
   sec.classList.toggle('collapsed');
+}
+/* P-3 · Colapso de la tarjeta fusionada "Lo que ve el modelo" con persistencia por
+   usuario (localStorage 'rpModelCollapsed'). Separado de toggleRpSec (genérico) para
+   poder guardar el estado; buildRP aplica el estado persistido al construir #rp-model. */
+function toggleRpModel(){
+  const s=document.getElementById('rp-model'); if(!s) return;
+  s.classList.toggle('collapsed');
+  try{ localStorage.setItem('rpModelCollapsed', s.classList.contains('collapsed')?'1':'0'); }catch(e){}
 }
 
 /* ── OPEN ORDER MODAL ── */
