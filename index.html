@@ -611,8 +611,8 @@ body.tab-max .cp>.osc-panel{display:none !important}
 /* ── Panel izquierdo: dos secciones ── */
 .lp-section-hdr{padding:6px 10px 4px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .lp-section-lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;display:flex;align-items:center;gap:5px}
-.lp-section-lbl.portafolio{color:var(--blue)}
-.lp-section-lbl.watchlist{color:var(--gold)}
+.lp-section-lbl.portafolio{color:var(--text-label)}
+.lp-section-lbl.watchlist{color:var(--text-label)}
 .lp-section-cnt{font-size:9px;color:var(--text3);background:rgba(255,255,255,.05);border-radius:3px;padding:0 5px}
 /* Equity de la cuenta (broker · Alpaca) — total del portafolio */
 .pf-equity-row{display:flex;align-items:baseline;justify-content:space-between;padding:0 10px 4px;flex-shrink:0}
@@ -675,7 +675,7 @@ body.tab-max .cp>.osc-panel{display:none !important}
 /* ── Paso 6 · "Operados recientemente" (sección bajo el Watchlist) ──
    flex:none a propósito: #wl-list lleva flex:1, así esta sección secundaria
    nunca le roba altura al Watchlist; con más de ~5 filas scrollea dentro. */
-.lp-section-lbl.recientes{color:var(--text2)}
+.lp-section-lbl.recientes{color:var(--text-label)}
 .phr-list{flex:none;max-height:132px;overflow-y:auto;padding:2px 0}
 .phr-row{display:flex;align-items:center;gap:6px;padding:4px 10px;font-size:10px;border-left:2px solid transparent;overflow:hidden}
 .phr-row:hover{background:rgba(255,255,255,.03);border-left-color:var(--border2)}
@@ -1503,7 +1503,7 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .tkr-volcell{display:inline-flex;align-items:center;gap:3px;min-width:0;white-space:nowrap;overflow:hidden}
 .tkr-volbar{position:relative;width:26px;height:4px;border-radius:2px;background:rgba(77,158,247,.15);flex-shrink:0;overflow:hidden}
 .tkr-volbar-fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px}
-.tkr-volbar-txt{font-size:8px;color:var(--text3);white-space:nowrap}
+.tkr-volbar-txt{font-size:8.5px;color:var(--text3);white-space:nowrap}
 .tkr-earn-ico{font-size:9px;text-align:center}
 /* Tarjeta-peek (popover al hover) — ficha etiqueta-izquierda / valor-derecha.
    Un único elemento reutilizado, informativo (pointer-events:none: no bloquea el
