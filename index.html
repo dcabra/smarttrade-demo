@@ -289,6 +289,22 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .rp-sec.collapsed .rp-collapsible-body{max-height:0!important}
 .rp-sec.collapsed .rp-caret{transform:rotate(180deg)}
 .rp-caret{transition:transform .2s}
+/* D2 · Riesgo del ticker: rejilla 2×2 de celdas. */
+.rp-risk-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:2px}
+.rp-risk-cell{background:var(--bg3);border-radius:5px;padding:6px 7px;min-width:0;overflow:hidden;display:flex;flex-direction:column;gap:2px}
+.rp-risk-h{font-size:8px;font-weight:700;color:var(--text-label);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-risk-hero{font-size:13px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.15;display:flex;align-items:baseline;gap:6px;min-width:0}
+.rp-risk-hero.vol{color:var(--blue)}              /* banda de volatilidad = azul (magnitud) */
+.rp-risk-hero.conc-amb{color:var(--orange)}       /* peso ≥ 10 % (convención del home) */
+.rp-risk-hero.conc-red{color:var(--red)}          /* peso ≥ 15 % (tope) */
+.rp-risk-sub{font-size:9px;color:var(--text-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.rp-risk-method{font-size:9px;color:var(--text-label);line-height:1.45;margin-top:5px}
+
+/* Chip de nivel de volatilidad: tres intensidades del MISMO azul, nunca verde/rojo. */
+.rp-vol-chip{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border-radius:999px;border:1px solid transparent;color:var(--blue);white-space:nowrap}
+.rp-vol-chip.calmado{background:rgba(77,158,247,.10);opacity:.75}
+.rp-vol-chip.medio{background:rgba(77,158,247,.18)}
+.rp-vol-chip.agitado{background:rgba(77,158,247,.28);border-color:rgba(77,158,247,.45)}
 /* Toggle SL/TP en toolbar */
 #btn-sltp{position:relative}
 /* Botón Orden panel derecho */
@@ -5247,14 +5263,14 @@ function buildRP(t,sig,fc){
   if(myPos && myPos.qty!=null){
     const upl=myPos.unrealized_pl, uplpc=(myPos.unrealized_plpc!=null)?myPos.unrealized_plpc*100:null;
     const pc2=(upl==null||upl===0)?'var(--text2)':(upl>0?'var(--green)':'var(--red)');
-    const pctEq=(EQUITY&&myPos.value!=null)?(myPos.value/EQUITY*100):null;
+    // El peso en cartera se mudó a la celda 4 de la tarjeta Riesgo (P-2).
     posHtml=`<div class="rp-fact rp-pos-sec" style="padding:7px 14px">
       <div class="rp-fact-lbl">💼 Tu posición</div>
       <div class="rp-pos-grid">
         <span class="rp-pos-k">${myPos.qty} u. @ ${myPos.avg_entry_price!=null?fP(myPos.avg_entry_price):'—'}</span>
         <span class="rp-pos-v" style="color:${pc2};font-weight:700">${upl!=null?fPS(upl):'—'}${uplpc!=null?` (${uplpc>=0?'+':''}${uplpc.toFixed(2)}%)`:''}</span>
       </div>
-      <div class="rp-pos-sub">Valor ${myPos.value!=null?fP(myPos.value):'—'}${pctEq!=null?` · ${pctEq.toFixed(1)}% del equity`:''}</div>
+      <div class="rp-pos-sub">Valor ${myPos.value!=null?fP(myPos.value):'—'}</div>
     </div>`;
   }
 
@@ -5284,6 +5300,10 @@ function buildRP(t,sig,fc){
     </div>
   </div>
   ${posHtml}
+  <div class="rp-sec" id="rp-riesgo" style="padding:6px 14px">
+    <div class="rp-lbl" style="margin-bottom:6px">Riesgo · ${t}</div>
+    <div id="rp-riesgo-body">${rpRiesgoCardBody(t,sig)}</div>
+  </div>
   <div class="rp-sec rp-sec-sig" style="padding:8px 14px">
     <div class="rp-lbl" style="margin-bottom:5px;flex-shrink:0;display:flex;align-items:center;cursor:pointer" title="Lo que ve el modelo — información, no recomendación. Clic para ver el detalle" onclick="openRpMax('sig')">Señal IA${motorBadge(sig)}<span class="rp-max-ico" title="Maximizar Señal IA" onclick="event.stopPropagation();openRpMax('sig')"><svg viewBox="0 0 12 12" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M4.6 1.6H1.6V4.6M7.4 1.6h3v3M4.6 10.4H1.6V7.4M7.4 10.4h3v-3"/></svg></span></div>
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-shrink:0">
@@ -5309,7 +5329,6 @@ function buildRP(t,sig,fc){
       <div style="font-size:10px;color:var(--text2);margin-bottom:4px">sin garantía</div>
       <div class="rp-fc-grid">${fcHtml}</div>
       <div class="rp-fc-note" style="margin-top:3px;font-size:9px">proyección del modelo · p50 mediana · p10/p90 rango · ${fcMetodoTxt(sig)}</div>
-      <div class="rp-fc-vol" id="rp-fc-vol" style="margin-top:3px;font-size:9px;color:var(--text-label)" title="Recorrido estimado del precio, no un objetivo. Es una banda de volatilidad, no una predicción de dirección.">${riesgoVolLineHTML(t)}</div>
     </div>
   </div>
   <div class="rp-sec" style="padding:6px 14px">
@@ -6748,6 +6767,62 @@ function riesgoVolLineHTML(t){
   const linea = `Rango de volatilidad esperado: ${cuerpo} · rango estimado, no un objetivo de precio`;
   return `<span class="rp-vol-line">${donut}<span class="rp-vol-line-txt">${linea}</span></span>`;
 }
+/* P-2 · Cuerpo (inner HTML) de la tarjeta "Riesgo del ticker" (§2.3 del diseño):
+   rejilla 2×2 de celdas + línea de método. Consume SOLO datos que ya existen
+   (riesgoRangoTicker, sig.sl_*, RIESGO_STATE.regimen/exposicion, POSITIONS/EQUITY);
+   ningún endpoint nuevo. Degradación honesta: celda sin dato → hero «—». Se repinta
+   al llegar RIESGO_STATE vía riesgoRenderRPVol (apunta a #rp-riesgo-body). */
+function rpRiesgoCardBody(t, sig){
+  sig = sig || {};
+  // 1 · Banda de volatilidad a 10 ruedas (azul = magnitud, no dirección) + chip de nivel.
+  const v = riesgoRangoTicker(t);
+  const volHero = riesgoRangoTxt(v.r10);                       // «—» si null (lo da riesgoPctTxt)
+  const nivel = riesgoVolNivel(v.r10);                         // calmado/medio/agitado o null
+  const volChip = nivel ? `<span class="rp-vol-chip ${nivel}">${nivel}</span>` : '';
+  const volSub = (v.r5!=null) ? riesgoRangoTxt(v.r5)+' · 5 ruedas' : 'sin dato';
+
+  // 2 · Stop operativo (distancia, NO retorno → neutro, sin verde/rojo).
+  const stopHero = (typeof sig.sl_distancia_pct==='number') ? fPct(-Math.abs(sig.sl_distancia_pct)) : '—';
+  const stopSub  = (typeof sig.sl_distancia_atr==='number') ? '≈'+sig.sl_distancia_atr.toFixed(1)+'×ATR' : '2×ATR';
+
+  // 3 · Régimen + exposición sugerida (texto neutro).
+  const R = (RIESGO_STATE && RIESGO_STATE.regimen) ? RIESGO_STATE.regimen : null;
+  const regHero = (R && R.estado) ? riesgoEsc(R.estado) : '—';
+  const regSub  = 'exposición sugerida ' + ((RIESGO_STATE && RIESGO_STATE.exposicion)
+    ? riesgoPctTxt(riesgoExpoPct(RIESGO_STATE.exposicion.recomendada)) : '—');
+
+  // 4 · Peso en cartera vs tope (convención del home: ámbar ≥10 %, rojo ≥15 %).
+  const pos = (POSITIONS||[]).find(p=>p.symbol===t);
+  const w = (pos && EQUITY && pos.value!=null) ? (pos.value/EQUITY*100) : null;
+  const concClass = (w!=null && w>=PHRISK_CONC_ROJO) ? ' conc-red'
+                  : (w!=null && w>=PHRISK_CONC_AMBAR) ? ' conc-amb' : '';
+  const wHero = (w!=null) ? w.toFixed(1)+'%' : '—';
+  const wSub  = (w!=null) ? 'tope '+PHRISK_CONC_ROJO+'%' : 'sin posición';
+
+  return `<div class="rp-risk-grid">
+    <div class="rp-risk-cell">
+      <div class="rp-risk-h">Banda 10 ruedas</div>
+      <div class="rp-risk-hero vol">${volHero}${volChip}</div>
+      <div class="rp-risk-sub">${volSub}</div>
+    </div>
+    <div class="rp-risk-cell">
+      <div class="rp-risk-h">Stop operativo</div>
+      <div class="rp-risk-hero">${stopHero}</div>
+      <div class="rp-risk-sub">${stopSub}</div>
+    </div>
+    <div class="rp-risk-cell">
+      <div class="rp-risk-h">Régimen</div>
+      <div class="rp-risk-hero">${regHero}</div>
+      <div class="rp-risk-sub">${regSub}</div>
+    </div>
+    <div class="rp-risk-cell">
+      <div class="rp-risk-h">Peso en cartera</div>
+      <div class="rp-risk-hero${concClass}">${wHero}</div>
+      <div class="rp-risk-sub">${wSub}</div>
+    </div>
+  </div>
+  <div class="rp-risk-method">banda GARCH ±1σ · ~70% cobertura (72% medida) · información, no recomendación</div>`;
+}
 /* ── Fase 3·1 · Chip de volatilidad del panel izquierdo ─────────────────────
    Reemplaza el badge de señal BUY/HOLD/SELL de las filas (PORTAFOLIO y WATCHLIST)
    por el NIVEL de volatilidad (magnitud, no dirección). Lee rango_10d.rango_pct
@@ -6857,13 +6932,17 @@ function riesgoRenderDayCells(){
   });
 }
 
-/* Actualiza solo la línea de volatilidad del Forecast IA del ticker activo,
-   sin re-renderizar toda la tarjeta (evita cerrar un modal expandido o pisar
-   una edición de SL/TP en curso). */
+/* P-2 · Repinta el cuerpo de la tarjeta Riesgo del ticker activo al llegar
+   RIESGO_STATE/velas, sin re-renderizar toda la tarjeta (evita cerrar un modal
+   expandido o pisar una edición de SL/TP en curso). Antes apuntaba a la línea de
+   volatilidad #rp-fc-vol de la Proyección; esa línea se retiró y la banda vive
+   ahora en la tarjeta Riesgo (#rp-riesgo-body). Sin sig cacheada para el ticker
+   activo, no repinta (no inventa). */
 function riesgoRenderRPVol(){
-  const el = document.getElementById('rp-fc-vol');
+  const el = document.getElementById('rp-riesgo-body');
   if(!el || typeof ACTIVE==='undefined' || !ACTIVE) return;
-  el.innerHTML = riesgoVolLineHTML(ACTIVE);
+  if(typeof CACHE!=='undefined' && CACHE[ACTIVE] && CACHE[ACTIVE].sig)
+    el.innerHTML = rpRiesgoCardBody(ACTIVE, CACHE[ACTIVE].sig);
 }
 /* Tooltip honesto compartido por el chip y la fila del panel. */
 const RIESGO_TOOLTIP = 'Recomendación. La defensa por régimen recortó el drawdown ~6 pp a cambio de ~1,5 pp de retorno anual (medido); un solo bajista real, el timing apenas supera al azar.';
