@@ -9223,7 +9223,7 @@ function renderAnTkSentimiento(ticker, ctx){
 function renderAnTkMicro(ticker){
   const el = $('an-tk-micro'); if(!el) return;
   const d2 = CACHE[ticker]||{};
-  const candles = d2.ohlcv?.candles||[], sig2 = d2.sig||{};
+  const candles = d2.ohlcv?.candles||[];
   if(!candles.length){ el.innerHTML=`<div class="an-empty">Sin OHLCV para ${ticker}</div>`; return; }
   const last = candles[candles.length-1];
   const vols = candles.slice(-20).map(c=>c.volume);
@@ -9240,8 +9240,6 @@ function renderAnTkMicro(ticker){
   const rsiArr2 = calcRSI(closes2);
   const lastRSI2 = rsiArr2.filter(v=>v!=null).pop();
   const rsiCol2 = lastRSI2>=70?'var(--red)':lastRSI2<=30?'var(--green)':'var(--text)';
-  const niv2 = sig2.niveles||{}, sl2 = niv2.sl, tp12 = niv2.tp1;
-  const rr2 = sl2&&tp12&&last.close?Math.abs(tp12-last.close)/Math.abs(last.close-sl2):null;
   el.innerHTML = `
     <div class="an-card">
       <div class="an-card-title">Precio · Vela</div>
@@ -9251,13 +9249,6 @@ function renderAnTkMicro(ticker){
       <div class="an-row"><span class="an-row-k">Volumen</span><span class="an-row-v">${(last.volume/1e6).toFixed(2)}M</span></div>
       <div class="an-row"><span class="an-row-k">ATR 14</span><span class="an-row-v">${lastATR?'$'+lastATR.toFixed(2):'—'} (${atrPct}%)</span></div>
       ${lastRSI2!=null?`<div class="an-row"><span class="an-row-k">RSI 14</span><span class="an-row-v" style="color:${rsiCol2}">${lastRSI2.toFixed(1)}${lastRSI2>=70?' ⚠':lastRSI2<=30?' ⚠':''}</span></div>`:''}
-    </div>
-    <div class="an-card">
-      <div class="an-card-title">SL / TP · R/B</div>
-      <div class="an-row"><span class="an-row-k">Stop Loss</span><span class="an-row-v" style="color:var(--red)">${sl2?'$'+sl2.toFixed(2):'—'}</span></div>
-      <div class="an-row"><span class="an-row-k">Take Profit 1</span><span class="an-row-v" style="color:var(--green)">${tp12?'$'+tp12.toFixed(2):'—'}</span></div>
-      ${rr2!=null?`<div class="an-row"><span class="an-row-k">Ratio R/B</span><span class="an-row-v" style="color:${rr2>=1.5?'var(--green)':rr2>=1?'var(--blue)':'var(--red)'}">1 : ${rr2.toFixed(2)}</span></div>`:''}
-      <div style="font-size:9px;color:var(--text3);margin-top:4px">Señal: <strong style="color:${sigCol(sig2['señal']||'HOLD')}">${sig2['señal']||'—'}</strong> · ${fmtConfPct(confPct(sig2))}%${motorBadge(sig2)}</div>
     </div>`;
 }
 
