@@ -468,6 +468,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .alert-val{font-size:9px;font-weight:600}
 .alert-pill.preg{background:rgba(114,133,166,.14);color:var(--text);border:1px solid rgba(114,133,166,.35)}
 .alert-pill.pvol{background:rgba(77,158,247,.12);color:var(--blue);border:1px solid rgba(77,158,247,.4)}
+.alert-pill.pconc{background:rgba(243,156,18,.12);color:var(--orange);border:1px solid rgba(243,156,18,.4)}
+.alert-pill.pconc-red{background:rgba(231,76,60,.12);color:var(--red);border:1px solid rgba(231,76,60,.4)}
 .alert-row.alert-risk{border-left:2px solid var(--blue)}   /* riesgo = tipo principal: acento a la izquierda */
 .no-alerts{padding:12px 10px;font-size:10px;color:var(--text-label);text-align:center}
 
@@ -2496,6 +2498,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       <button class="al-fbtn on" data-af="all"     onclick="alSetFilter('type','all',this)">Todas</button>
       <button class="al-fbtn"    data-af="regimen" onclick="alSetFilter('type','regimen',this)">🧭 Régimen</button>
       <button class="al-fbtn"    data-af="vol"     onclick="alSetFilter('type','vol',this)">🌊 Volatilidad</button>
+      <button class="al-fbtn"    data-af="conc"    onclick="alSetFilter('type','conc',this)">⚖️ Concentración</button>
       <button class="al-fbtn"    data-af="signal"  onclick="alSetFilter('type','signal',this)">🔄 Señal</button>
       <button class="al-fbtn"    data-af="sl"      onclick="alSetFilter('type','sl',this)">🚨 SL</button>
       <button class="al-fbtn"    data-af="tp"      onclick="alSetFilter('type','tp',this)">✅ TP</button>
@@ -3903,6 +3906,8 @@ async function refreshBroker(){
   const [equity, positions] = await Promise.all([fetchBrokerEquity(), fetchBrokerPositions()]);
   renderEquity(equity);
   POSITIONS = positions;
+  // Alerta de riesgo: concentración de posiciones (peso vs tope). EQUITY/POSITIONS ya frescos.
+  try{ detectarSaltoConcentracion(); }catch(e){}
   fetchServerCaps();   // M2: topes/gasto/halt — autoridad del servidor (no bloquea el resto del refresco)
   // Si el modal de orden está abierto, refrescar el bloque "Tu posición"
   // (evita que se abra vacío por una carrera con la carga del broker).
@@ -8517,6 +8522,35 @@ function detectarSaltoVol(tickers){
   saveLastVol(store);
 }
 
+const ST_LAST_CONC_KEY = 'st_last_conc';
+function loadLastConc(){ try{ return JSON.parse(localStorage.getItem(ST_LAST_CONC_KEY)||'{}'); }catch{ return {}; } }
+function saveLastConc(store){ try{ localStorage.setItem(ST_LAST_CONC_KEY, JSON.stringify(store)); }catch(e){} }
+function concNivelN(w){
+  if(w==null || isNaN(w)) return 0;
+  if(w >= PHRISK_CONC_ROJO)  return 3;   // tope (≥15%)
+  if(w >= PHRISK_CONC_AMBAR) return 2;   // ámbar (10–15%)
+  return 1;                              // normal (<10%)
+}
+function concNivelLbl(n){ return n===1?'normal':n===2?'ámbar':n===3?'tope':'—'; }
+
+/* Salto de concentración por posición — SOLO subidas de banda (normal→ámbar→tope). */
+function detectarSaltoConcentracion(){
+  if(!(typeof EQUITY==='number' && EQUITY>0) || !Array.isArray(POSITIONS)) return;
+  const store = loadLastConc(), now = Date.now();
+  POSITIONS.forEach(p=>{
+    const t = p && p.symbol; if(!t || p.value==null) return;
+    const w = p.value/EQUITY*100;
+    const nivelN = concNivelN(w);
+    if(nivelN<=1){ store[t] = { nivel:1, ts:now }; return; }   // normal: siembra, no alerta
+    const prev = store[t], fresh = prev && (now-(prev.ts||0)) <= REG_VOL_TTL_MS;
+    if(fresh && prev.nivel && nivelN > prev.nivel && !hasRecentAlert('conc', t)){
+      addAlert({ type:'conc', ticker:t, from:prev.nivel, to:nivelN, w:w });
+    }
+    store[t] = { nivel:nivelN, ts:now };
+  });
+  saveLastConc(store);
+}
+
 /* Pulso de la pestaña ⚡ Alertas. Solo si NO está abierta: si el usuario ya la
    está viendo, el pulso sería ruido. El estado se lee del DOM (clase .on), no
    de localStorage['st_tab'] — esa es la última preferencia guardada, que el
@@ -8685,6 +8719,23 @@ function renderAlerts(){
         </div>
         <div class="alert-row-body">
           <span class="alert-msg"><strong>${riesgoVolNivelLbl(a.from)}</strong> → <strong>${riesgoVolNivelLbl(a.to)}</strong>${r10Txt}</span>
+          <div class="alert-actions"><button class="alert-del-btn" title="Borrar alerta" onclick="event.stopPropagation();deleteAlert('${a.id}')">🗑</button></div>
+        </div>
+      </div>`;
+    }
+    if(a.type==='conc'){
+      const tope = (typeof PHRISK_CONC_ROJO==='number')?PHRISK_CONC_ROJO:15;
+      const wTxt = (a.w!=null) ? (' · '+a.w.toFixed(1)+'% de la cartera (tope '+tope+'%)') : '';
+      const pill = (a.to>=3) ? 'pconc-red' : 'pconc';
+      return `<div class="alert-row alert-risk" title="Concentración de la posición vs tope" onclick="pick('${a.ticker}')">
+        <div class="alert-row-top">
+          ${unreadDot}<span class="alert-ico">⚖️</span>
+          <span class="alert-sym">${a.ticker}</span>
+          <span class="alert-pill ${pill}">CONCENTRACIÓN</span>
+          <span class="alert-time">${ts}</span>
+        </div>
+        <div class="alert-row-body">
+          <span class="alert-msg"><strong>${concNivelLbl(a.from)}</strong> → <strong>${concNivelLbl(a.to)}</strong>${wTxt}</span>
           <div class="alert-actions"><button class="alert-del-btn" title="Borrar alerta" onclick="event.stopPropagation();deleteAlert('${a.id}')">🗑</button></div>
         </div>
       </div>`;
