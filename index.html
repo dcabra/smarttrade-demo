@@ -466,6 +466,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .alert-time{font-size:8px;color:var(--text3);margin-left:auto}
 .alert-msg{font-size:9px;color:var(--text2);line-height:1.4}
 .alert-val{font-size:9px;font-weight:600}
+.alert-pill.preg{background:rgba(114,133,166,.14);color:var(--text);border:1px solid rgba(114,133,166,.35)}
+.alert-pill.pvol{background:rgba(77,158,247,.12);color:var(--blue);border:1px solid rgba(77,158,247,.4)}
+.alert-row.alert-risk{border-left:2px solid var(--blue)}   /* riesgo = tipo principal: acento a la izquierda */
 .no-alerts{padding:12px 10px;font-size:10px;color:var(--text-label);text-align:center}
 
 /* ── Panel inferior (chat + órdenes) ── */
@@ -2490,10 +2493,12 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       <span style="font-size:9px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.1em">⚡ Alertas del sistema</span>
       <span id="alert-cnt" style="font-size:9px;color:var(--text3);background:rgba(243,156,18,.1);border:1px solid rgba(243,156,18,.2);border-radius:3px;padding:0 5px">0</span>
       <span class="al-fdiv"></span>
-      <button class="al-fbtn on" data-af="all"    onclick="alSetFilter('type','all',this)">Todas</button>
-      <button class="al-fbtn"    data-af="signal" onclick="alSetFilter('type','signal',this)">🔄 Señal</button>
-      <button class="al-fbtn"    data-af="sl"     onclick="alSetFilter('type','sl',this)">🚨 SL</button>
-      <button class="al-fbtn"    data-af="tp"     onclick="alSetFilter('type','tp',this)">✅ TP</button>
+      <button class="al-fbtn on" data-af="all"     onclick="alSetFilter('type','all',this)">Todas</button>
+      <button class="al-fbtn"    data-af="regimen" onclick="alSetFilter('type','regimen',this)">🧭 Régimen</button>
+      <button class="al-fbtn"    data-af="vol"     onclick="alSetFilter('type','vol',this)">🌊 Volatilidad</button>
+      <button class="al-fbtn"    data-af="signal"  onclick="alSetFilter('type','signal',this)">🔄 Señal</button>
+      <button class="al-fbtn"    data-af="sl"      onclick="alSetFilter('type','sl',this)">🚨 SL</button>
+      <button class="al-fbtn"    data-af="tp"      onclick="alSetFilter('type','tp',this)">✅ TP</button>
       <select class="al-tk-sel" id="al-tk-sel" onchange="alSetFilter('ticker',this.value)" title="Filtrar por ticker"><option value="all">Todos los tickers</option></select>
       <button id="alert-mute" onclick="toggleMute()" title="Silenciar alertas" style="margin-left:auto;font-size:11px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:3px;padding:1px 7px;cursor:pointer">🔊</button>
       <button onclick="clearAlerts()" style="font-size:9px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 6px;cursor:pointer">Limpiar</button>
@@ -7009,6 +7014,8 @@ async function riesgoCargar(){
     // get() ya devuelve null ante red/401/no-ok; disponible:false es el "apagado" explícito del backend.
     RIESGO_STATE = (d && d.disponible !== false) ? d : null;
     RIESGO_AT = Date.now();
+    // B2 · alertas de riesgo (tipo principal): régimen de mercado + salto de volatilidad.
+    if(RIESGO_STATE){ try{ detectarCambioRegimen(); detectarSaltoVol(tickers); }catch(e){} }
   }catch(e){
     RIESGO_STATE = null;
   }
@@ -8465,6 +8472,46 @@ function addAlert(a){
   if(a.ticker) ringBell(a.ticker);
 }
 
+const ST_LAST_REGIMEN_KEY = 'st_last_regimen';
+const ST_LAST_VOL_KEY     = 'st_last_vol';
+const REG_VOL_TTL_MS      = 72 * 3600 * 1000;   // 72h: un prev más viejo compara contra un mundo que ya no existe
+
+function loadLastRegimen(){ try{ return JSON.parse(localStorage.getItem(ST_LAST_REGIMEN_KEY)||'null'); }catch{ return null; } }
+function saveLastRegimen(o){ try{ localStorage.setItem(ST_LAST_REGIMEN_KEY, JSON.stringify({estado:o.estado, risk_on:o.risk_on, ts:Date.now()})); }catch(e){} }
+function loadLastVol(){ try{ return JSON.parse(localStorage.getItem(ST_LAST_VOL_KEY)||'{}'); }catch{ return {}; } }
+function saveLastVol(store){ try{ localStorage.setItem(ST_LAST_VOL_KEY, JSON.stringify(store)); }catch(e){} }
+function riesgoVolNivelLbl(n){ return n===1?'calmado':n===2?'medio':n===3?'agitado':'—'; }
+
+/* Cambio de régimen de mercado (nivel mercado, una alerta por giro). */
+function detectarCambioRegimen(){
+  if(!RIESGO_STATE || !RIESGO_STATE.regimen || !RIESGO_STATE.regimen.estado) return;
+  const nuevo = { estado:String(RIESGO_STATE.regimen.estado), risk_on:!!RIESGO_STATE.regimen.risk_on };
+  const prev  = loadLastRegimen();
+  const fresh = prev && (Date.now()-(prev.ts||0)) <= REG_VOL_TTL_MS;
+  if(fresh && prev.estado && prev.estado !== nuevo.estado && !hasRecentAlert('regimen','MERCADO')){
+    addAlert({ type:'regimen', ticker:'MERCADO', from:prev.estado, to:nuevo.estado, riskOn:nuevo.risk_on,
+               expo:(RIESGO_STATE.exposicion ? RIESGO_STATE.exposicion.recomendada : null) });
+  }
+  saveLastRegimen(nuevo);
+}
+
+/* Salto de volatilidad por ticker — SOLO subidas de nivel (calmado→medio→agitado). */
+function detectarSaltoVol(tickers){
+  if(!RIESGO_STATE || !RIESGO_STATE.por_ticker) return;
+  const store = loadLastVol(), now = Date.now();
+  (tickers||[]).forEach(t=>{
+    const r10 = riesgoRangoTicker(t).r10;
+    const nivelN = riesgoVolNivelN(r10);
+    if(!nivelN) return;                       // sin dato: ni siembra ni alerta
+    const prev = store[t], fresh = prev && (now-(prev.ts||0)) <= REG_VOL_TTL_MS;
+    if(fresh && prev.nivel && nivelN > prev.nivel && !hasRecentAlert('vol', t)){
+      addAlert({ type:'vol', ticker:t, from:prev.nivel, to:nivelN, r10:r10 });
+    }
+    store[t] = { nivel:nivelN, ts:now };
+  });
+  saveLastVol(store);
+}
+
 /* Pulso de la pestaña ⚡ Alertas. Solo si NO está abierta: si el usuario ya la
    está viendo, el pulso sería ruido. El estado se lee del DOM (clase .on), no
    de localStorage['st_tab'] — esa es la última preferencia guardada, que el
@@ -8604,6 +8651,36 @@ function renderAlerts(){
             ${pct?`<span class="up"> +${pct}%</span>`:''}
           </span>
           ${actions}
+        </div>
+      </div>`;
+    }
+    if(a.type==='regimen'){
+      const expoTxt = (a.expo!=null) ? (' · exposición sugerida '+riesgoPctTxt(riesgoExpoPct(a.expo))) : '';
+      return `<div class="alert-row alert-risk" title="Cambio de régimen de mercado" onclick="pick('SPY')">
+        <div class="alert-row-top">
+          ${unreadDot}<span class="alert-ico">🧭</span>
+          <span class="alert-sym">MERCADO</span>
+          <span class="alert-pill preg">RÉGIMEN</span>
+          <span class="alert-time">${ts}</span>
+        </div>
+        <div class="alert-row-body">
+          <span class="alert-msg"><strong>${a.from}</strong> → <strong>${a.to}</strong>${expoTxt}</span>
+          <div class="alert-actions"><button class="alert-del-btn" title="Borrar alerta" onclick="event.stopPropagation();deleteAlert('${a.id}')">🗑</button></div>
+        </div>
+      </div>`;
+    }
+    if(a.type==='vol'){
+      const r10Txt = (a.r10!=null) ? (' · '+riesgoRangoTxt(a.r10)+' a 10 ruedas') : '';
+      return `<div class="alert-row alert-risk" title="Salto de volatilidad" onclick="pick('${a.ticker}')">
+        <div class="alert-row-top">
+          ${unreadDot}<span class="alert-ico">🌊</span>
+          <span class="alert-sym">${a.ticker}</span>
+          <span class="alert-pill pvol">VOLATILIDAD</span>
+          <span class="alert-time">${ts}</span>
+        </div>
+        <div class="alert-row-body">
+          <span class="alert-msg"><strong>${riesgoVolNivelLbl(a.from)}</strong> → <strong>${riesgoVolNivelLbl(a.to)}</strong>${r10Txt}</span>
+          <div class="alert-actions"><button class="alert-del-btn" title="Borrar alerta" onclick="event.stopPropagation();deleteAlert('${a.id}')">🗑</button></div>
         </div>
       </div>`;
     }
