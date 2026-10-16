@@ -2482,7 +2482,7 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
         <span class="chat-chip" onclick="sendChip(this)">Selecciona un ticker para ver sugerencias</span>
       </div>
       <div class="chat-input-row">
-        <input class="chat-input" id="chat-input" placeholder="Pregunta sobre el ticker activo, indicadores, señales..." onkeydown="if(event.key==='Enter')sendChat()"/>
+        <input class="chat-input" id="chat-input" placeholder="Pregunta sobre riesgo, niveles, contexto o el ticker activo..." onkeydown="if(event.key==='Enter')sendChat()"/>
         <button class="chat-send" id="chat-send" onclick="sendChat()">Enviar ▶</button>
       </div>
     </div>
@@ -6397,14 +6397,19 @@ function fillRow(t,sig,fc){
 /* ── PICK TICKER ── */
 function updateChatChips(t, señal){
   const sen = señal || CACHE[t]?.sig?.['señal'] || 'HOLD';
+  // B1 · chips alineados al Norte: lideran decisión y riesgo; la señal queda demotada a una sola.
+  // Chip líder adaptado al contexto: con posición → mantener/ajustar/salir; sin posición → entrar/esperar.
+  // En este árbol POSITIONS es un array [{symbol,…}] y TICKERS = POSITIONS.map(p=>p.symbol):
+  // la fuente correcta de "tiene posición" es TICKERS (POSITIONS[t] no indexa por ticker).
+  const hasPos = !!(typeof TICKERS!=='undefined' && TICKERS && TICKERS.indexOf && TICKERS.indexOf(t)>=0);
+  const decision = hasPos ? `¿Mantengo, ajusto o salgo de ${t}?` : `¿Entro en ${t} o espero?`;
   const chipDefs = [
-    `¿Por qué ${sen} en ${t}?`,
-    `Explícame la señal de ${t}`,
-    `¿Está sobrecomprado ${t}?`,
-    `¿Cuándo se invalida la señal?`,
-    `¿Tiene sentido el SL/TP?`,
+    decision,
+    `¿Qué riesgo tiene ${t}?`,
+    `¿Tiene sentido mi SL/TP?`,
     `¿Cómo va ${t} vs el mercado?`,
-    `¿Qué riesgo tiene esta posición?`,
+    `¿Qué dice el analista de ${t}?`,
+    `¿Por qué ${sen} en ${t}?`,
     `Resumen del portafolio`
   ];
   const chipsEl = $('chat-chips');
