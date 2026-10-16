@@ -6,7 +6,7 @@
 <title>SmartTrade · Análisis IA</title>
 <style>
 :root {
-  --lp-w:260px;   /* ancho del panel izquierdo (portafolio/watchlist) */
+  --lp-w:280px;   /* ancho del panel izquierdo (portafolio/watchlist) */
   --rp-w:300px;   /* ancho del panel derecho (precio/señal/forecast/orden) — antes 260px hardcodeado */
   --gold:#f5c518; --gold-dim:#b8860b;
   --blue:#4d9ef7; --blue-dim:#1a3a6a;
@@ -1490,17 +1490,17 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
    en TODAS las filas de la lista. Regla de color: verde/rojo SOLO para retornos
    (día, P&L); azul SOLO para la barra de volatilidad; todo lo demás, gris tenue.
    SL/TP/distancia/valor/peso se mudaron a la tarjeta-peek (hover). */
-/* Columnas que CABEN en el panel real (--lp-w 260px − padding − scrollbar ≈ 237px).
+/* Columnas que CABEN en el panel real (--lp-w 280px − padding − scrollbar ≈ 257px).
    MISMA plantilla en PORTAFOLIO y WATCHLIST → alineadas y consistentes. La de
    volatilidad es flexible (1fr) y absorbe el sobrante; precio/día/P&L/📅 van en
    ancho fijo a la derecha → nunca se recortan. El ✕ de watchlist es absoluto
    (no entra en la grilla → no roba ancho). El símbolo tiene 42px: entra un ticker
    de 4 letras (AMZN, TSLA) sin truncarse. */
-.tkr-grid{display:grid;grid-template-columns:42px 44px 32px minmax(0,1fr) 38px 12px;align-items:center;gap:2px;min-height:20px}
-.tkr-grid .tkr-sym{font-size:10px;font-weight:700;color:var(--text2);min-width:0;overflow:hidden;text-overflow:ellipsis}
-.tkr-grid .tkr-px-xs{font-size:10px;font-weight:600;color:var(--text2);text-align:right;white-space:nowrap;overflow:hidden}
-.tkr-grid .tkr-day-xs{font-size:8.5px;font-weight:600;text-align:right;white-space:nowrap;margin:0;overflow:hidden}
-.tkr-grid .tkr-pl-xs{font-size:8.5px;font-weight:700;text-align:right;white-space:nowrap}
+.tkr-grid{display:grid;grid-template-columns:40px 46px 34px minmax(0,1fr) 48px 12px;align-items:center;gap:2px;min-height:20px}
+.tkr-grid .tkr-sym{font-size:10px;font-weight:700;color:#e8ecf4;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.tkr-grid .tkr-px-xs{font-size:10px;font-weight:600;color:var(--text);text-align:right;white-space:nowrap;overflow:hidden}
+.tkr-grid .tkr-day-xs{font-size:10px;font-weight:600;text-align:right;white-space:nowrap;margin:0;overflow:hidden}
+.tkr-grid .tkr-pl-xs{font-size:10px;font-weight:700;text-align:right;white-space:nowrap}
 .tkr.sel .tkr-grid .tkr-sym{color:var(--gold)}
 .tkr.sel .tkr-grid .tkr-px-xs{color:var(--gold)}
 /* Barra fina horizontal de volatilidad (un solo azul; se llena por valor/nivel).
@@ -1508,7 +1508,7 @@ table.ph-table{width:100%;border-collapse:collapse;font-size:12px}
 .tkr-volcell{display:inline-flex;align-items:center;gap:3px;min-width:0;white-space:nowrap;overflow:hidden}
 .tkr-volbar{position:relative;width:26px;height:4px;border-radius:2px;background:rgba(77,158,247,.15);flex-shrink:0;overflow:hidden}
 .tkr-volbar-fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px}
-.tkr-volbar-txt{font-size:8.5px;color:var(--text3);white-space:nowrap}
+.tkr-volbar-txt{font-size:10px;font-weight:500;color:var(--blue);white-space:nowrap}
 .tkr-earn-ico{font-size:9px;text-align:center}
 /* Tarjeta-peek (popover al hover) — ficha etiqueta-izquierda / valor-derecha.
    Un único elemento reutilizado, informativo (pointer-events:none: no bloquea el
