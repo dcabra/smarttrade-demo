@@ -299,6 +299,19 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-
 .rp-risk-hero.conc-red{color:var(--red)}          /* peso ≥ 15 % (tope) */
 .rp-risk-sub{font-size:9px;color:var(--text-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .rp-risk-method{font-size:9px;color:var(--text-label);line-height:1.45;margin-top:5px}
+/* Fase 2 · Stop en el broker: indicador ●/▲ + botón discreto "Proteger posición".
+   Sin verde/rojo de P&L: el ● usa un verde tenue (sage) distinto del --green de
+   retorno; el ▲ "sin stop" reusa el ámbar de concentración (--orange). */
+.rp-stop-box{display:flex;flex-direction:column;gap:3px;margin-top:5px}
+.rp-stop-ok{font-size:9px;font-weight:700;color:#5c9b7d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-stop-warn{font-size:9px;font-weight:700;color:var(--orange);white-space:nowrap}
+.rp-stop-dash{font-size:9px;color:var(--text-label)}
+.rp-proteger{font-size:9px;font-weight:700;color:var(--text2);background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;cursor:pointer;white-space:nowrap;align-self:flex-start}
+.rp-proteger:hover:not(:disabled){border-color:var(--text3);color:var(--text)}
+.rp-proteger:disabled{opacity:.45;cursor:not-allowed}
+.rp-stop-msg{font-size:9px;line-height:1.35;white-space:normal}
+.rp-stop-msg.ok{color:#5c9b7d}
+.rp-stop-msg.err{color:var(--orange)}
 
 /* Chip de nivel de volatilidad: tres intensidades del MISMO azul, nunca verde/rojo. */
 .rp-vol-chip{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:1px 6px;border-radius:999px;border:1px solid transparent;color:var(--blue);white-space:nowrap}
@@ -3865,6 +3878,37 @@ async function fetchBrokerPositions(){
     .filter(p => p.symbol);
 }
 
+/* ── Fase 2 · Stops vivos en el broker (protección de posiciones) ────────────
+   Mapa SIMBOLO → lista de stops GTC de venta vivos en Alpaca
+   (GET /v1/broker/positions/stops). TTL corto (~60s) y TOLERANTE a fallo: si la
+   lectura no llega (null por NO_TOKEN/401/503/red), el mapa queda null y el
+   indicador de la tarjeta de riesgo degrada a "—" sin romper la tarjeta. Un mapa
+   vacío {} es una lectura buena SIN stops → el indicador muestra "sin stop" (▲),
+   que NO es lo mismo que "—" (desconocido). No se consulta en bucle. */
+let BROKER_STOPS = null;          // { "AAPL":[{stop_price,qty,order_id,type,status,es_leg_bracket},...], ... } | null
+let BROKER_STOPS_AT = 0;
+const BROKER_STOPS_TTL_MS = 60*1000;
+
+async function cargarBrokerStops(force){
+  if(!force && BROKER_STOPS && (Date.now()-BROKER_STOPS_AT) < BROKER_STOPS_TTL_MS) return BROKER_STOPS;
+  const d = await brokerGet('/v1/broker/positions/stops');   // null silencioso si falla
+  if(d && typeof d==='object' && !Array.isArray(d)){
+    const norm = {};
+    for(const k in d){ norm[String(k).toUpperCase()] = d[k]; }   // misma normalización (mayúsculas) que POSITIONS
+    BROKER_STOPS = norm;
+    BROKER_STOPS_AT = Date.now();
+  }else{
+    BROKER_STOPS = null;          // lectura fallida → degrada a "—"
+  }
+  return BROKER_STOPS;
+}
+
+/* Lista de stops del ticker (o null si el mapa no está cargado / no hay clave). */
+function brokerStopsFor(t){
+  if(!BROKER_STOPS) return null;
+  return BROKER_STOPS[String(t||'').toUpperCase()] || null;
+}
+
 let CASH_AVAIL = null;   // efectivo real disponible (cash de Alpaca, sin margen)
 let EQUITY = null;       // equity total de la cuenta (último valor conocido)
 let LAST_EQUITY = null;  // equity al cierre previo (para el P&L del día exacto)
@@ -6167,6 +6211,79 @@ function getEffectiveNiv(ticker){
   return out;
 }
 
+/* ── Fase 2 · Nivel de STOP OPERATIVO del ticker ─────────────────────────────
+   MISMA resolución que usa la tarjeta SL/TP: override manual del usuario
+   (getNivUser(t,'sl')) si existe; si no, el SL del modelo (sig.niveles.sl).
+   Devuelve número o null (sin nivel). NO es el "soporte técnico de 20 ruedas"
+   del analista: ése es una referencia, esto es el SL operativo (≈2×ATR). */
+function stopOperativo(t, sig){
+  const ov = (typeof getNivUser==='function') ? getNivUser(t, 'sl') : null;
+  if(ov != null && !isNaN(ov)) return +ov;
+  const sl = (sig && sig.niveles) ? sig.niveles.sl : null;
+  return (sl != null && !isNaN(sl)) ? +sl : null;
+}
+
+/* ── Fase 2 · Colocar/mover el stop operativo como stop-market GTC de VENTA ───
+   POST /v1/broker/positions/{t}/stop (reduce-only, exento del freno). Confirma
+   ANTES (orden real contra Alpaca, aunque sea paper). Espeja el manejo de
+   errores de confirmAndSubmit. Si no hay nivel, o el nivel no está por debajo
+   del precio, avisa y NO llama al backend (coherente con el guard del backend). */
+async function protegerPosicion(t){
+  const d   = (typeof CACHE!=='undefined') ? CACHE[t] : null;
+  const sig = d && d.sig;
+  const precio = stopOperativo(t, sig);
+  const px  = sig ? sig.precio_actual : null;
+  const pos = (POSITIONS||[]).find(p => p && p.symbol===String(t).toUpperCase());
+
+  const msgId = 'rp-stop-msg-'+t;
+  const setMsg = (cls, txt)=>{ const el=document.getElementById(msgId); if(el){ el.className='rp-stop-msg '+cls; el.textContent=txt; } };
+
+  // Guard de cliente (espejo del backend): sin nivel o nivel ≥ precio → no protege.
+  if(precio==null || px==null || precio>=px){
+    setMsg('err', precio==null
+      ? 'No hay nivel de stop operativo definido para este ticker.'
+      : 'El nivel operativo no está por debajo del precio: un stop ahí no protegería.');
+    return;   // sin llamada al backend
+  }
+
+  const qty = (pos && pos.qty!=null) ? pos.qty : null;
+  const qtyTxt = (qty!=null) ? (qty+' u.') : 'la cantidad en cartera';
+  const ok = window.confirm(
+    `Voy a colocar un stop-market GTC de VENTA de ${qtyTxt} de ${t} en Alpaca a $${precio.toFixed(2)} (nivel operativo).`
+    + `\n\nEs reduce-only: solo puede cerrar, nunca abrir ni ampliar.`
+    + `\n\n¿Confirmas?`);
+  if(!ok) return;
+
+  const btn = document.querySelector('#rp-riesgo-body .rp-proteger');
+  const prev = btn ? btn.textContent : null;
+  if(btn){ btn.disabled=true; btn.textContent='Enviando…'; }
+  setMsg('', '');
+
+  try{
+    const r = await brokerFetch('/v1/broker/positions/'+encodeURIComponent(t)+'/stop',
+                                { method:'POST', body:{ stop_price: precio, reemplazar: true } });
+    // Éxito: refresca el mapa de stops y repinta la tarjeta (indicador → ●).
+    await cargarBrokerStops(true);
+    if(typeof riesgoRenderRPVol==='function') riesgoRenderRPVol();
+    const accion = (r && r.accion) ? r.accion : 'colocado';
+    const accionTxt = accion==='reemplazado_en_sitio'   ? 'reemplazado en sitio'
+                    : accion==='cancelado_y_recolocado' ? 'cancelado y recolocado'
+                    : accion==='colocado'               ? 'colocado' : accion;
+    setMsg('ok', `Stop ${accionTxt} · $${precio.toFixed(2)}`);
+  }catch(e){
+    let txt;
+    if(e.code==='UNAUTHORIZED')      txt='Sesión expirada (401). Reconecta tu cuenta.';
+    else if(e.status===400)          txt=e.message;                 // guard/caps del backend
+    else if(e.status===422)          txt=e.message;                 // AlpacaError
+    else if(e.code==='UNAVAILABLE')  txt='Backend no disponible (503).';
+    else if(e.code==='NETWORK')      txt='No se pudo contactar el backend.';
+    else if(e.code==='NO_TOKEN')     txt='No hay sesión. Conecta tu cuenta.';
+    else                             txt='Alpaca rechazó la orden: '+(e.message||'error');
+    if(btn){ btn.disabled=false; btn.textContent=prev||'Proteger posición'; }
+    setMsg('err', txt);
+  }
+}
+
 /* ── BUILD LEFT PANEL ── */
 /* Orden de las listas del panel izquierdo (persistente) */
 let PF_SORT = localStorage.getItem('st_pf_sort') || 'def';
@@ -6511,6 +6628,12 @@ async function pick(t){
   if(rEl) rEl.classList.remove('skel');
   if(d.sig){$('tb-price').textContent=fP(d.sig.precio_actual);$('cp-price').textContent=fP(d.sig.precio_actual);}
   buildRP(t,d.sig,d.fc);
+  // Fase 2 · Si el ticker es una posición, carga los stops vivos del broker (TTL
+  // corto, tolerante) y repinta la tarjeta de riesgo para mostrar el indicador
+  // ●/▲. No bloquea el render; no se consulta en bucle.
+  if((POSITIONS||[]).some(p=>p && p.symbol===String(t).toUpperCase())){
+    cargarBrokerStops().then(()=>{ if(ACTIVE===t && typeof riesgoRenderRPVol==='function') riesgoRenderRPVol(); });
+  }
   // Borde superior de la gráfica con color de la señal — conecta ticker seleccionado con gráfica
   if(d.sig){
     const sen=d.sig['señal']||'HOLD';
@@ -6860,6 +6983,33 @@ function rpRiesgoCardBody(t, sig){
   const wHero = (w!=null) ? w.toFixed(1)+'%' : '—';
   const wSub  = (w!=null) ? 'tope '+PHRISK_CONC_ROJO+'%' : 'sin posición';
 
+  // 2b · Fase 2 · Solo con posición abierta: indicador "stop en broker ●/▲" +
+  // botón "Proteger posición". Sin posición → ni indicador ni botón.
+  let stopBrokerHTML = '';
+  if(pos){
+    let ind;
+    if(BROKER_STOPS===null){
+      ind = '<span class="rp-stop-dash">—</span>';                      // mapa no cargado/fallido
+    }else{
+      const lista = brokerStopsFor(t);
+      const st = Array.isArray(lista) ? lista.find(s=>s && s.stop_price!=null) : null;
+      ind = st
+        ? `<span class="rp-stop-ok">● stop en broker · $${(+st.stop_price).toFixed(2)}</span>`
+        : `<span class="rp-stop-warn">▲ sin stop en broker</span>`;
+    }
+    const lvl = stopOperativo(t, sig);
+    const px  = (typeof sig.precio_actual==='number') ? sig.precio_actual : null;
+    const puedeProteger = (typeof lvl==='number' && px!=null && lvl < px);
+    const title = (typeof lvl!=='number')
+      ? 'No hay nivel de stop operativo definido para este ticker.'
+      : (px!=null && lvl>=px)
+        ? `El nivel operativo ($${(+lvl).toFixed(2)}) no está por debajo del precio` + (px!=null?` ($${px.toFixed(2)})`:'') + `: un stop ahí no protegería (lo rechazaría el backend).`
+        : 'Coloca o mueve el stop-market GTC de venta al nivel operativo.';
+    stopBrokerHTML = `<div class="rp-stop-box">${ind}`
+      + `<button class="rp-proteger" onclick="protegerPosicion('${t}')"${puedeProteger?'':' disabled'} title="${title}">Proteger posición</button>`
+      + `<span class="rp-stop-msg" id="rp-stop-msg-${t}"></span></div>`;
+  }
+
   return `<div class="rp-risk-grid">
     <div class="rp-risk-cell">
       <div class="rp-risk-h">Banda 10 ruedas</div>
@@ -6870,6 +7020,7 @@ function rpRiesgoCardBody(t, sig){
       <div class="rp-risk-h">Stop operativo</div>
       <div class="rp-risk-hero">${stopHero}</div>
       <div class="rp-risk-sub">${stopSub}</div>
+      ${stopBrokerHTML}
     </div>
     <div class="rp-risk-cell">
       <div class="rp-risk-h">Régimen</div>
