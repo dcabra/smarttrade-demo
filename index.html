@@ -6245,6 +6245,13 @@ async function protegerPosicion(t){
       : 'El nivel operativo no está por debajo del precio: un stop ahí no protegería.');
     return;   // sin llamada al backend
   }
+  // Guard de cliente: una posición fraccional (<1 acción) no puede protegerse,
+  // porque un stop en Alpaca exige cantidad entera (el backend ya la rechaza).
+  const qtyEnt = (pos && pos.qty!=null) ? Math.floor(Math.abs(+pos.qty)) : 0;
+  if(qtyEnt<1){
+    setMsg('err', 'La posición es fraccional (<1 acción); un stop requiere cantidad entera, así que no puede protegerse.');
+    return;   // sin llamada al backend
+  }
 
   const qty = (pos && pos.qty!=null) ? pos.qty : null;
   const qtyTxt = (qty!=null) ? (qty+' u.') : 'la cantidad en cartera';
@@ -6265,6 +6272,7 @@ async function protegerPosicion(t){
     // Éxito: refresca el mapa de stops y repinta la tarjeta (indicador → ●).
     await cargarBrokerStops(true);
     if(typeof riesgoRenderRPVol==='function') riesgoRenderRPVol();
+    ALPACA_ORDERS = null;   // invalida la caché de "Órdenes manuales → Alpaca" (igual que confirmAndSubmit)
     const accion = (r && r.accion) ? r.accion : 'colocado';
     const accionTxt = accion==='reemplazado_en_sitio'   ? 'reemplazado en sitio'
                     : accion==='cancelado_y_recolocado' ? 'cancelado y recolocado'
@@ -6999,12 +7007,18 @@ function rpRiesgoCardBody(t, sig){
     }
     const lvl = stopOperativo(t, sig);
     const px  = (typeof sig.precio_actual==='number') ? sig.precio_actual : null;
-    const puedeProteger = (typeof lvl==='number' && px!=null && lvl < px);
+    // Un stop en Alpaca exige cantidad ENTERA: una posición cuya parte entera es
+    // 0 (p.ej. AMD 0.409) NO puede protegerse (el backend la rechaza). Se refleja
+    // aquí para no habilitar un botón que solo erraría tras intentarlo.
+    const qtyEnt = (pos && pos.qty!=null) ? Math.floor(Math.abs(+pos.qty)) : 0;
+    const puedeProteger = (typeof lvl==='number' && px!=null && lvl < px && qtyEnt>=1);
     const title = (typeof lvl!=='number')
       ? 'No hay nivel de stop operativo definido para este ticker.'
       : (px!=null && lvl>=px)
         ? `El nivel operativo ($${(+lvl).toFixed(2)}) no está por debajo del precio` + (px!=null?` ($${px.toFixed(2)})`:'') + `: un stop ahí no protegería (lo rechazaría el backend).`
-        : 'Coloca o mueve el stop-market GTC de venta al nivel operativo.';
+        : (qtyEnt<1)
+          ? 'La posición es fraccional (<1 acción); un stop requiere cantidad entera, así que no puede protegerse.'
+          : 'Coloca o mueve el stop-market GTC de venta al nivel operativo.';
     stopBrokerHTML = `<div class="rp-stop-box">${ind}`
       + `<button class="rp-proteger" onclick="protegerPosicion('${t}')"${puedeProteger?'':' disabled'} title="${title}">Proteger posición</button>`
       + `<span class="rp-stop-msg" id="rp-stop-msg-${t}"></span></div>`;
