@@ -1223,9 +1223,6 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .ph-cover-k{color:var(--green)}
 .ph-cover-s{color:var(--text3)}
 .phrisk-hdr{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-label)}
-.phrisk-cash{font-size:23px;font-weight:700;color:var(--text);line-height:1;font-variant-numeric:tabular-nums}
-.phrisk-cash-sub{font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums}
-.phrisk-inv{font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums}
 .phrisk-bar{position:relative;display:flex;height:6px;border-radius:3px;overflow:visible;background:rgba(122,144,176,.14)}
 .phrisk-bar-cash{background:var(--text3)}
 .phrisk-bar-inv{background:var(--blue);border-radius:3px 0 0 3px}
@@ -1241,14 +1238,14 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 /* Pulido Fase C · FOCAL exposición↔objetivo: lo prominente del panel.
    Jerarquía por estado en ÁMBAR/NEUTRO (nunca --green/--red de P&L):
    neutro (sin recorte) · ámbar suave (dentro de banda) · ámbar fuerte (de-risk). */
-.phrisk-focal{font-size:13.5px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.35;margin:2px 0 1px}
-.phrisk-focal .st{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:1px 6px;border-radius:9px;margin-left:5px;vertical-align:middle}
-.phrisk-focal.neutro{color:var(--text)}
-.phrisk-focal.neutro .st{color:var(--text3);background:rgba(122,144,176,.12)}
-.phrisk-focal.banda{color:var(--text)}
-.phrisk-focal.banda .st{color:var(--orange);background:rgba(243,156,18,.10)}
-.phrisk-focal.derisk{color:var(--orange)}
-.phrisk-focal.derisk .st{color:var(--orange);background:rgba(243,156,18,.20)}
+.phrisk-hero{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;margin:1px 0 3px}
+.phrisk-hero .ex{font-size:26px;font-weight:700;line-height:1;color:var(--text);font-variant-numeric:tabular-nums}
+.phrisk-hero.derisk .ex{color:var(--orange)}
+.phrisk-hero .obj{font-size:11px;font-weight:600;color:var(--text3);font-variant-numeric:tabular-nums}
+.phrisk-hero .st{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:1px 6px;border-radius:9px;vertical-align:middle}
+.phrisk-hero.neutro .st{color:var(--text3);background:rgba(122,144,176,.12)}
+.phrisk-hero.banda .st{color:var(--orange);background:rgba(243,156,18,.10)}
+.phrisk-hero.derisk .st{color:var(--orange);background:rgba(243,156,18,.20)}
 /* ══ E1·C · Cockpit de la defensa por régimen (carril de riesgo) ═══════════
    Azul/neutro como el resto del carril; "armada" con acento ámbar discreto.
    Nada de verde/rojo de P&L (los mensajes usan azul/ámbar, no --green/--red). */
@@ -13089,11 +13086,14 @@ function phriskRender(){
     + (objMark!=null ? `<div class="phrisk-bar-mark" style="left:${clamp(objMark)}%" title="objetivo del régimen"></div>` : '')
     + `</div>`;
 
-  // FOCAL prominente: exposición↔objetivo, coloreado por estado (solo si hay régimen).
-  const focalHtml = (estDef && objMark!=null)
-    ? `<div class="phrisk-focal ${estDef.clase}">Exposición ${invPct!=null ? riesgoPctTxt(invPct) : '—'}`
-      + ` · objetivo ${riesgoPctTxt(objMark)}<span class="st">${riesgoEsc(estDef.etiqueta)}</span></div>`
-    : '';
+  // HERO prominente: exposición actual como número grande, objetivo del régimen al lado,
+  // coloreado por estado (ámbar solo en de-risk/banda; neutro en risk-on o sin régimen).
+  const heroClase = estDef ? estDef.clase : 'neutro';
+  const heroHtml = `<div class="phrisk-hero ${heroClase}">`
+    + `<span class="ex">${invPct!=null ? invPct.toFixed(1)+'%' : '—'}</span>`
+    + (objMark!=null ? ` <span class="obj">/ objetivo ${riesgoPctTxt(objMark)}</span>` : '')
+    + (estDef ? `<span class="st">${riesgoEsc(estDef.etiqueta)}</span>` : '')
+    + `</div>`;
 
   const ddHtml = (dd!=null)
     ? `<span class="v phrisk-dd" style="color:${dd<0?'var(--red)':'var(--text2)'}">${dd<=0?'':'+'}${dd.toFixed(2)}%</span>`
@@ -13116,11 +13116,10 @@ function phriskRender(){
 
   el.innerHTML = `
     <div class="phrisk-hdr">Riesgo · exposición</div>
-    ${focalHtml}
-    <div class="phrisk-cash">${cashPct!=null ? cashPct.toFixed(1)+'%' : '—'}</div>
-    <div class="phrisk-cash-sub">${cash!=null ? fP(cash) : '—'} en efectivo</div>
-    <div class="phrisk-inv">${invPct!=null ? invPct.toFixed(1)+'%' : '—'} invertido${inv!=null && !isNaN(inv) ? ' · '+fP(inv)+' en mercado' : ''}</div>
+    ${heroHtml}
     ${barra}
+    <div class="phrisk-line"><span class="k">En efectivo</span><span class="v">${cashPct!=null ? cashPct.toFixed(1)+'%' : '—'}${cash!=null ? ' · '+fP(cash) : ''}</span></div>
+    <div class="phrisk-line"><span class="k">En mercado</span><span class="v">${inv!=null && !isNaN(inv) ? fP(inv) : '—'}</span></div>
     <div class="phrisk-line"><span class="k">Mayor exposición</span>${
       top ? `<span class="v">${top.symbol} · ${fP(top.value)}</span>` : '<span class="v">—</span>'
     }</div>
