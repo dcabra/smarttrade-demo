@@ -1226,14 +1226,29 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .phrisk-cash{font-size:23px;font-weight:700;color:var(--text);line-height:1;font-variant-numeric:tabular-nums}
 .phrisk-cash-sub{font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums}
 .phrisk-inv{font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums}
-.phrisk-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:rgba(122,144,176,.14)}
+.phrisk-bar{position:relative;display:flex;height:6px;border-radius:3px;overflow:visible;background:rgba(122,144,176,.14)}
 .phrisk-bar-cash{background:var(--text3)}
-.phrisk-bar-inv{background:var(--blue)}
+.phrisk-bar-inv{background:var(--blue);border-radius:3px 0 0 3px}
+/* Pulido Fase C · relleno invertido en ámbar cuando el régimen pide recortar. */
+.phrisk-bar-inv.derisk{background:var(--orange)}
+/* Marca vertical del objetivo del régimen (tick neutro, nunca verde/rojo). */
+.phrisk-bar-mark{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:var(--text);border-radius:1px}
 .phrisk-line{display:flex;align-items:baseline;gap:6px;font-size:10.5px;color:var(--text3);font-variant-numeric:tabular-nums}
 .phrisk-line .k{color:var(--text-label)}
 .phrisk-line .v{color:var(--text2);font-weight:600}
 .phrisk-dd{font-weight:700}
 .phrisk-empty{font-size:10.5px;color:var(--text-label)}
+/* Pulido Fase C · FOCAL exposición↔objetivo: lo prominente del panel.
+   Jerarquía por estado en ÁMBAR/NEUTRO (nunca --green/--red de P&L):
+   neutro (sin recorte) · ámbar suave (dentro de banda) · ámbar fuerte (de-risk). */
+.phrisk-focal{font-size:13.5px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.35;margin:2px 0 1px}
+.phrisk-focal .st{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:1px 6px;border-radius:9px;margin-left:5px;vertical-align:middle}
+.phrisk-focal.neutro{color:var(--text)}
+.phrisk-focal.neutro .st{color:var(--text3);background:rgba(122,144,176,.12)}
+.phrisk-focal.banda{color:var(--text)}
+.phrisk-focal.banda .st{color:var(--orange);background:rgba(243,156,18,.10)}
+.phrisk-focal.derisk{color:var(--orange)}
+.phrisk-focal.derisk .st{color:var(--orange);background:rgba(243,156,18,.20)}
 /* ══ E1·C · Cockpit de la defensa por régimen (carril de riesgo) ═══════════
    Azul/neutro como el resto del carril; "armada" con acento ámbar discreto.
    Nada de verde/rojo de P&L (los mensajes usan azul/ámbar, no --green/--red). */
@@ -11628,7 +11643,7 @@ function renderHome(){
   phriskRender();         // R2 · riesgo/exposición — pinta ya con equity/efectivo;
                           // el drawdown se completa cuando la serie del chart llega
   renderDefensaCard();    // E1·C · cockpit defensa — pinta lo último conocido (o se oculta)
-  cargarDefensa().then(()=>renderDefensaCard());   // refresca desde el backend (fire-and-forget)
+  cargarDefensa().then(()=>{ renderDefensaCard(); phriskRender(); });   // refresca defensa + barra/marca/color del régimen
   renderHomeTable();
   renderPortfolioValueChart(PH_RANGE);
   ensureSpyBenchmark();   // el OHLCV de SPY no se cachea solo en Home-first boot
@@ -13028,6 +13043,21 @@ function phriskDrawdown(vals){
   return (last-max)/max*100;
 }
 
+/* Pulido Fase C · estado de la defensa por régimen para colorear el panel.
+   Lee BROKER_DEFENSA DEFENSIVAMENTE: sin dato / sin objetivo → null (el panel
+   se comporta como hoy: sin color de estado y sin marca). Devuelve
+   {clase, color, etiqueta}. Color = ÁMBAR/NEUTRO, jamás verde/rojo (P&L). */
+function phriskEstadoDefensa(){
+  const D = (typeof BROKER_DEFENSA !== 'undefined') ? BROKER_DEFENSA : null;
+  if(!D || D.objetivo == null) return null;                 // sin régimen → sin color ni marca
+  const objPct = riesgoPctTxt(Number(D.objetivo) * 100);    // "50 %" / "100 %"
+  if(D.accion === 'de-risk')                                 // sobre-expuesto → recortar
+    return { clase:'derisk', color:'var(--orange)', etiqueta:`recortar a ${objPct}` };
+  if(D.accion === 'nada' && Number(D.objetivo) < 1)          // risk-off dentro de banda
+    return { clase:'banda',  color:'var(--orange)', etiqueta:'dentro de banda' };
+  return { clase:'neutro', color:null, etiqueta:'sin recorte' };   // risk-on / objetivo pleno
+}
+
 function phriskRender(){
   const el=$('phrisk'); if(!el) return;
   const x = phsynExposicion();                 // fuente compartida con R5
@@ -13043,10 +13073,27 @@ function phriskRender(){
   const top = phriskMayorExposicion();
   const dd  = phriskDrawdown(PH_DRAW && PH_DRAW.vals);
 
+  // Pulido Fase C · estado del régimen (defensivo) → color, etiqueta y marca.
+  const estDef  = phriskEstadoDefensa();
+  const objFrac = (typeof BROKER_DEFENSA!=='undefined' && BROKER_DEFENSA && BROKER_DEFENSA.objetivo!=null)
+                ? Number(BROKER_DEFENSA.objetivo) : null;
+  const objMark = objFrac!=null ? objFrac*100 : null;       // posición de la marca (0–100)
+  const clamp   = v => Math.max(0,Math.min(100,v)).toFixed(2);
+
+  // Barra con marca: INVERTIDO a la izquierda (0→invPct), efectivo a la derecha,
+  // y un tick en el objetivo del régimen. Relleno invertido ámbar solo en de-risk.
+  const invClass = (estDef && estDef.clase==='derisk') ? 'phrisk-bar-inv derisk' : 'phrisk-bar-inv';
   const barra = `<div class="phrisk-bar">`
-    + (cashPct!=null ? `<div class="phrisk-bar-cash" style="width:${Math.max(0,Math.min(100,cashPct)).toFixed(2)}%"></div>` : '')
-    + (invPct!=null  ? `<div class="phrisk-bar-inv"  style="width:${Math.max(0,Math.min(100,invPct)).toFixed(2)}%"></div>`  : '')
+    + (invPct!=null  ? `<div class="${invClass}" style="width:${clamp(invPct)}%"></div>`  : '')
+    + (cashPct!=null ? `<div class="phrisk-bar-cash" style="width:${clamp(cashPct)}%"></div>` : '')
+    + (objMark!=null ? `<div class="phrisk-bar-mark" style="left:${clamp(objMark)}%" title="objetivo del régimen"></div>` : '')
     + `</div>`;
+
+  // FOCAL prominente: exposición↔objetivo, coloreado por estado (solo si hay régimen).
+  const focalHtml = (estDef && objMark!=null)
+    ? `<div class="phrisk-focal ${estDef.clase}">Exposición ${invPct!=null ? riesgoPctTxt(invPct) : '—'}`
+      + ` · objetivo ${riesgoPctTxt(objMark)}<span class="st">${riesgoEsc(estDef.etiqueta)}</span></div>`
+    : '';
 
   const ddHtml = (dd!=null)
     ? `<span class="v phrisk-dd" style="color:${dd<0?'var(--red)':'var(--text2)'}">${dd<=0?'':'+'}${dd.toFixed(2)}%</span>`
@@ -13062,8 +13109,14 @@ function phriskRender(){
   const recHtml = `<span class="v">${riesgoPctTxt(recExp)}</span>`
     + `<span class="k">(por régimen) · tu exposición actual: ${invPct!=null ? riesgoPctTxt(invPct) : '—'}</span>`;
 
+  // El objetivo del régimen ya es lo PROMINENTE (focalHtml); la línea chica de
+  // «Exposición recomendada» queda solo como respaldo cuando no hay régimen vivo.
+  const recLine = estDef ? '' :
+    `<div class="phrisk-line" title="${riesgoEsc(RIESGO_TOOLTIP)}"><span class="k">Exposición recomendada</span>${recHtml}</div>`;
+
   el.innerHTML = `
     <div class="phrisk-hdr">Riesgo · exposición</div>
+    ${focalHtml}
     <div class="phrisk-cash">${cashPct!=null ? cashPct.toFixed(1)+'%' : '—'}</div>
     <div class="phrisk-cash-sub">${cash!=null ? fP(cash) : '—'} en efectivo</div>
     <div class="phrisk-inv">${invPct!=null ? invPct.toFixed(1)+'%' : '—'} invertido${inv!=null && !isNaN(inv) ? ' · '+fP(inv)+' en mercado' : ''}</div>
@@ -13072,7 +13125,7 @@ function phriskRender(){
       top ? `<span class="v">${top.symbol} · ${fP(top.value)}</span>` : '<span class="v">—</span>'
     }</div>
     <div class="phrisk-line"><span class="k">Drawdown</span>${ddHtml}</div>
-    <div class="phrisk-line" title="${riesgoEsc(RIESGO_TOOLTIP)}"><span class="k">Exposición recomendada</span>${recHtml}</div>`;
+    ${recLine}`;
 }
 
 function phSetAllocMode(btn){
