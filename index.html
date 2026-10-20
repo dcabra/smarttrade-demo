@@ -1234,6 +1234,38 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .phrisk-line .v{color:var(--text2);font-weight:600}
 .phrisk-dd{font-weight:700}
 .phrisk-empty{font-size:10.5px;color:var(--text-label)}
+/* ══ E1·C · Cockpit de la defensa por régimen (carril de riesgo) ═══════════
+   Azul/neutro como el resto del carril; "armada" con acento ámbar discreto.
+   Nada de verde/rojo de P&L (los mensajes usan azul/ámbar, no --green/--red). */
+.defensa-card{margin:2px 14px 10px 0;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:rgba(122,144,176,.04);display:flex;flex-direction:column;gap:8px}
+.defensa-card.armada{border-color:rgba(243,156,18,.45);background:rgba(243,156,18,.05)}
+.defensa-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.defensa-ttl{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-label)}
+.defensa-badge{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:10px}
+.defensa-badge.on{color:var(--orange);background:rgba(243,156,18,.12)}
+.defensa-badge.off{color:var(--text2);background:rgba(122,144,176,.12)}
+.defensa-estado{font-size:11px;color:var(--text2);line-height:1.45}
+.defensa-sub{font-size:10px;color:var(--text3);font-variant-numeric:tabular-nums;margin-top:2px}
+.defensa-plan{display:flex;flex-direction:column;gap:3px;font-size:10.5px;color:var(--text2);font-variant-numeric:tabular-nums;border-top:1px solid var(--border);padding-top:6px}
+.defensa-plan-row{display:flex;justify-content:space-between;gap:8px}
+.defensa-plan-row .s{color:var(--text);font-weight:600}
+.defensa-plan-tot{color:var(--text-label);font-size:10px;margin-top:2px}
+.defensa-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.defensa-btn{font:inherit;font-size:10.5px;font-weight:600;cursor:pointer;border-radius:6px;padding:5px 11px;border:1px solid var(--border2);background:rgba(122,144,176,.10);color:var(--text)}
+.defensa-btn:hover{border-color:var(--blue)}
+.defensa-btn:disabled{opacity:.5;cursor:not-allowed}
+.defensa-btn.toggle-on{border-color:rgba(243,156,18,.5);color:var(--orange)}
+.defensa-btn.ejecutar{border-color:var(--blue);color:var(--blue)}
+.defensa-msg{font-size:10px;min-height:12px}
+.defensa-msg.ok{color:var(--blue)}
+.defensa-msg.err{color:var(--orange)}
+.defensa-bitacora{border-top:1px solid var(--border);padding-top:6px}
+.defensa-bitacora summary{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-label);cursor:pointer;list-style:none}
+.defensa-bitacora summary::-webkit-details-marker{display:none}
+.defensa-bita-list{margin-top:5px}
+.defensa-bita-row{font-size:9.5px;color:var(--text3);font-variant-numeric:tabular-nums;padding:2px 0;display:flex;gap:6px}
+.defensa-bita-row .t{color:var(--text-label);white-space:nowrap}
+.defensa-bita-row .e{color:var(--text2);font-weight:600}
 .phz-cartera .ph-table th:nth-child(2),.phz-cartera .ph-table td:nth-child(2),.phz-cartera .ph-table th:nth-child(3),.phz-cartera .ph-table td:nth-child(3),.phz-cartera .ph-table th:nth-child(4),.phz-cartera .ph-table td:nth-child(4),.phz-cartera .ph-table th:nth-child(6),.phz-cartera .ph-table td:nth-child(6){display:none}
 .phz-table-scroll{flex:1;min-height:0;overflow-y:auto;border-top:1px solid var(--border)}
 /* ── Layout terminal: grilla de 3 columnas que llena el alto del home ──
@@ -2174,6 +2206,9 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
             <div class="ph-alloc" id="ph-alloc"></div>
             <div class="phrisk" id="phrisk"></div>
           </div>
+          <!-- E1·C · Cockpit de la defensa por régimen (bajo "Riesgo · exposición").
+               Se puebla desde /v1/broker/defensa/* (A1/A2); oculto sin sesión/datos. -->
+          <div class="defensa-card" id="defensa-regimen" style="display:none"></div>
           <div class="ph-table-wrap phz-table-scroll" id="ph-table"></div>
         </div>
 
@@ -3907,6 +3942,217 @@ async function cargarBrokerStops(force){
 function brokerStopsFor(t){
   if(!BROKER_STOPS) return null;
   return BROKER_STOPS[String(t||'').toUpperCase()] || null;
+}
+
+/* ── E1·C · Cockpit de la defensa por régimen ──────────────────────────────
+   Estado del backend A1/A2 (GET /v1/broker/defensa/estado). TTL ~60 s,
+   tolerante: lectura fallida / sin sesión → null → la tarjeta se oculta (no
+   rompe el Home). Se refresca tras toggle/ejecutar. La bitácora se trae aparte,
+   bajo demanda al abrir el colapsable. */
+let BROKER_DEFENSA = null;        // {activa,objetivo,exposicion,accion,plan,regimen?,risk_on?,equity?} | null
+let BROKER_DEFENSA_AT = 0;
+const BROKER_DEFENSA_TTL_MS = 60*1000;
+let BROKER_DEFENSA_BITA = null;   // [{ts,evento,motivo,detalle}] | null (aún no cargada)
+let DEFENSA_BITA_OPEN = false;    // recuerda si el colapsable está abierto entre repintados
+
+async function cargarDefensa(force){
+  if(!force && BROKER_DEFENSA && (Date.now()-BROKER_DEFENSA_AT) < BROKER_DEFENSA_TTL_MS) return BROKER_DEFENSA;
+  const d = await brokerGet('/v1/broker/defensa/estado');   // null silencioso si falla / sin token
+  if(d && typeof d==='object' && !Array.isArray(d)){
+    BROKER_DEFENSA = d;
+    BROKER_DEFENSA_AT = Date.now();
+  }else{
+    BROKER_DEFENSA = null;        // sin sesión / backend caído → tarjeta oculta
+  }
+  return BROKER_DEFENSA;
+}
+
+async function cargarDefensaBitacora(){
+  const d = await brokerGet('/v1/broker/defensa/bitacora');
+  BROKER_DEFENSA_BITA = (d && Array.isArray(d.bitacora)) ? d.bitacora : [];
+  renderDefensaCard();
+}
+
+/* Fracción 0–1 → "NN%"; cantidad con hasta 4 decimales (sin ceros de cola). */
+function defensaPct(f){ return (f==null||isNaN(f)) ? '—' : (f*100).toFixed(0)+'%'; }
+function defensaQty(q){ return (q==null||isNaN(q)) ? '—' : (+q).toFixed(4).replace(/\.?0+$/,''); }
+function defensaMoney(v){ return (typeof fP==='function') ? fP(v) : ('$'+Math.round(+v||0)); }
+
+/* Resumen compacto del plan para el confirm de ejecución. */
+function defensaResumenPlan(plan){
+  if(!Array.isArray(plan) || !plan.length) return '';
+  return plan.map(p => `${p.symbol} ${defensaQty(p.qty)} u (~${defensaMoney(p.notional)})`).join(', ');
+}
+
+/* Mensaje de error legible (espejo del catch de protegerPosicion). */
+function defensaErrTxt(e){
+  if(!e) return 'Error desconocido.';
+  if(e.code==='UNAUTHORIZED')  return 'Sesión expirada (401). Reconecta tu cuenta.';
+  if(e.status===400)           return e.message;                 // guard/caps del backend
+  if(e.status===422)           return e.message;                 // AlpacaError
+  if(e.code==='UNAVAILABLE')   return 'Backend no disponible (503).';
+  if(e.code==='NETWORK')       return 'No se pudo contactar el backend.';
+  if(e.code==='NO_TOKEN')      return 'No hay sesión. Conecta tu cuenta.';
+  return 'Error: '+(e.message||'desconocido');
+}
+
+function defensaSetMsg(cls, txt){
+  const el=document.getElementById('defensa-msg');
+  if(el){ el.className='defensa-msg '+(cls||''); el.textContent=txt||''; }
+}
+
+function renderDefensaCard(){
+  const el = document.getElementById('defensa-regimen');
+  if(!el) return;
+  const D = BROKER_DEFENSA;
+  if(!D){ el.style.display='none'; el.classList.remove('armada'); return; }
+  el.style.display='flex';
+
+  const activa = !!D.activa;
+  const accion = D.accion || 'sin_datos';
+  // regimen/risk_on: usa lo que mande el backend; si no vienen, se derivan del
+  // objetivo (1.0 = risk-on / 0.5 = risk-off), que es su única codificación.
+  const riskOn = (D.risk_on!=null) ? !!D.risk_on
+               : (D.objetivo!=null ? (D.objetivo>=1) : null);
+  const regTxt = D.regimen ? String(D.regimen)
+               : (riskOn===true?'alcista':riskOn===false?'bajista':'—');
+  const objPct = defensaPct(D.objetivo);
+  const expPct = defensaPct(D.exposicion);
+  el.classList.toggle('armada', activa);
+
+  // 2 · estado legible (tono neutro, sin verde/rojo)
+  let estado, sub='';
+  if(accion==='de-risk'){
+    estado = `Régimen ${regTxt} · objetivo ${objPct} · recorte pendiente`;
+    sub    = `Exposición actual ${expPct} vs objetivo ${objPct}`;
+  } else if(accion==='nada' && riskOn===true){
+    estado = `Régimen ${regTxt} · objetivo 100% · sin recorte`;
+    if(D.exposicion!=null) sub = `Exposición actual ${expPct} vs objetivo ${objPct}`;
+  } else if(accion==='nada'){
+    estado = `Régimen ${regTxt} · objetivo ${objPct} · exposición dentro de banda`;
+    sub    = `Exposición actual ${expPct} vs objetivo ${objPct}`;
+  } else {
+    estado = 'Defensa por régimen · sin datos de régimen/exposición';
+  }
+
+  // 3 · plan (solo si hay recorte pendiente). Es dry-run: mostrarlo NO ejecuta.
+  let planHtml='';
+  if(accion==='de-risk' && Array.isArray(D.plan) && D.plan.length){
+    const filas = D.plan.map(p =>
+      `<div class="defensa-plan-row"><span class="s">${riesgoEsc(p.symbol)}</span>`
+      + `<span>${defensaQty(p.qty)} u · ${defensaMoney(p.notional)}</span></div>`).join('');
+    const tot = D.plan.reduce((s,p)=>s+(+p.notional||0),0);
+    planHtml = `<div class="defensa-plan">${filas}`
+      + `<div class="defensa-plan-tot">Total a recortar: ${defensaMoney(tot)} · dry-run (no ejecuta)</div></div>`;
+  }
+
+  // 1 · toggle (kill-switch) · 4 · ejecutar (solo de-risk Y armada)
+  const toggleBtn = activa
+    ? `<button class="defensa-btn toggle-on" onclick="defensaToggle(false)">Desarmar</button>`
+    : `<button class="defensa-btn" onclick="defensaToggle(true)">Armar</button>`;
+  const ejecutarBtn = (accion==='de-risk' && activa)
+    ? `<button class="defensa-btn ejecutar" onclick="defensaEjecutar()">Ejecutar de-risk ahora</button>`
+    : '';
+
+  // 5 · bitácora (colapsable, últimos ~10)
+  const bita = Array.isArray(BROKER_DEFENSA_BITA) ? BROKER_DEFENSA_BITA.slice(0,10) : null;
+  const bitaRows = (bita===null)
+    ? '<div class="defensa-bita-row"><span class="t">abre para cargar…</span></div>'
+    : (bita.length
+        ? bita.map(b=>{
+            const ts = b.ts ? String(b.ts).replace('T',' ').slice(0,19) : '';
+            return `<div class="defensa-bita-row"><span class="t">${riesgoEsc(ts)}</span>`
+                 + `<span class="e">${riesgoEsc(b.evento||'')}</span>`
+                 + `<span>${riesgoEsc(b.motivo||'')}</span></div>`;
+          }).join('')
+        : '<div class="defensa-bita-row"><span class="t">sin eventos</span></div>');
+
+  el.innerHTML = `
+    <div class="defensa-hdr">
+      <span class="defensa-ttl">Defensa por régimen</span>
+      <span class="defensa-badge ${activa?'on':'off'}">${activa?'armada':'desarmada'}</span>
+    </div>
+    <div class="defensa-estado">${estado}${sub?`<div class="defensa-sub">${sub}</div>`:''}</div>
+    ${planHtml}
+    <div class="defensa-actions">${toggleBtn}${ejecutarBtn}</div>
+    <div class="defensa-msg" id="defensa-msg"></div>
+    <details class="defensa-bitacora"${DEFENSA_BITA_OPEN?' open':''} ontoggle="defensaBitaToggle(this)">
+      <summary>Bitácora</summary>
+      <div class="defensa-bita-list">${bitaRows}</div>
+    </details>`;
+}
+
+function defensaBitaToggle(det){
+  DEFENSA_BITA_OPEN = !!(det && det.open);
+  if(DEFENSA_BITA_OPEN && BROKER_DEFENSA_BITA===null) cargarDefensaBitacora();   // carga perezosa
+}
+
+/* TOGGLE (kill-switch). Armar → confirma (texto honesto sobre el alcance actual);
+   desarmar → sin confirmación (siempre seguro). Refresca estado + bitácora. */
+async function defensaToggle(activar){
+  if(activar){
+    const ok = window.confirm(
+      "Vas a ARMAR la defensa por régimen. Hoy esto habilita el de-risk MANUAL "
+      + "('Ejecutar de-risk ahora'); cuando el disparo automático diario esté activo "
+      + "(próxima fase) armada significará que el recorte al 50% se hará solo al pasar "
+      + "a risk-off.\n\n¿Confirmas?");
+    if(!ok) return;
+  }
+  defensaSetMsg('', '');
+  try{
+    await brokerFetch('/v1/broker/defensa/toggle',
+      { method:'POST', body: activar ? {activa:true, motivo:'armada desde cockpit'} : {activa:false} });
+    await cargarDefensa(true);
+    renderDefensaCard();
+    cargarDefensaBitacora();   // el cambio quedó anotado en la bitácora
+    defensaSetMsg('ok', activar ? 'Defensa armada.' : 'Defensa desarmada.');
+  }catch(e){
+    defensaSetMsg('err', defensaErrTxt(e));
+  }
+}
+
+/* EJECUTAR de-risk ahora (disparo MANUAL; el automático diario es Fase B).
+   Confirma con el resumen del plan; reduce-only (solo cierra). Muestra el
+   resultado y refresca estado + bitácora + stops. */
+async function defensaEjecutar(){
+  const D = BROKER_DEFENSA;
+  if(!D || D.accion!=='de-risk' || !D.activa){
+    defensaSetMsg('err', 'No hay recorte pendiente o la defensa no está armada.');
+    return;
+  }
+  const resumen = defensaResumenPlan(D.plan) || '(plan vacío)';
+  const ok = window.confirm(
+    `Voy a vender a mercado para bajar la exposición al 50%: ${resumen}. `
+    + `Reduce-only, solo cierra.\n\n¿Confirmas?`);
+  if(!ok) return;
+
+  const btn = document.querySelector('#defensa-regimen .defensa-btn.ejecutar');
+  const prev = btn ? btn.textContent : null;
+  if(btn){ btn.disabled=true; btn.textContent='Ejecutando…'; }
+  defensaSetMsg('', '');
+
+  try{
+    const r = await brokerFetch('/v1/broker/defensa/ejecutar', { method:'POST' });
+    let cls='ok', txt;
+    if(r && r.accion==='abstente'){
+      cls='err'; txt='Abstención: '+(r.motivo||'—');
+    } else if(r && r.accion==='de-risk'){
+      const n=(r.ejecutadas||[]).length, ne=(r.errores||[]).length, nc=(r.cancelados_stops||[]).length;
+      txt = `Ejecutado: ${n} venta(s)` + (nc?`, ${nc} stop(s) cancelado(s)`:'') + (ne?` · ${ne} error(es)`:'');
+      if(ne) cls='err';
+    } else {
+      txt = 'Nada que ejecutar' + (r && r.accion ? ` (${r.accion})` : '');
+    }
+    await cargarDefensa(true);
+    renderDefensaCard();
+    cargarDefensaBitacora();
+    if(typeof cargarBrokerStops==='function') cargarBrokerStops(true);   // la venta pudo cambiar stops
+    if(typeof ALPACA_ORDERS!=='undefined') ALPACA_ORDERS = null;         // invalida caché de órdenes manuales
+    defensaSetMsg(cls, txt);
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent=prev||'Ejecutar de-risk ahora'; }
+    defensaSetMsg('err', defensaErrTxt(e));
+  }
 }
 
 let CASH_AVAIL = null;   // efectivo real disponible (cash de Alpaca, sin margen)
@@ -11381,6 +11627,8 @@ function renderHome(){
   renderHomeAllocation();
   phriskRender();         // R2 · riesgo/exposición — pinta ya con equity/efectivo;
                           // el drawdown se completa cuando la serie del chart llega
+  renderDefensaCard();    // E1·C · cockpit defensa — pinta lo último conocido (o se oculta)
+  cargarDefensa().then(()=>renderDefensaCard());   // refresca desde el backend (fire-and-forget)
   renderHomeTable();
   renderPortfolioValueChart(PH_RANGE);
   ensureSpyBenchmark();   // el OHLCV de SPY no se cachea solo en Home-first boot
