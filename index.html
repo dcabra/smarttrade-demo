@@ -1271,6 +1271,8 @@ tr.ph-row-conflict > td{background:rgba(243,156,18,.07)}
 .defensa-msg{font-size:10px;min-height:12px}
 .defensa-msg.ok{color:var(--blue)}
 .defensa-msg.err{color:var(--orange)}
+.defensa-btn.rerisk{border-color:var(--blue);color:var(--blue)}
+.defensa-rerisk-ttl{font-size:10px;color:var(--text2);font-weight:600;margin-bottom:2px}
 .defensa-bitacora{border-top:1px solid var(--border);padding-top:6px}
 .defensa-bitacora summary{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-label);cursor:pointer;list-style:none}
 .defensa-bitacora summary::-webkit-details-marker{display:none}
@@ -3966,6 +3968,7 @@ let BROKER_DEFENSA_AT = 0;
 const BROKER_DEFENSA_TTL_MS = 60*1000;
 let BROKER_DEFENSA_BITA = null;   // [{ts,evento,motivo,detalle}] | null (aún no cargada)
 let DEFENSA_BITA_OPEN = false;    // recuerda si el colapsable está abierto entre repintados
+let BROKER_RERISK = null;         // plan de re-risk (POST /defensa/rerisk/evaluar) | null
 
 async function cargarDefensa(force){
   if(!force && BROKER_DEFENSA && (Date.now()-BROKER_DEFENSA_AT) < BROKER_DEFENSA_TTL_MS) return BROKER_DEFENSA;
@@ -3973,8 +3976,17 @@ async function cargarDefensa(force){
   if(d && typeof d==='object' && !Array.isArray(d)){
     BROKER_DEFENSA = d;
     BROKER_DEFENSA_AT = Date.now();
+    // E1·Fase C · si hay re-risk disponible, trae el plan dry-run (una llamada extra
+    // SOLO cuando el backend lo marca disponible → raro: solo tras un de-risk en risk-on).
+    if(d.rerisk && d.rerisk.disponible){
+      const rr = await brokerFetch('/v1/broker/defensa/rerisk/evaluar', { method:'POST' }).catch(()=>null);
+      BROKER_RERISK = (rr && rr.accion==='re-risk') ? rr : null;
+    }else{
+      BROKER_RERISK = null;
+    }
   }else{
     BROKER_DEFENSA = null;        // sin sesión / backend caído → tarjeta oculta
+    BROKER_RERISK = null;
   }
   return BROKER_DEFENSA;
 }
@@ -4066,6 +4078,22 @@ function renderDefensaCard(){
     ? `<button class="defensa-btn ejecutar" onclick="defensaEjecutar()">Ejecutar de-risk ahora</button>`
     : '';
 
+  // E1·Fase C · re-risk disponible (risk-on + hay de-risk que restaurar). El plan es
+  // dry-run; mostrarlo NO ejecuta. Compra pro-rata a lo existente; requiere tu clic.
+  let rerHtml='', rerBtn='';
+  const RR = BROKER_RERISK;
+  if(RR && RR.accion==='re-risk' && Array.isArray(RR.plan) && RR.plan.length){
+    const filas = RR.plan.map(p =>
+      `<div class="defensa-plan-row"><span class="s">${riesgoEsc(p.symbol)}</span>`
+      + `<span>${defensaQty(p.qty)} u · ${defensaMoney(p.notional)}</span></div>`).join('');
+    const tot = RR.plan.reduce((s,p)=>s+(+p.notional||0),0);
+    rerHtml = `<div class="defensa-plan">`
+      + `<div class="defensa-rerisk-ttl">Re-risk disponible · subir a la meta ${defensaPct(RR.meta)} (la previa al último de-risk)</div>`
+      + filas
+      + `<div class="defensa-plan-tot">Total a agregar: ${defensaMoney(tot)} · dry-run (no ejecuta)</div></div>`;
+    rerBtn = `<button class="defensa-btn rerisk" onclick="defensaRerisk()">Abrir hacia objetivo</button>`;
+  }
+
   // 5 · bitácora (colapsable, últimos ~10)
   const bita = Array.isArray(BROKER_DEFENSA_BITA) ? BROKER_DEFENSA_BITA.slice(0,10) : null;
   const bitaRows = (bita===null)
@@ -4086,7 +4114,8 @@ function renderDefensaCard(){
     </div>
     <div class="defensa-estado">${estado}${sub?`<div class="defensa-sub">${sub}</div>`:''}</div>
     ${planHtml}
-    <div class="defensa-actions">${toggleBtn}${ejecutarBtn}</div>
+    ${rerHtml}
+    <div class="defensa-actions">${toggleBtn}${ejecutarBtn}${rerBtn}</div>
     <div class="defensa-msg" id="defensa-msg"></div>
     <details class="defensa-bitacora"${DEFENSA_BITA_OPEN?' open':''} ontoggle="defensaBitaToggle(this)">
       <summary>Bitácora</summary>
@@ -4163,6 +4192,52 @@ async function defensaEjecutar(){
     defensaSetMsg(cls, txt);
   }catch(e){
     if(btn){ btn.disabled=false; btn.textContent=prev||'Ejecutar de-risk ahora'; }
+    defensaSetMsg('err', defensaErrTxt(e));
+  }
+}
+
+/* ABRIR hacia objetivo (RE-RISK · Fase C). Sube la exposición a la meta previa al
+   último de-risk. Compra a mercado (origen manual, pasa la compuerta como orden
+   tuya; el freno la bloquea sola). Requiere tu clic. Confirma con el plan. */
+async function defensaRerisk(){
+  const RR = BROKER_RERISK;
+  if(!RR || RR.accion!=='re-risk' || !Array.isArray(RR.plan) || !RR.plan.length){
+    defensaSetMsg('err', 'No hay re-risk disponible ahora.');
+    return;
+  }
+  const resumen = defensaResumenPlan(RR.plan) || '(plan vacío)';
+  const ok = window.confirm(
+    `Voy a COMPRAR a mercado para subir la exposición hacia la meta ${defensaPct(RR.meta)} `
+    + `(la que tenías antes del último de-risk): ${resumen}. `
+    + `Compra lo que ya tienes, no abre nombres nuevos.\n\n¿Confirmas?`);
+  if(!ok) return;
+
+  const btn = document.querySelector('#defensa-regimen .defensa-btn.rerisk');
+  const prev = btn ? btn.textContent : null;
+  if(btn){ btn.disabled=true; btn.textContent='Abriendo…'; }
+  defensaSetMsg('', '');
+
+  try{
+    const r = await brokerFetch('/v1/broker/defensa/rerisk/ejecutar', { method:'POST' });
+    let cls='ok', txt;
+    if(r && r.accion==='abstente'){
+      cls='err'; txt='Abstención: '+(r.motivo||'—');
+    }else if(r && r.accion==='re-risk'){
+      const n=(r.ejecutadas||[]).length, ne=(r.errores||[]).length;
+      txt = `Ejecutado: ${n} compra(s)` + (ne?` · ${ne} error(es)`:'');
+      if(ne) cls='err';
+    }else{
+      txt = 'Nada que ejecutar' + (r && r.accion ? ` (${r.accion})` : '');
+    }
+    BROKER_RERISK = null;                 // consumido; se relee del backend
+    await cargarDefensa(true);
+    renderDefensaCard();
+    cargarDefensaBitacora();
+    if(typeof ALPACA_ORDERS!=='undefined') ALPACA_ORDERS = null;   // invalida caché de órdenes
+    if(typeof refreshBroker==='function') refreshBroker();         // equity/posiciones cambiaron
+    defensaSetMsg(cls, txt);
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent=prev||'Abrir hacia objetivo'; }
     defensaSetMsg('err', defensaErrTxt(e));
   }
 }
