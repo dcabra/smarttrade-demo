@@ -2319,8 +2319,6 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
       </div>
 
       <div class="om-ctx"><span class="k">Precio actual</span><span id="om-px" style="font-weight:700;color:var(--text)">—</span></div>
-      <div class="om-ctx"><span class="k">Señal del modelo</span><span id="om-sig">—</span></div>
-      <div class="om-ctx"><span class="k">Niveles del modelo</span><span id="om-niv" style="font-size:10px;color:var(--text2)">—</span></div>
 
       <div>
         <div class="om-lbl">Símbolo</div>
@@ -3255,25 +3253,13 @@ function openOM(ticker, pf){
   const d = CACHE[OM_TICKER] || {};
   const sig = d.sig || {};
   const px = sig.precio_actual;
-  const sen = sig['señal'] || 'HOLD';
-
   $('om-sym').textContent = OM_TICKER;
   $('om-symbol').value = OM_TICKER;
   $('om-px').textContent = fP(px);
-  const sc = sigCol(sen);
-  $('om-sig').innerHTML = `<span style="font-weight:800;color:${sc}">${pillLbl(sen)}</span>`;
-  const niv = getEffectiveNiv(OM_TICKER);
-  // Niveles: si la alerta trae SL/TP, mostrarlos; si no, los del modelo.
-  if(pf && (pf.sl!=null || pf.tp!=null)){
-    $('om-niv').textContent = `SL ${pf.sl!=null?(+pf.sl).toFixed(1):'—'} · TP ${pf.tp!=null?(+pf.tp).toFixed(1):'—'}`;
-  } else {
-    $('om-niv').textContent = (niv.sl||niv.tp1)
-      ? `SL ${niv.sl?niv.sl.toFixed(1):'—'} · TP1 ${niv.tp1?niv.tp1.toFixed(1):'—'}`
-      : '—';
-  }
 
-  // Defaults: lado sugerido por el modelo (BUY/SELL), market, notional
-  OM_SIDE = sen==='SELL' ? 'sell' : 'buy';
+  // Defaults: lado = COMPRAR por defecto. El formulario de ejecución NO deriva nada de la señal
+  // (sin ventaja probada; la señal es información, no consejo). El founder elige vender explícitamente.
+  OM_SIDE = 'buy';
   OM_TYPE = 'market';
   OM_QMODE = 'notional';
   // Prellenado desde alerta (si viene): el lado manda sobre el default del modelo.
