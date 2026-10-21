@@ -3422,8 +3422,15 @@ function omQuickQty(f){
   const myPos=(POSITIONS||[]).find(p=>p.symbol===OM_TICKER);
   if(!myPos || !(myPos.qty>0)) return;
   const brOn=$('om-bracket')?.checked;
-  let q=myPos.qty*f;
-  q = brOn ? Math.floor(q) : +q.toFixed(6);   // bracket exige entera
+  let q;
+  if(f===1 && !brOn){
+    // TODO sin bracket: usar la cantidad EXACTA de Alpaca (sin truncar a 6 decimales)
+    // → el cierre no deja "polvo" (bug que dejó residuos de NKE/SONY el 21-oct).
+    q = myPos.qty;
+  } else {
+    q = myPos.qty*f;
+    q = brOn ? Math.floor(q) : +q.toFixed(6);   // bracket exige entera
+  }
   $('om-amount').value=q||'';
   omUpdateEstimate();
 }
