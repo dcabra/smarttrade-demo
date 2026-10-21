@@ -3917,7 +3917,12 @@ async function fetchBrokerPositions(){
       change_today     : parseAmount(p.change_today),
       asset_class      : (p.asset_class ?? p.class ?? '') + ''
     }))
-    .filter(p => p.symbol);
+    .filter(p => p.symbol)
+    // Descarta el "polvo": residuos sub-céntimo que quedan tras una venta TOTAL
+    // (fracciones ~1e-08 u) y que Alpaca sigue listando como posición. Un valor
+    // conocido por debajo de 1¢ no es una posición; si el valor es desconocido
+    // (lectura transitoria) NO se oculta, para no esconder una posición real.
+    .filter(p => !(Number.isFinite(p.value) && Math.abs(p.value) < 0.01));
 }
 
 /* ── Fase 2 · Stops vivos en el broker (protección de posiciones) ────────────
