@@ -3252,6 +3252,10 @@ function openOM(ticker, pf){
   OM_TICKER = (ticker||'').toUpperCase();
   const d = CACHE[OM_TICKER] || {};
   const sig = d.sig || {};
+  // niveles efectivos del ticker (alerta > usuario > modelo). Se usa abajo para
+  // prellenar el bracket; faltaba tras quitar la fila om-niv del formulario (110ac52),
+  // y su ausencia lanzaba ReferenceError e impedia abrir el modal.
+  const niv = (typeof getEffectiveNiv==='function') ? getEffectiveNiv(OM_TICKER) : {};
   const px = sig.precio_actual;
   $('om-sym').textContent = OM_TICKER;
   $('om-symbol').value = OM_TICKER;
