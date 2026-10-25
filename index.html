@@ -2427,6 +2427,13 @@ input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
             <input type="checkbox" id="om-personal-limit-ack" onchange="renderConfirmSendState()">
             <span id="om-personal-limit-check-txt">Sé que supero mi límite diario personal, continuar</span>
           </label>
+          <!-- Fricción del NÚCLEO: vender SPY a mano exige un check consciente
+               (protocolo de dolor). No bloquea — solo obliga al paso. Ámbar a
+               propósito: la regla de color reserva rojo/verde para P&L. -->
+          <label class="om-personal-limit-check" id="om-dolor-check" style="display:none">
+            <input type="checkbox" id="om-dolor-ack" onchange="renderConfirmSendState()">
+            <span id="om-dolor-check-txt" style="color:var(--orange)"></span>
+          </label>
           <div class="om-row2" style="margin-top:9px">
             <button class="om-btn ghost" onclick="cancelConfirm()">Cancelar</button>
             <button class="om-btn send" id="om-confirm-send" onclick="confirmAndSubmit()">Confirmar envío</button>
@@ -3766,7 +3773,9 @@ function sendBrokerOrder(){
   }
 
   // Mostrar confirmación
-  OM_PENDING={ payload, est, symbol, personalLimitExceeded };
+  // Fricción del núcleo: vender SPY a mano dispara el protocolo de dolor.
+  const nucleoSell = (OM_SIDE==='sell' && (symbol||'').trim().toUpperCase()==='SPY');
+  OM_PENDING={ payload, est, symbol, personalLimitExceeded, nucleoSell };
   showConfirm(payload, est, personalLimitExceeded);
 }
 
@@ -3826,6 +3835,20 @@ function showConfirm(payload, est, personalLimitExceeded){
       checkTxt.textContent = `Superas tu límite personal de ${fP(lim)}/día (llevas ${fP(gastado)} + esta orden). Marca aquí para continuar de todos modos.`;
     }
   }
+
+  // Fricción del NÚCLEO: vender SPY a mano exige marcar un check consciente
+  // (protocolo de dolor). No es un tope técnico; solo obliga al paso.
+  const dolorRow=$('om-dolor-check'), dolorChk=$('om-dolor-ack'), dolorTxt=$('om-dolor-check-txt');
+  const nucleoSell = !!OM_PENDING?.nucleoSell;
+  if(dolorRow){
+    dolorRow.style.display = nucleoSell ? 'flex' : 'none';
+    if(dolorChk) dolorChk.checked = false;
+    if(nucleoSell && dolorTxt){
+      dolorTxt.textContent = 'Estás vendiendo SPY, el núcleo, a mano. El protocolo de dolor: no vendes '
+        + 'el núcleo por miedo — el sistema ya gestiona el riesgo con la defensa por régimen y las caídas '
+        + 'son esperadas. Marca aquí solo si vendes por una razón que NO es el pánico.';
+    }
+  }
   renderConfirmSendState();
 }
 /* Habilita/deshabilita "Confirmar envío" según la fricción del límite
@@ -3835,12 +3858,15 @@ function renderConfirmSendState(){
   if(!btn) return;
   const exigeCheck = !!OM_PENDING?.personalLimitExceeded;
   const marcado = $('om-personal-limit-ack')?.checked;
-  btn.disabled = exigeCheck && !marcado;
+  const exigeDolor = !!OM_PENDING?.nucleoSell;
+  const dolorMarcado = $('om-dolor-ack')?.checked;
+  btn.disabled = (exigeCheck && !marcado) || (exigeDolor && !dolorMarcado);
 }
 function cancelConfirm(){
   OM_PENDING=null;
   $('om-confirm').style.display='none';
   const checkRow=$('om-personal-limit-check'); if(checkRow) checkRow.style.display='none';
+  const dolorRow=$('om-dolor-check'); if(dolorRow) dolorRow.style.display='none';
   $('om-send-btn').style.display='block';
   $('om-send-hint').style.display='block';
 }
