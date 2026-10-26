@@ -4087,20 +4087,6 @@ function renderDefensaCard(){
     estado = 'Defensa por régimen · sin datos de régimen/exposición';
   }
 
-  // 2b · drawdown del vehículo (tono NEUTRO, sin verde/rojo). Fracciones <=0 o
-  // null. Nunca con "+": 0 → "0.0%", negativo → "-2.3%", null → "—". Si no hay
-  // ningún valor, la línea no se muestra.
-  let ddSub='';
-  const dd = D.drawdown;
-  if(dd && (dd.actual_pct!=null || dd.max_pct!=null)){
-    const fmtDD = v => {
-      if(v==null) return '—';
-      const pct = v*100;
-      return (pct>=0 ? Math.abs(pct).toFixed(1) : '-'+Math.abs(pct).toFixed(1)) + '%';
-    };
-    ddSub = `Drawdown desde máx.: actual ${fmtDD(dd.actual_pct)} · peor ${fmtDD(dd.max_pct)}`;
-  }
-
   // 3 · plan (solo si hay recorte pendiente). Es dry-run: mostrarlo NO ejecuta.
   let planHtml='';
   if(accion==='de-risk' && Array.isArray(D.plan) && D.plan.length){
@@ -4154,7 +4140,7 @@ function renderDefensaCard(){
       <span class="defensa-ttl">Defensa por régimen</span>
       <span class="defensa-badge ${activa?'on':'off'}">${activa?'armada':'desarmada'}</span>
     </div>
-    <div class="defensa-estado">${estado}${sub?`<div class="defensa-sub">${sub}</div>`:''}${ddSub?`<div class="defensa-sub">${ddSub}</div>`:''}</div>
+    <div class="defensa-estado">${estado}${sub?`<div class="defensa-sub">${sub}</div>`:''}</div>
     ${planHtml}
     ${rerHtml}
     <div class="defensa-actions">${toggleBtn}${ejecutarBtn}${rerBtn}</div>
@@ -7399,6 +7385,21 @@ function rpRiesgoCardBody(t, sig){
       + `<span class="rp-stop-msg" id="rp-stop-msg-${t}"></span></div>`;
   }
 
+  // 5 · Drawdown desde el máximo del VEHÍCULO (no del ticker). Fuente única:
+  // RIESGO_STATE.drawdown = {actual_pct, max_pct} (fracciones <=0 o null).
+  // Tono NEUTRO (es distancia, no P&L): sin verde/rojo, SIN "+" nunca.
+  // 0 → "0.0%", negativo → "-2.3%", null → "—". Solo si hay algún dato.
+  let ddLine = '';
+  const dd = (RIESGO_STATE && RIESGO_STATE.drawdown) ? RIESGO_STATE.drawdown : null;
+  if(dd && (dd.actual_pct!=null || dd.max_pct!=null)){
+    const fmtDD = x => {
+      if(x==null) return '—';
+      const pct = x*100;
+      return (pct>=0 ? Math.abs(pct).toFixed(1) : '-'+Math.abs(pct).toFixed(1)) + '%';
+    };
+    ddLine = `<div class="rp-risk-method">Drawdown desde máx.: actual ${fmtDD(dd.actual_pct)} · peor ${fmtDD(dd.max_pct)}</div>`;
+  }
+
   return `<div class="rp-risk-grid">
     <div class="rp-risk-cell">
       <div class="rp-risk-h">Banda 10 ruedas</div>
@@ -7422,6 +7423,7 @@ function rpRiesgoCardBody(t, sig){
       <div class="rp-risk-sub">${wSub}</div>
     </div>
   </div>
+  ${ddLine}
   <div class="rp-risk-method">banda GARCH ±1σ · ~70% cobertura (72% medida) · información, no recomendación</div>`;
 }
 /* ── Fase 3·1 · Chip de volatilidad del panel izquierdo ─────────────────────
