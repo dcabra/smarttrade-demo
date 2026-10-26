@@ -4087,6 +4087,20 @@ function renderDefensaCard(){
     estado = 'Defensa por régimen · sin datos de régimen/exposición';
   }
 
+  // 2b · drawdown del vehículo (tono NEUTRO, sin verde/rojo). Fracciones <=0 o
+  // null. Nunca con "+": 0 → "0.0%", negativo → "-2.3%", null → "—". Si no hay
+  // ningún valor, la línea no se muestra.
+  let ddSub='';
+  const dd = D.drawdown;
+  if(dd && (dd.actual_pct!=null || dd.max_pct!=null)){
+    const fmtDD = v => {
+      if(v==null) return '—';
+      const pct = v*100;
+      return (pct>=0 ? Math.abs(pct).toFixed(1) : '-'+Math.abs(pct).toFixed(1)) + '%';
+    };
+    ddSub = `Drawdown desde máx.: actual ${fmtDD(dd.actual_pct)} · peor ${fmtDD(dd.max_pct)}`;
+  }
+
   // 3 · plan (solo si hay recorte pendiente). Es dry-run: mostrarlo NO ejecuta.
   let planHtml='';
   if(accion==='de-risk' && Array.isArray(D.plan) && D.plan.length){
@@ -4140,7 +4154,7 @@ function renderDefensaCard(){
       <span class="defensa-ttl">Defensa por régimen</span>
       <span class="defensa-badge ${activa?'on':'off'}">${activa?'armada':'desarmada'}</span>
     </div>
-    <div class="defensa-estado">${estado}${sub?`<div class="defensa-sub">${sub}</div>`:''}</div>
+    <div class="defensa-estado">${estado}${sub?`<div class="defensa-sub">${sub}</div>`:''}${ddSub?`<div class="defensa-sub">${ddSub}</div>`:''}</div>
     ${planHtml}
     ${rerHtml}
     <div class="defensa-actions">${toggleBtn}${ejecutarBtn}${rerBtn}</div>
